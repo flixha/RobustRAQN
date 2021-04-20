@@ -106,38 +106,47 @@ def get_parallel_waveform_client(waveform_client):
     Bind a `get_waveforms_bulk` method to waveform_client if it doesn't already
     have one.
     """
-    def _get_waveforms_bulk_parallel_naive(self, bulk, cores=None):
+    def _get_waveforms_bulk_parallel_naive(self, bulk, parallel=True,
+                                           cores=None):
         """
         parallel implementation of get_waveforms_bulk.
         """
-        if cores is None:
-            cores = min(len(bulk), cpu_count())
-        # There seems to be a negative effect on speed if there's too many
-        # read-threads - For now set limit to 16
-        cores = min(cores, 16)
+        if parallel:
+            if cores is None:
+                cores = min(len(bulk), cpu_count())
+            # There seems to be a negative effect on speed if there's too many
+            # read-threads - For now set limit to 16
+            cores = min(cores, 16)
 
-        # Logger.info('Start bulk-read paralle pool')
-        with pool_boy(Pool=ThreadPool, traces=len(bulk), cores=cores) as pool:
-            results = [pool.apply_async(
-                self.get_waveforms,
-                args=arg,
-                error_callback=document_client_read_error)
-                    for arg in bulk]
-        st_list = list()
-        # Need to handle possible read-errors in each request when getting each
-        # request-result.
-        for res in results:
-            try:
-                st_list.append(res.get())
-            # InternalMSEEDError
-            except Exception as e:
-                Logger.error(e)
-                pass
-        # traces = [res.get() for res in results]
-        st = Stream(traces=st_list)
-        #st = Stream()
-        #for arg in bulk_arg:
-        #    st += self.get_waveforms(*arg)
+            # Logger.info('Start bulk-read paralle pool')
+            with pool_boy(Pool=ThreadPool, traces=len(bulk), cores=cores) as pool:
+                results = [pool.apply_async(
+                    self.get_waveforms,
+                    args=arg,
+                    error_callback=document_client_read_error)
+                        for arg in bulk]
+            st_list = list()
+            # Need to handle possible read-errors in each request when getting each
+            # request-result.
+            for res in results:
+                try:
+                    st_list.append(res.get())
+                # InternalMSEEDError
+                except Exception as e:
+                    Logger.error(e)
+                    pass
+            # traces = [res.get() for res in results]
+            st = Stream(traces=st_list)
+            #st = Stream()
+            #for arg in bulk_arg:
+            #    st += self.get_waveforms(*arg)
+        else:
+            for arg in bulk:
+                try:
+                    st += client.get_waveforms(*arg)
+                except Exception as e:
+                    document_client_read_error(e)
+                    continue
         return st
 
     # add waveform_bulk method dynamically if it doesn't exist already

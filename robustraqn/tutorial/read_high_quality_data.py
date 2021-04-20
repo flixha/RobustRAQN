@@ -1,5 +1,4 @@
 
-# %%
 
 import os
 from obspy.core import UTCDateTime
@@ -7,9 +6,8 @@ import robustraqn
 from robustraqn.quality_metrics import (
     create_bulk_request, get_waveforms_bulk, read_ispaq_stats,
     get_parallel_waveform_client)
-
-
 from obspy.clients.fdsn import Client
+
 
 metrics_path = os.path.join(os.path.dirname(robustraqn.__file__),
                             'tutorial/data/ispaq/Parquet_database/csv/')
@@ -45,9 +43,6 @@ client = Client('UIB-NORSAR')
 client = get_parallel_waveform_client(client)
 
 # Request the data with a bulk-request
-st = client.get_waveforms_bulk_parallel(bulk_request, parallel=True,
-                                            cores=2)
+st = client.get_waveforms_bulk_parallel(bulk_request, parallel=True, cores=2)
 # alternative API:
-# st = get_waveforms_bulk(client, bulk, parallel=True, cores=2)
-
-# %%
+# st = get_waveforms_bulk(client, bulk_request, parallel=True, cores=2)

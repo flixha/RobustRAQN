@@ -15,7 +15,7 @@ from collections import Counter
 
 #from obspy import read_events, read_inventory
 # from obspy.core.event import Catalog
-#import obspy
+# import obspy
 from obspy.core.stream import Stream
 from obspy.core.inventory.inventory import Inventory
 #from obspy.core.util.base import TypeError
@@ -23,18 +23,15 @@ from obspy.core.inventory.inventory import Inventory
 from obspy.io.nordic.core import read_nordic
 from obspy import read as obspyread
 from obspy import UTCDateTime
-# from obspy.io.mseed import InternalMSEEDError
 
 from eqcorrscan.utils.correlate import pool_boy
 from eqcorrscan.utils.despike import median_filter
 from eqcorrscan.core.match_filter import Tribe
 from eqcorrscan.core.match_filter.party import Party
 from eqcorrscan.core.match_filter.family import Family
-#from obspy import read_nordic
-#import obspy
 
-# import spectral_tools
-from spectral_tools import st_balance_noise, Noise_model
+# import obustraqn.spectral_tools
+from obustraqn.spectral_tools import st_balance_noise, Noise_model
 
 from timeit import default_timer
 import logging

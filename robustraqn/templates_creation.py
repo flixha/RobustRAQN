@@ -8,10 +8,6 @@
 import os
 import glob
 # from importlib import reload
-# from os import write
-
-# import numpy as np
-
 from multiprocessing import Pool, cpu_count
 from multiprocessing.pool import ThreadPool
 
@@ -37,10 +33,10 @@ from eqcorrscan.utils.correlate import pool_boy
 # import load_events_for_detection
 # import spectral_tools
 # reload(load_events_for_detection)
-from load_events_for_detection import (
+from robustraqn.load_events_for_detection import (
     normalize_NSLC_codes, get_all_relevant_stations, load_event_stream,
     try_remove_responses, check_template, prepare_picks)
-from spectral_tools import (
+from robustraqn.spectral_tools import (
     st_balance_noise, Noise_model, get_updated_inventory_with_noise_models)
 
 

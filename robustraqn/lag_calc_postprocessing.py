@@ -27,8 +27,8 @@ from eqcorrscan.core.match_filter.party import Party
 #from obspy import read_nordic
 #import obspy
 
-from quality_metrics import (create_bulk_request, get_waveforms_bulk,
-                             read_ispaq_stats)
+from robustraqn.quality_metrics import (
+    create_bulk_request, get_waveforms_bulk, read_ispaq_stats)
 
 import logging
 Logger = logging.getLogger(__name__)

@@ -1,26 +1,31 @@
 
 # %%
 
+import os
 from obspy.core import UTCDateTime
+import robustraqn
 from robustraqn.quality_metrics import (
     create_bulk_request, get_waveforms_bulk, read_ispaq_stats,
     get_parallel_waveform_client)
 
+
 from obspy.clients.fdsn import Client
 
+metrics_path = os.path.join(os.path.dirname(robustraqn.__file__),
+                            'tutorial/data/ispaq/Parquet_database/csv/')
 
 stations = ['BER']
 
 # Read in data quality metrics
 ispaq = read_ispaq_stats(
-    folder='~/repos/RobustRAQN/tutorial/data/ispaq/Parquet_database/csv/',
-    stations=stations, startyear=2020, endyear=2020, ispaq_prefixes=['all'],
-    ispaq_suffixes=['simpleMetrics', 'PSDMetrics'], file_type = 'parquet')
+    folder=metrics_path, stations=stations, startyear=2020, endyear=2020,
+    ispaq_prefixes=['all'], ispaq_suffixes=['simpleMetrics', 'PSDMetrics'],
+    file_type = 'parquet')
 
 # Create a bulk-request from data quality metrics
 bulk_request, day_stats = create_bulk_request(
     starttime=UTCDateTime(2020, 1, 10), endtime=UTCDateTime(2020, 1, 11),
-    stats=ispaq, parallel=True, cores=4,
+    stats=ispaq, parallel=True, cores=2,
     stations=stations, location_priority=['10','00',''],
     band_priority=['B','H','S','E','N'], instrument_priority=['H'],
     components=['Z','N','E','1','2'],
@@ -36,12 +41,13 @@ bulk_request, day_stats = create_bulk_request(
 
 
 client = Client('UIB-NORSAR')
-# Monkey-patch for parallel waveform request
+# Monkey-patch client to allow parallel waveform request
 client = get_parallel_waveform_client(client)
 
 # Request the data with a bulk-request
-day_st = client.get_waveforms_bulk_parallel(bulk_request, parallel=True,
+st = client.get_waveforms_bulk_parallel(bulk_request, parallel=True,
                                             cores=2)
-# day_st = get_waveforms_bulk(client, bulk, parallel=True, cores=2)  # alternat
+# alternative API:
+# st = get_waveforms_bulk(client, bulk, parallel=True, cores=2)
 
 # %%

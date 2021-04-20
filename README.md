@@ -7,5 +7,5 @@ In a conda environment:
 - `git clone https://github.com/flixha/RobustRAQN`
 - `cd RobustRAQN`
 - `conda install --file requirements.txt`
-- ( wcmatch muss evtl. mit pip installiert werden)
+- (you may have to install wcmatch through pip)
 - `python setup.py develop`

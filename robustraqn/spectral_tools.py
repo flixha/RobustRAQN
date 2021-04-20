@@ -1,13 +1,6 @@
 
 # %% 
 import os
-# import glob
-# import sys
-#import types
-
-# from multiprocessing import Pool, cpu_count
-# from multiprocessing.pool import ThreadPool
-# from eqcorrscan.utils.correlate import pool_boy
 
 import pandas as pd
 import wcmatch
@@ -42,29 +35,12 @@ from obspy import UTCDateTime
 # from obspy.imaging.cm import pqlx
 from obspy.signal.spectral_estimation import get_nlnm
 
-
-# from pathlib import Path
-# sys.path.insert(1, os.path.expanduser("~/repos/ispaq/ispaq_python3/ispaq"))
-# sys.path.insert(1, os.path.expanduser("~/Documents2/NNSN/HighNoiseModel/"
-#                                       + "HighFreqNoiseMustang_paper"))
-# sys.path.insert(1, os.path.expanduser("~/Documents2/NNSN/HighNoiseModel/"
-#                 + "HighFreqNoiseMustang_paper/Examples/NSNO_EIDA"))
-
-# from noiseplot import setupPSDPlot
-#import addIRISPDFs_UiB
-#from addIRISPDFs_UiB import findPDFBounds, findUniqFreq, calcMegaPDF
-
-import quality_metrics
-from quality_metrics import *
-
-
+from robustraqn.quality_metrics import ()
 
 import logging
 Logger = logging.getLogger(__name__)
 
-  
 
-# class Trace(obspy.core.stream.Trace):
 
 def balance_noise(self, inv, balance_power_coefficient=2,
                   water_level_above_5s_in_db=-150, ground_motion_input=[]):
@@ -110,7 +86,7 @@ def balance_noise(self, inv, balance_power_coefficient=2,
                 if noise_model.decibels[j] < water_level_above_5s_in_db:
                     noise_model.decibels[j] = water_level_above_5s_in_db
         # noise_model = Noise_model(noise_model.frequencies, noise_model.decibels)
-            
+
         f_filter = noise_model.frequencies
         amp_filter = noise_model.amplitude
     except:
@@ -184,8 +160,9 @@ def balance_noise(self, inv, balance_power_coefficient=2,
     return self
 
 
+# Would be nice to monkey-patch this method onto the Stream-class
 #class Stream(obspy.core.stream.Stream):
-      
+
 def st_balance_noise(
     self, inv, balance_power_coefficient=2, ground_motion_input=[],
     water_level_above_5s_in_db=-150):
@@ -198,7 +175,7 @@ def st_balance_noise(
         # adding the function causes errors once running it in parallel
         # bound_method = tr_balance_noise.__get__(tr)
         # bound_method = types.MethodType(tr_balance_noise, tr)
-        
+
         #if not hasattr(tr, "balance_noise"):
         # tr.balance_noise = bound_method
         Logger.debug('Trying to balance noise for ' + str(tr))
@@ -207,7 +184,7 @@ def st_balance_noise(
             tr, inv, balance_power_coefficient=balance_power_coefficient,
             ground_motion_input=ground_motion_input,
             water_level_above_5s_in_db=water_level_above_5s_in_db)
-        
+
     return self
 
 
@@ -230,12 +207,7 @@ def sum_station_pdf(inv, pdf_dir, network, station, location="*",
     station_pdf_folder = 'StationPDFs'
     if not os.path.exists(station_pdf_folder):
         os.makedirs(station_pdf_folder)
-    
-    # outpdffile = os.path.join(
-    #     station_pdf_folder, network + '.' + station + '.' + location + '.'
-    #     + channel).replace('?', '_').replace('*', '_').replace('(', '_').\
-    #     replace(')', '_').replace('@', '_').replace('|', '_').\
-    #     replace('[', '_').replace(']', '_')
+
     outpdffile = os.path.join(
         station_pdf_folder, network + '.' + station + '.' + location + '.'
         + channel)
@@ -339,7 +311,7 @@ def calcMegaPDF(freq_u, freq_u_str, db_u, pdffiles, outpdffile='megapdf.npy'):
                 f1 = freq[i]
                 db1 = db[i]
                 hit1 = hits[i]
-        
+
                 i_f1 = fd[str(f1)]
                 i_db1 = dbd[db1]
                 pdf[i_f1, i_db1] += hit1
@@ -368,14 +340,14 @@ def isMicroseismOk(freq, db, hits, db_tol=5, max_hits_perc=20, f_min=0.2,
     '''
     copyright Emily Wolin. Integrated from
     https://github.com/ewolin/HighFreqNoiseMustang_paper
-    
+
     Check that a PDF does not fall too far below the Peterson NLNM
     '''
     # find total number of PSDs in PDF
     mode_freq = stats.mode(freq)
     ih = np.where(freq == mode_freq)
     n_psds = hits[ih].sum()
-    
+
     T_nlnm, db_nlnm = get_nlnm()
     f_nlnm = 1./T_nlnm
     nlnm_interp = interp1d(np.log10(f_nlnm), db_nlnm)
@@ -388,7 +360,6 @@ def isMicroseismOk(freq, db, hits, db_tol=5, max_hits_perc=20, f_min=0.2,
     db_check = db[icheck]
     hits_check = hits[icheck]
     dbdiff = db_nlnm_check - db_check
-    #print(dbdiff)
     # define max_hits from allowed percentage and total number of PSDs
     max_hits = max_hits_perc / 100 * n_psds
     ibelow, = np.where(dbdiff > db_tol)
@@ -397,8 +368,7 @@ def isMicroseismOk(freq, db, hits, db_tol=5, max_hits_perc=20, f_min=0.2,
     
     ibelow = np.intersect1d(np.where(dbdiff > db_tol),
                             np.where(hits_check > max_hits))
-    #hits_below = np.where(ibelow > max_hits)
-
+    # hits_below = np.where(ibelow > max_hits)
     # check if more than a selected percentage of PSDs for any frequency in
     # microseism band exceeds allowed number of exceeding PSDs:
     isok = True
@@ -406,7 +376,7 @@ def isMicroseismOk(freq, db, hits, db_tol=5, max_hits_perc=20, f_min=0.2,
         fi = np.where(f_check_below == f)
         if hits_below[fi].sum() > max_hits:
             isok = False
-        
+
     # if len(ibelow) == 0:
     #     isok = True
     # else: 
@@ -418,12 +388,12 @@ def findPDFBounds(pdffiles):
     '''
     copyright Emily Wolin. Integrated from
     https://github.com/ewolin/HighFreqNoiseMustang_paper
-    
+
     Get lists of unique frequencies and dBs
     from all individual PDF files
     '''
     Logger.info('finding list of unique freq, dB')
-    
+
     j = -1
     first_pdffile_found = False
     while not first_pdffile_found:
@@ -437,8 +407,6 @@ def findPDFBounds(pdffiles):
             Logger.error(e)
             Logger.info(
                 'Looking for next available NSLC time period with PDF file.')
-
-    #print(pdffiles[0])
     #df_single = pd.read_csv(pdffiles[0], skiprows=5, 
     #                        names=['freq', 'db', 'hits'])
     freq_u = df_single.freq.unique()
@@ -483,11 +451,10 @@ def findUniqFreq(pdffiles):
             Logger.error(e)
             Logger.info(
                 'Looking for next available NSLC time period with PDF file.')
-            
+
     # df_single = pd.read_csv(pdffiles[0], skiprows=5, 
     #                         names=['freq', 'db', 'hits'], 
     #                         dtype={'freq':'str'})
-    
     for i in range(j,len(pdffiles)):
         try:
             df_single =  pd.read_csv(pdffiles[i], skiprows=5, 
@@ -758,11 +725,8 @@ class Noise_model:
     @power.setter
     def power(self, pow):
         self.decibels = 10 * np.log10(pow)
-        
 
-        
 
-        
 
 class Station(obspy.core.inventory.station.Station):
     

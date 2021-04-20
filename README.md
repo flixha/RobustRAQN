@@ -4,8 +4,8 @@ Robust request and data quality negotiater for the integration of seismic data q
 # INSTALL:
 
 In a conda environment:
-`git clone https://github.com/flixha/RobustRAQN`
-- cd RobustRAQN
-- conda install --file requirements.txt
+- `git clone https://github.com/flixha/RobustRAQN`
+- `cd RobustRAQN`
+- `conda install --file requirements.txt`
 - ( wcmatch muss evtl. mit pip installiert werden)
-- python setup.py develop
+- `python setup.py develop`

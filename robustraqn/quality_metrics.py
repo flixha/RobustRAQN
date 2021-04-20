@@ -111,6 +111,7 @@ def get_parallel_waveform_client(waveform_client):
         """
         parallel implementation of get_waveforms_bulk.
         """
+        st = Stream()
         if parallel:
             if cores is None:
                 cores = min(len(bulk), cpu_count())
@@ -125,25 +126,19 @@ def get_parallel_waveform_client(waveform_client):
                     args=arg,
                     error_callback=document_client_read_error)
                         for arg in bulk]
-            st_list = list()
             # Need to handle possible read-errors in each request when getting each
             # request-result.
             for res in results:
                 try:
-                    st_list.append(res.get())
+                    st += res.get()
                 # InternalMSEEDError
                 except Exception as e:
                     Logger.error(e)
                     pass
-            # traces = [res.get() for res in results]
-            st = Stream(traces=st_list)
-            #st = Stream()
-            #for arg in bulk_arg:
-            #    st += self.get_waveforms(*arg)
         else:
             for arg in bulk:
                 try:
-                    st += client.get_waveforms(*arg)
+                    st += self.get_waveforms(*arg)
                 except Exception as e:
                     document_client_read_error(e)
                     continue

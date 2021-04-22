@@ -212,9 +212,10 @@ def create_template_objects(
     prepick, samp_rate, seisanWAVpath, inv=Inventory(), remove_response=False,
     noise_balancing=False, balance_power_coefficient=2, ground_motion_input=[],
     min_n_traces=8, write_out=False, prefix='', make_pretty_plot=False,
-    check_template_strict=True, allow_channel_duplication=True, normalize_NSLC=True,
-    sta_translation_file="station_code_translation.txt", std_network_code='NS',
-    std_location_code='00',  std_channel_prefix='BH', parallel=False, cores=1):
+    check_template_strict=True, allow_channel_duplication=True,
+    normalize_NSLC=True, sta_translation_file="station_code_translation.txt",
+    std_network_code='NS', std_location_code='00',  std_channel_prefix='BH',
+    parallel=False, cores=1):
     """
       Wrapper for create-template-function
     """

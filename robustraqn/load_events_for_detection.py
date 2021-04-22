@@ -31,7 +31,7 @@ from eqcorrscan.core.match_filter.party import Party
 from eqcorrscan.core.match_filter.family import Family
 
 # import obustraqn.spectral_tools
-from obustraqn.spectral_tools import st_balance_noise, Noise_model
+from robustraqn.spectral_tools import st_balance_noise, Noise_model
 
 from timeit import default_timer
 import logging
@@ -423,9 +423,9 @@ def daily_plot(st, year, month, day, data_unit='counts', suffix=''):
 
 
 
-def prepare_picks(event, stream, std_network_code='NS', std_location_code='00',
-                  std_channel_prefix='BH', sta_translation_file=
-                  "station_code_translation.txt"):
+def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
+                  std_location_code='00', std_channel_prefix='BH',
+                  sta_translation_file="station_code_translation.txt"):
     """
     Prepare the picks for being used in EQcorrscan. The following criteria are
     being considered:
@@ -476,6 +476,11 @@ def prepare_picks(event, stream, std_network_code='NS', std_location_code='00',
             continue
         # Sort available channels so that Z is the last item
         available_chans.sort()
+        # for no normalization; just do any required channel-switching
+        if not normalize_NSLC:
+            std_network_code = pick.waveform_id.network_code
+            std_location_code = pick.waveform_id.location_code
+            std_channel_prefix = pick.waveform_id.channel_code[0:2] or ''
         # Check wether pick is P or S-phase, and normalize network/station/
         # location and channel codes
         if pick.phase_hint.upper()[0]=='P' or pick.phase_hint.upper()[0]=='S':

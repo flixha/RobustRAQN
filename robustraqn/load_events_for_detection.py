@@ -4,7 +4,7 @@ import fnmatch
 import wcmatch
 from eqcorrscan.utils.plotting import detection_multiplot
 import pandas as pd
-#import matplotlib
+# import matplotlib
 from threadpoolctl import threadpool_limits
 
 from multiprocessing import Pool, cpu_count, current_process, get_context
@@ -15,12 +15,12 @@ from itertools import chain, repeat
 from collections import Counter
 # import numexpr as ne
 
-#from obspy import read_events, read_inventory
+# from obspy import read_events, read_inventory
 # from obspy.core.event import Catalog
 # import obspy
 from obspy.core.stream import Stream
 from obspy.core.inventory.inventory import Inventory
-#from obspy.core.util.base import TypeError
+# from obspy.core.util.base import TypeError
 # from obspy.core.event import Event
 from obspy.io.nordic.core import read_nordic
 from obspy import read as obspyread
@@ -39,7 +39,7 @@ from timeit import default_timer
 import logging
 Logger = logging.getLogger(__name__)
 
-#from eqcorrscan.utils.catalog_utils import filter_picks
+# from eqcorrscan.utils.catalog_utils import filter_picks
 
 
 def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
@@ -82,7 +82,7 @@ def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
         # channels without signal
         # if sum(tr.copy().detrend().data)==0 and tr in st:
         n_samples_nonzero = np.count_nonzero(tr.copy().detrend().data)
-        if n_samples_nonzero==0 and tr in st:
+        if n_samples_nonzero == 0 and tr in st:
             st = st.remove(tr)
             continue
         # channels with empty channel code:
@@ -108,25 +108,24 @@ def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
             st = st.remove(tr)
             continue
 
-        #print(tr.id)
         # ADJUST unsupported, but decipherable codes
         # Adjust single-letter location codes:
         if len(tr.stats.location) == 1:
             tr.stats.location = tr.stats.location + '0'
-        # Adjust empty-letter channel codes: ## DO NOT ADJUST YET - IT MAY 
+        # Adjust empty-letter channel codes: ## DO NOT ADJUST YET - IT MAY
         # WORK LIKE THIS WITH PROPER INVENTORY
-        #if tr.stats.channel[1] == ' ' and len(tr.stats.channel) == 3:
+        # if tr.stats.channel[1] == ' ' and len(tr.stats.channel) == 3:
         #    tr.stats.channel = tr.stats.channel[0] + 'H' + tr.stats.channel[2]
-            
-    #Add channels to template, but check if similar components are already present
-    channel_priorities = ["H*","B*","S*","E*","N*","*"]
+
+    # Add channels to template, but check if similar components are already
+    # present
+    channel_priorities = ["H*", "B*", "S*", "E*", "N*", "*"]
     waveAtSelStations = Stream()
     for station in selectedStations:
         for channel_priority in channel_priorities:
             waveAlreadyAtSelStation = waveAtSelStations.select(station=station)
             if not waveAlreadyAtSelStation:
-                addWaves = st.select(station=station,
-                                        channel=channel_priority)
+                addWaves = st.select(station=station, channel=channel_priority)
                 waveAtSelStations += addWaves
     # If there are more than one traces for the same station-component-
     # combination, then choose the "best" trace
@@ -147,19 +146,20 @@ def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
             # 3. best trace: more complete metadata - location code
             if len(keepTrSt) == 0 or len(keepTrSt) > 1:
                 loccodes = [t.stats.location for t in sameStaChanSt]
-                if any(l=='' for l in loccodes) and\
-                   any(l=='??' for l in loccodes):
+                if any(locc == '' for locc in loccodes) and\
+                   any(locc == '??' for locc in loccodes):
                     removeTrSt += sameStaChanSt.select(location="")
                     keepTrSt += sameStaChanSt.select(
-                        sampling_rate= max(samp_rates), location="?*")
+                        sampling_rate=max(samp_rates), location="?*")
             # 4 best trace: more complete metadata - network code
             if len(keepTrSt) == 0 or len(keepTrSt) > 1:
                 netcodes = [t.stats.network for t in sameStaChanSt]
-                if (any(n=='' for n in netcodes)\
-                   and any(n=='??' for n in netcodes)):
+                if (any(n == '' for n in netcodes)
+                        and any(n == '??' for n in netcodes)):
                     removeTrSt += sameStaChanSt.select(network="")
-                    keepTrSt += sameStaChanSt.select(sampling_rate=
-                        max(samp_rates), location="?*", network="??")
+                    keepTrSt += sameStaChanSt.select(
+                        sampling_rate=max(samp_rates), location="?*",
+                        network="??")
                 if len(keepTrSt) > 1:
                     keepTrSt = Stream() + keepTrSt[0]
             for tt in sameStaChanSt:
@@ -175,10 +175,11 @@ def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
     channelIDs = list()
     for trace in waveAtSelStations:
         if trace.id in channelIDs:
-            for j in range(0,k):
+            for j in range(0, k):
                 testSameIDtrace = waveAtSelStations[j]
                 if trace.id == testSameIDtrace.id:
-                    if trace.stats.starttime >= testSameIDtrace.stats.starttime:
+                    if (trace.stats.starttime >=
+                            testSameIDtrace.stats.starttime):
                         waveAtSelStations.remove(trace)
                     else:
                         waveAtSelStations.remove(testSameIDtrace)
@@ -188,7 +189,7 @@ def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
     st = waveAtSelStations
     # Preprocessing
     # cut around origin plus some
-    
+
     # Don't trim the stream if that means you are padding with zeros
     starttime = origin.time - 30
     endtime = starttime + 360
@@ -225,7 +226,6 @@ def prepare_detection_stream(st, tribe, parallel=False, cores=None,
     for tr in st:
         # channels with empty channel code:
         if len(tr.stats.channel) == 0:
-            #st = st.remove(tr)
             st_of_tr_to_be_removed += tr
             continue
         # channels with undecipherable channel names
@@ -246,24 +246,23 @@ def prepare_detection_stream(st, tribe, parallel=False, cores=None,
                 continue
         if tr.stats.sampling_rate < min_samp_rate:
             st_of_tr_to_be_removed += tr
-        #print(tr.id)
         # ADJUST unsupported, but decipherable codes
         # Adjust single-letter location codes:
         if len(tr.stats.location) == 1:
             tr.stats.location = tr.stats.location + '0'
-    
+
     # Remove unsuitable traces from stream
     for tr in st_of_tr_to_be_removed:
         if tr in st:
             st.remove(tr)
     # For NORSAR data, replace Zeros with None
-    
+
     # Do resampling if requested (but only on channels with higher rate):
     # if downsampled_max_rate is not None:
     #    for tr in st:
     #        if tr.stats.sampling_rate > downsampled_max_rate:
     #            tr.resample(sampling_rate=downsampled_max_rate)
-    
+
     # Detrend and merge
     # st = parallel_detrend(st, parallel=True, cores=None, type='simple')
     # st.detrend(type = 'linear')
@@ -275,11 +274,11 @@ def prepare_detection_stream(st, tribe, parallel=False, cores=None,
     # If using Zero as a fill_value, then EQcorrscan will not be able to
     # automatically recognize these times and exclude the correlation-
     # value on those traces from the stacked value.
-    #st.merge(method=0, fill_value=0, interpolation_samples=0)
+    # st.merge(method=0, fill_value=0, interpolation_samples=0)
 
     # TODO write despiking smartly
     if try_despike:
-        #st_despike = st.copy()
+        # st_despike = st.copy()
         for tr in st:
             # starttime = tr.stats.starttime
             # endtime = tr.stats.endtime
@@ -288,12 +287,12 @@ def prepare_detection_stream(st, tribe, parallel=False, cores=None,
             # # (starts on 00:00:00 and ends on 23:59:59).
             # reqtime1 = UTCDateTime(mid_t.year, mid_t.month, mid_t.day, 0, 0, 0)
             # reqtime2 = UTCDateTime(mid_t.year, mid_t.month, mid_t.day,23,59,59)
-    
+
             # day_stats = stats[stats['start'].str.contains(str(reqtime1)[0:19])]
             nslc_target = tr.stats.network + "." + tr.stats.station + "."\
                 + tr.stats.location + '.' + tr.stats.channel
             chn_stats = ispaq[ispaq['target'].str.contains(nslc_target)]
-            #target = availability.iloc[0]['target']
+            # target = availability.iloc[0]['target']
             # num_spikes = ispaq[(ispaq['target']==target) & 
             # (day_stats['metricName']=='num_spikes')]
             num_spikes = chn_stats[chn_stats['metricName']=='num_spikes']
@@ -313,11 +312,12 @@ def prepare_detection_stream(st, tribe, parallel=False, cores=None,
                 Logger.warning('Failed to despike %s: %s', str(tr))
                 Logger.warning(e)
         
-                # tracelength = testtrace.stats.npts / testtrace.stats.sampling_rate
+                # tracelength = (testtrace.stats.npts /
+                #                testtrace.stats.sampling_rate)
                 #         print('Despiking ' + contFile )
                 # testtrace = median_filter(testtrace, multiplier=10,
                 #         windowlength=tracelength, interp_len=0.1, debug=0)
-                #test for step functions which mess up a lot
+                # test for step functions which mess up a lot
             # try:
             #     diftrace = tr.copy()
             #     diftrace.differentiate()
@@ -325,7 +325,8 @@ def prepare_detection_stream(st, tribe, parallel=False, cores=None,
             #     difStream += diftrace
             #     _spike_test(difStream, percent=0.9999, multiplier=1e1)
             # except MatchFilterError:
-            #     tracelength = diftrace.stats.npts / diftrace.stats.sampling_rate
+            #     tracelength = (diftrace.stats.npts /
+            #                    diftrace.stats.sampling_rate)
             #     print('Despiking 1st differential of ' + contFile)
             #     testtrace = median_filter(diftrace, multiplier=10,
             #             windowlength=tracelength, interp_len=0.1, debug=0)
@@ -355,23 +356,22 @@ def parallel_merge(st, method=0, fill_value=None, interpolation_samples=0,
                    cores=1):
     seed_id_list = [tr.id for tr in st]
     unique_seed_id_list = set(seed_id_list)
-    
+
     stream_list = [st.select(id=seed_id) for seed_id in unique_seed_id_list]
-    
+
     with pool_boy(
-        Pool=Pool, traces=len(unique_seed_id_list), cores=cores) as pool:
+            Pool=Pool, traces=len(unique_seed_id_list), cores=cores) as pool:
         results = [pool.apply_async(
             trace_st.merge, {method, fill_value, interpolation_samples})
                     for trace_st in stream_list]
-            
+
     streams = [res.get() for res in results]
     for trace_st in streams:
         for tr in trace_st:
             st.append(tr)
 
-    #st.merge(method=0, fill_value=None, interpolation_samples=0)
+    # st.merge(method=0, fill_value=None, interpolation_samples=0)
     return st
-
 
 
 def parallel_rotate(st, inv, cores=None, method="->ZNE"):
@@ -384,32 +384,31 @@ def parallel_rotate(st, inv, cores=None, method="->ZNE"):
     # appear first and are processed first in parallel loop (for better load-
     # balancing).
     net_sta_loc = list(chain.from_iterable(repeat(item, count)
-                       for item,count in Counter(net_sta_loc).most_common()))
+                       for item, count in Counter(net_sta_loc).most_common()))
     # Need to sort list by original order after set()
     unique_net_sta_loc_list = sorted(set(net_sta_loc),
                                      key=lambda x: net_sta_loc.index(x))
-    
+
     # stream_list = [st.select(id=seed_id) for seed_id in unique_seed_id_list]
-    
+
     if cores is None:
         cores = min(len(unique_net_sta_loc_list), cpu_count())
-    with pool_boy(
-        Pool=Pool, traces=len(unique_net_sta_loc_list), cores=cores) as pool:
+    with pool_boy(Pool=get_context("spawn").Pool,
+                  traces=len(unique_net_sta_loc_list), cores=cores) as pool:
         results = [pool.apply_async(
             st.select(network=nsl[0], station=nsl[1], location=nsl[2]).rotate,
             args=(method,),
             kwds=dict(inventory=inv.select(network=nsl[0], station=nsl[1],
                                            location=nsl[2])))
                    for nsl in unique_net_sta_loc_list]
-            
+
     streams = [res.get() for res in results]
     for trace_st in streams:
         for tr in trace_st:
             st.append(tr)
-       
-    #st.merge(method=0, fill_value=None, interpolation_samples=0)
-    return st
 
+    # st.merge(method=0, fill_value=None, interpolation_samples=0)
+    return st
 
 
 def daily_plot(st, year, month, day, data_unit='counts', suffix=''):
@@ -420,7 +419,7 @@ def daily_plot(st, year, month, day, data_unit='counts', suffix=''):
                                    + str(month).zfill(2) + str(day).zfill(2)
                                    + '_' + tr.stats.station
                                    + '_' + tr.stats.channel + suffix + '.png')
-        tr.plot(type='dayplot', size=(1900, 1080), outfile = outPlotFile,
+        tr.plot(type='dayplot', size=(1900, 1080), outfile=outPlotFile,
                 data_unit=data_unit)
 
 
@@ -428,7 +427,7 @@ def get_matching_trace_for_pick(pick, stream):
     """
     find the trace-id that matches a pick to a suitable trace in stream
 
-    pick for which to find the suitable trace 
+    pick for which to find the suitable trace
     stream of relevant traces (i.e., for the same station as the pick is)
     """
     k = None
@@ -468,7 +467,7 @@ def get_matching_trace_for_pick(pick, stream):
         pick_id_wildcarded = '.'.join(
             pick_id.split('.')[0:3] + [pick_chan_wildcarded])
         matches = [(i, id) for i, id in enumerate(avail_tr_ids)
-                    if fnmatch.fnmatch(id, pick_id_wildcarded)]
+                   if fnmatch.fnmatch(id, pick_id_wildcarded)]
         if matches:
             k = matches[0][0]
         else:
@@ -476,7 +475,7 @@ def get_matching_trace_for_pick(pick, stream):
             pick_loc_chan_wildcarded = (pick_id.split('.')[1] + '.'
                                         + pick_chan_wildcarded)
             matches = [(i, id) for i, id in enumerate(avail_locs_chans)
-                    if fnmatch.fnmatch(id, pick_loc_chan_wildcarded)]
+                       if fnmatch.fnmatch(id, pick_loc_chan_wildcarded)]
             if matches:
                 k = matches[0][0]
             # 6 if not found, allow space in channel and wrong location
@@ -519,7 +518,7 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
      - remove picks without phase_hint
      - compare picks to the available waveform-traces
      - normalize network/station/channel codes
-     - if the channel is not available, the pick will be switched to a suitable 
+     - if the channel is not available, the pick will be switched to a suitable
        alternative channel
      - put P-pick on Z-channel
      - put S-picks on horizontal channels if available
@@ -535,17 +534,17 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
     :returns: :class:`obspy.event`
 
     """
-    #correct PG / SG picks to P / S
-    #for pick in event.picks:
+    # correct PG / SG picks to P / S
+    # for pick in event.picks:
     #    if pick.phase_hint == 'PG':
     #        pick.phase_hint = 'P'
     #    elif pick.phase_hint == 'SG':
     #        pick.phase_hint = 'S'
-    
-    ## catalog.plot(projection='local', resolution='h')
+
+    # catalog.plot(projection='local', resolution='h')
     sta_fortransl_dict, sta_backtrans_dict = load_station_translation_dict(
         file=sta_translation_file)
-   
+
     newEvent = event.copy()
     newEvent.picks = list()
     #remove all picks for amplitudes etc: keep only P and S
@@ -555,7 +554,7 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
             continue
         # Check which channels are available for pick's station in stream
         avail_comps = [tr.stats.channel[-1] for tr in
-                          stream.select(station=pick.waveform_id.station_code)]
+                       stream.select(station=pick.waveform_id.station_code)]
         if not avail_comps:
             continue
         # Sort available channels so that Z is the last item
@@ -571,7 +570,7 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
             std_channel_prefix = matching_tr_id.split('.')[3][0:2]
         # Check wether pick is P or S-phase, and normalize network/station/
         # location and channel codes
-        if pick.phase_hint.upper()[0]=='P' or pick.phase_hint.upper()[0]=='S':
+        if pick.phase_hint.upper()[0] in 'PS':
             pick.waveform_id.network_code = std_network_code
             pick.waveform_id.location_code = std_location_code
             # Check station code for altnerative code, change to the standard

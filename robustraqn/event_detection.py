@@ -18,7 +18,7 @@ def run_from_ipython():
 import os, glob, gc, math, calendar, matplotlib, platform, sys
 
 from numpy.core.numeric import True_
-sys.path.insert(1, os.path.expanduser("~/Documents2/NorthSea/Elgin/Detection"))
+#sys.path.insert(1, os.path.expanduser("~/Documents2/NorthSea/Elgin/Detection"))
 
 from os import times
 import pandas as pd
@@ -45,8 +45,8 @@ from obspy import UTCDateTime
 #from obspy.io.mseed import InternalMSEEDError
 from obspy.clients.filesystem.sds import Client
 
-from processify import processify
-from fancy_processify import fancy_processify
+from robustraqn.processify import processify
+from robustraqn.fancy_processify import fancy_processify
 
 # from eqcorrscan.utils import pre_processing
 # from eqcorrscan.core import match_filter, lag_calc
@@ -61,14 +61,15 @@ from eqcorrscan.utils.plotting import detection_multiplot
 # import quality_metrics, spectral_tools, load_events_for_detection
 # reload(quality_metrics)
 # reload(load_events_for_detection)
-from quality_metrics import (create_bulk_request, get_waveforms_bulk,
+from robustraqn.quality_metrics import (create_bulk_request, get_waveforms_bulk,
                              read_ispaq_stats)
-from load_events_for_detection import (
+from robustraqn.load_events_for_detection import (
     prepare_detection_stream, init_processing, init_processing_wRotation,
     print_error_plots, get_all_relevant_stations, reevaluate_detections,
     multiplot_detection)
-from spectral_tools import Noise_model, get_updated_inventory_with_noise_models
-from createTemplates_object import create_template_objects
+from robustraqn.spectral_tools import (Noise_model,
+                                       get_updated_inventory_with_noise_models)
+from robustraqn.templates_creation import create_template_objects
 
 
 #@processify
@@ -79,10 +80,15 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
                       trig_int=0, threshold=10, min_chans=10, multiplot=False,
                       day_st=Stream(), check_array_misdetections=False,
                       short_tribe=Tribe(), write_party=False,
+                      detection_path='Detections',
+                      redetection_path='ReDetections',
                       return_stream=True, dump_stream_to_disk=False):
     """
     Function to run reading, initial processing, detection etc. on one day.
     """
+    # Keep user's data safe
+    tribe = tribe.copy()
+    short_tribe = short_tribe.copy()
     #Set the path to the folders with continuous data:
     archive_path = '/data/seismo-wav/SLARCHIVE'
     # archive_path2 = '/data/seismo-wav/EIDA/archive'
@@ -198,7 +204,8 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
             plotDir='DetectionPlots', daylong=True, fill_gaps=True,
             ignore_bad_data=False, ignore_length=True, 
             parallel_process=parallel, cores=cores,
-            concurrency='multiprocess', xcorr_func='time_domain',
+            # concurrency='multiprocess', xcorr_func='time_domain',
+            xcorr_func='fftw', concurrency='multithread',
             #parallel_process=False, #concurrency=None,
             group_size=n_templates_per_run, full_peaks=False,
             save_progress=False, process_cores=cores, spike_test=False)
@@ -241,7 +248,7 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
             return [party, return_st]
 
     if write_party:
-        detection_file_name = os.path.join('Detections_MAD9',
+        detection_file_name = os.path.join(detection_path,
                                            'UniqueDet' + current_day_str)
         party.write(detection_file_name, format='tar', overwrite=True)
         party.write(detection_file_name + '.csv', format='csv',
@@ -256,7 +263,7 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
             Logger.error('Missing short templates for detection-reevaluation.')
         else:    
             party = reevaluate_detections(
-                party, short_tribe, stream=day_st, threshold=threshold / 2,
+                party, short_tribe, stream=day_st, threshold=threshold * 0.6,
                 trig_int=40.0, threshold_type='MAD', overlap='calculate',
                 plot=False, plotDir='ReDetectionPlots', fill_gaps=True,
                 ignore_bad_data=False, daylong=True, ignore_length=True,
@@ -276,7 +283,7 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
                     return [party, return_st]
             if write_party:
                 detection_file_name = os.path.join(
-                    'ReDetections_MAD9', 'UniqueDet_short_' + current_day_str)
+                    redetection_path, 'UniqueDet_short_' + current_day_str)
                 party.write(detection_file_name, format='tar', overwrite=True)
                 party.write(detection_file_name + '.csv', format='csv',
                             overwrite=True)

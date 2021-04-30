@@ -8,6 +8,7 @@ Created on Sun Jul 16 17:23:45 2017
 
 # %%
 
+
 def run_from_ipython():
     try:
         __IPYTHON__
@@ -15,11 +16,11 @@ def run_from_ipython():
     except NameError:
         return False
 
+
 import os, glob, gc, math, calendar, matplotlib, platform, sys
-
 from numpy.core.numeric import True_
-#sys.path.insert(1, os.path.expanduser("~/Documents2/NorthSea/Elgin/Detection"))
-
+# sys.path.insert(1, os.path.expanduser(
+#   "~/Documents2/NorthSea/Elgin/Detection"))
 from os import times
 import pandas as pd
 if not run_from_ipython:
@@ -30,11 +31,7 @@ import pickle
 
 from timeit import default_timer
 import logging
-Logger = logging.getLogger(__name__)
-# logging.basicConfig(level=logging.INFO)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
+
 
 from obspy import read_inventory
 #from obspy.core.event import Event, Origin, Catalog
@@ -61,8 +58,8 @@ from eqcorrscan.utils.plotting import detection_multiplot
 # import quality_metrics, spectral_tools, load_events_for_detection
 # reload(quality_metrics)
 # reload(load_events_for_detection)
-from robustraqn.quality_metrics import (create_bulk_request, get_waveforms_bulk,
-                             read_ispaq_stats)
+from robustraqn.quality_metrics import (create_bulk_request,
+                                        get_waveforms_bulk, read_ispaq_stats)
 from robustraqn.load_events_for_detection import (
     prepare_detection_stream, init_processing, init_processing_wRotation,
     print_error_plots, get_all_relevant_stations, reevaluate_detections,
@@ -71,6 +68,11 @@ from robustraqn.spectral_tools import (Noise_model,
                                        get_updated_inventory_with_noise_models)
 from robustraqn.templates_creation import create_template_objects
 
+Logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 
 #@processify
 def run_day_detection(tribe, date, ispaq, selectedStations,
@@ -89,7 +91,7 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
     # Keep user's data safe
     tribe = tribe.copy()
     short_tribe = short_tribe.copy()
-    #Set the path to the folders with continuous data:
+    # Set the path to the folders with continuous data:
     archive_path = '/data/seismo-wav/SLARCHIVE'
     # archive_path2 = '/data/seismo-wav/EIDA/archive'
     client = Client(archive_path)
@@ -97,7 +99,6 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
     n_templates_per_run = 20
     n_templates = len(tribe)
     n_runs = math.ceil(n_templates / n_templates_per_run)
-
 
     starttime = UTCDateTime(pd.to_datetime(date))
     starttime_req = starttime - 15*60
@@ -117,9 +118,9 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
         bulk, day_stats = create_bulk_request(
             starttime_req, endtime_req, stats=ispaq,
             parallel=parallel, cores=cores,
-            stations=selectedStations, location_priority=['00','10',''],
-            band_priority=['B','H','S','E','N'], instrument_priority=['H'],
-            components=['Z','N','E','1','2'],
+            stations=selectedStations, location_priority=['00', '10', ''],
+            band_priority=['B', 'H', 'S', 'E', 'N'], instrument_priority=['H'],
+            components=['Z', 'N', 'E', '1', '2'],
             min_availability=0.8, max_cross_talk=1,
             max_spikes=1000, max_glitches=1000, max_num_gaps=500,
             max_num_overlaps=1000, max_max_overlap=86400,
@@ -131,7 +132,7 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
             require_clock_lock=False, max_suspect_time_tag=86400)
         if not bulk:
             Logger.warning('No waveforms requested for %s - %s',
-                            str(starttime)[0:19], str(endtime)[0:19])
+                           str(starttime)[0:19], str(endtime)[0:19])
             if not return_stream and dump_stream_to_disk:
                 return
             else:
@@ -140,7 +141,7 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
         # Read in continuous data and prepare for processing
         day_st = get_waveforms_bulk(client, bulk, parallel=parallel,
                                     cores=cores)
-            
+
         Logger.info('Successfully read in %s traces for bulk request of %s'
                     + ' NSLC-objects for %s - %s.', len(day_st), len(bulk),
                     str(starttime)[0:19], str(endtime)[0:19])
@@ -148,7 +149,7 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
             day_st, tribe, parallel=parallel, cores=cores, try_despike=False,
             ispaq=day_stats)
         # daily_plot(day_st, year, month, day, data_unit="counts", suffix='')
-        
+
         # Do initial processing (rotation, stats normalization, merging)
         # by parallelization across three-component seismogram sets.
         day_st = init_processing_wRotation(
@@ -163,7 +164,7 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
             std_network_code="NS", std_location_code="00",
             std_channel_prefix="BH", noise_balancing=noise_balancing,
             balance_power_coefficient=balance_power_coefficient)
-        
+
         # # Alternatively, do parallel processing across each trace, but then
         # # the NSLC-normalization with rotation has to happen independently.
         # day_st = init_processing(
@@ -182,12 +183,12 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
         #     std_channel_prefix="BH",
         #     sta_translation_file="station_code_translation.txt")
     
-    #daily_plot(day_st, year, month, day, data_unit="counts",
+    # daily_plot(day_st, year, month, day, data_unit="counts",
     #           suffix='resp_removed')            
     # If there is no data for the day, then continue on next day.
     if not day_st.traces:
         Logger.warning('No data for detection on %s, continuing' +
-                        ' with next day.', current_day_str)
+                       ' with next day.', current_day_str)
         if not return_stream and dump_stream_to_disk:
             return
         else:
@@ -206,13 +207,13 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
             parallel_process=parallel, cores=cores,
             # concurrency='multiprocess', xcorr_func='time_domain',
             xcorr_func='fftw', concurrency='multithread',
-            #parallel_process=False, #concurrency=None,
+            # parallel_process=False, #concurrency=None,
             group_size=n_templates_per_run, full_peaks=False,
             save_progress=False, process_cores=cores, spike_test=False)
-            # xcorr_func='fftw', concurrency=None, cores=1,
-            # xcorr_func=None, concurrency=None, cores=1,
-            # xcorr_func=None, concurrency='multiprocess', cores=cores,
-        #party = Party().read()
+        # xcorr_func='fftw', concurrency=None, cores=1,
+        # xcorr_func=None, concurrency=None, cores=1,
+        # xcorr_func=None, concurrency='multiprocess', cores=cores,
+        # party = Party().read()
     except Exception as e:
         Logger.error('Exception on %s', current_day_str)
         Logger.error(e, exc_info=True)
@@ -291,8 +292,8 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
     if multiplot:
         multiplot_detection(party, tribe, day_st, out_folder='DetectionPlots')
     if dump_stream_to_disk:
-        pickle.dump(day_st, open('tmp_st.pickle', "wb" ) , protocol=-1)
-        pickle.dump(party, open('tmp_party.pickle', "wb" ) , protocol=-1)
+        pickle.dump(day_st, open('tmp_st.pickle', "wb"), protocol=-1)
+        pickle.dump(party, open('tmp_party.pickle', "wb"), protocol=-1)
     gc.collect()
     # n = gc.collect()
     # Logger.info("Number of unreachable objects collected by GC: ", n)

@@ -8,7 +8,7 @@
 import os
 import glob
 # from importlib import reload
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool, cpu_count, get_context
 from multiprocessing.pool import ThreadPool
 
 # from obspy import read_events, read_inventory
@@ -243,7 +243,8 @@ def create_template_objects(
         # processes. inv can be empty Inv, or chosen more carefully for the
         # problem to speed this up.
         # e.g. with : channel='?H?', latitude=59, longitude=2, maxradius=7
-        with pool_boy(Pool=Pool, traces=len(sfiles), n_cores=cores) as pool:
+        with pool_boy(Pool=get_context("spawn").Pool, traces=len(sfiles),
+                      n_cores=cores) as pool:
             results = (
                 [pool.apply_async(
                     _create_template_objects, 
@@ -277,9 +278,9 @@ def create_template_objects(
         #    tribe = Tribe()
         #    wavnames = ()
         
-        pool.close()
-        pool.join()
-        pool.terminate()
+        # pool.close()
+        # pool.join()
+        # pool.terminate()
     else:
         (tribe, wavnames) = _create_template_objects(
             sfiles, selectedStations, template_length, lowcut, highcut,

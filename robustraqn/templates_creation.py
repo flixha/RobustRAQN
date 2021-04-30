@@ -106,7 +106,7 @@ def _create_template_objects(
         if remove_response:
             wavef = try_remove_responses(
                 wavef, inv, taper_fraction=0.15, pre_filt=[0.01, 0.05, 45, 50],
-                parallel=parallel, cores=cores)
+                parallel=False, cores=cores)
         wavef = wavef.detrend(type='simple')
         
         # standardize all codes for network, station, location, channel
@@ -129,7 +129,8 @@ def _create_template_objects(
             wavef = wavef.detrend('linear').taper(
                 0.15, type='hann', max_length=30,side='both')
 
-        event = prepare_picks(event=event, stream=wavef)
+        event = prepare_picks(event=event, stream=wavef,
+                              normalize_NSLC=normalize_NSLC)
         wavef = pre_processing.shortproc(
             st=wavef, lowcut=lowcut, highcut=highcut, filt_order=4,
             samp_rate=samp_rate, parallel=False, num_cores=1)
@@ -219,6 +220,10 @@ def create_template_objects(
     """
       Wrapper for create-template-function
     """
+    # Get only relevant inventory information to make Pool-startup quicker
+    new_inv = Inventory()
+    for sta in selectedStations:
+        new_inv += inv.select(station=sta)
     if parallel and len(sfiles) > 1:
         if cores is None:
             cores = min(len(sfiles), cpu_count())
@@ -234,15 +239,19 @@ def create_template_objects(
         # Is this I/O or CPU limited task?
         # Test on bigger problem (350 templates):
         # Threadpool: 10 minutes vs Pool: 7 minutes
+        # TODO: the problem is deep-copying of the inventory to the threads/
+        # processes. inv can be empty Inv, or chosen more carefully for the
+        # problem to speed this up.
+        # e.g. with : channel='?H?', latitude=59, longitude=2, maxradius=7
         with pool_boy(Pool=Pool, traces=len(sfiles), n_cores=cores) as pool:
-            results =\
+            results = (
                 [pool.apply_async(
                     _create_template_objects, 
                     ([sfile], selectedStations, template_length,
                         lowcut, highcut, min_snr, prepick, samp_rate,
                         seisanWAVpath),
                     dict(
-                        inv=inv.select(
+                        inv=new_inv.select(
                             time=UTCDateTime(sfile[-6:] + sfile[-19:-9])),
                         remove_response=remove_response,
                         noise_balancing=noise_balancing,
@@ -258,7 +267,7 @@ def create_template_objects(
                         std_location_code=std_location_code,
                         std_channel_prefix=std_channel_prefix,
                         parallel=thread_parallel, cores=n_threads)
-                    ) for sfile in sfiles]
+                    ) for sfile in sfiles])
         #try:
         res_out = [res.get() for res in results]
         tribes = [r[0] for r in res_out if len(r[0]) > 0]
@@ -274,7 +283,7 @@ def create_template_objects(
     else:
         (tribe, wavnames) = _create_template_objects(
             sfiles, selectedStations, template_length, lowcut, highcut,
-            min_snr, prepick, samp_rate, seisanWAVpath, inv=inv,
+            min_snr, prepick, samp_rate, seisanWAVpath, inv=new_inv,
             remove_response=remove_response,
             noise_balancing=noise_balancing, balance_power_coefficient=
             balance_power_coefficient, ground_motion_input=ground_motion_input,
@@ -298,7 +307,7 @@ def create_template_objects(
             templ.write('Templates/' + prefix + templ.name + '.mseed',
                         format="MSEED")
     
-    return (tribe, wavnames)
+    return tribe, wavnames
 
 
 # %% ############## MAIN ###################

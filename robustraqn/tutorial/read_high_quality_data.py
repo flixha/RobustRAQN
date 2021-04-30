@@ -1,11 +1,13 @@
 
 
+# %%
 import os
 from obspy.core import UTCDateTime
 import robustraqn
 from robustraqn.quality_metrics import (
     create_bulk_request, get_waveforms_bulk, read_ispaq_stats,
     get_parallel_waveform_client)
+from robustraqn import spectral_tools
 from obspy.clients.fdsn import Client
 
 
@@ -46,3 +48,5 @@ client = get_parallel_waveform_client(client)
 st = client.get_waveforms_bulk_parallel(bulk_request, parallel=True, cores=2)
 # alternative API:
 # st = get_waveforms_bulk(client, bulk_request, parallel=True, cores=2)
+
+# %%

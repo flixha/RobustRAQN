@@ -1,5 +1,7 @@
 import os
 import glob
+import fnmatch
+import wcmatch
 from eqcorrscan.utils.plotting import detection_multiplot
 import pandas as pd
 #import matplotlib
@@ -308,8 +310,8 @@ def prepare_detection_stream(st, tribe, parallel=False, cores=None,
                 #testStream += testtrace
                 #_spike_test(testStream, percent=0.98, multiplier=5e4)
             except Exception as e:
-                Logger.warning('Failed to despike %s', str(tr))
-        
+                Logger.warning('Failed to despike %s: %s', str(tr))
+                Logger.warning(e)
         
                 # tracelength = testtrace.stats.npts / testtrace.stats.sampling_rate
                 #         print('Despiking ' + contFile )
@@ -422,6 +424,90 @@ def daily_plot(st, year, month, day, data_unit='counts', suffix=''):
                 data_unit=data_unit)
 
 
+def get_matching_trace_for_pick(pick, stream):
+    """
+    find the trace-id that matches a pick to a suitable trace in stream
+
+    pick for which to find the suitable trace 
+    stream of relevant traces (i.e., for the same station as the pick is)
+    """
+    k = None
+    avail_tr_ids = [tr.id for tr in
+                    stream.select(station=pick.waveform_id.station_code)]
+    avail_nets = [tr_id.split('.')[0] for tr_id in avail_tr_ids]
+    avail_locs = [tr_id.split('.')[2] for tr_id in avail_tr_ids]
+    avail_chans = [tr_id.split('.')[3] for tr_id in avail_tr_ids]
+    pick_id = pick.waveform_id.id
+    pick_net_chan = pick_id.split('.')[0] + '.' + pick_id.split('.')[3]
+    pick_loc_chan = '.'.join(pick_id.split('.')[2:])
+    avail_nets_chans = [
+        id.split('.')[0] + '.' + id.split('.')[3] for id in avail_tr_ids]
+    avail_locs_chans = ['.'.join(id.split('.')[2:]) for id in avail_tr_ids]
+    #for k, code in enumerate(avail_tr_ids):
+    # Check available traces for suitable network/location/channel
+    if pick.waveform_id.id in avail_tr_ids:
+        k = avail_tr_ids.index(pick.waveform_id.id)
+    # 1. only location code doesn't match
+    elif pick_net_chan in avail_nets_chans:
+        k = avail_nets_chans.index(pick_net_chan)
+    # 2. network code doesn't match
+    elif pick_loc_chan in avail_locs_chans:
+        k = avail_locs_chans.index(pick_loc_chan)
+    # 3 if not found, check if the channel code is missing a letter
+    elif (' ' in pick.waveform_id.channel_code
+            or len(pick.waveform_id.channel_code) <= 2):
+        if len(pick.waveform_id.channel_code) == 2:
+            pick.waveform_id.channel_code = (
+                pick.waveform_id.channel_code[0] + ' '
+                + pick.waveform_id.channel_code[1])
+        elif len(pick.waveform_id.channel_code) == 1:
+            pick.waveform_id.channel_code = (
+                '  ' + pick.waveform_id.channel_code[1])
+        pick_id = pick.waveform_id.id
+        pick_chan_wildcarded = pick_id.split('.')[3].replace(' ', '?')
+        pick_id_wildcarded = '.'.join(
+            pick_id.split('.')[0:3] + [pick_chan_wildcarded])
+        matches = [(i, id) for i, id in enumerate(avail_tr_ids)
+                    if fnmatch.fnmatch(id, pick_id_wildcarded)]
+        if matches:
+            k = matches[0][0]
+        else:
+            # 4 if not found, allow space in channel and wrong network
+            pick_loc_chan_wildcarded = (pick_id.split('.')[1] + '.'
+                                        + pick_chan_wildcarded)
+            matches = [(i, id) for i, id in enumerate(avail_locs_chans)
+                    if fnmatch.fnmatch(id, pick_loc_chan_wildcarded)]
+            if matches:
+                k = matches[0][0]
+            # 6 if not found, allow space in channel and wrong location
+            if k is None:
+                pick_net_chan_wildcarded = (pick_id.split('.')[0]
+                                            + pick_chan_wildcarded)
+                matches = [
+                    (i, id) for i, id in enumerate(avail_nets_chans)
+                    if fnmatch.fnmatch(id, pick_net_chan_wildcarded)]
+                if matches:
+                    k = matches[0][0]
+            # 7 if not found, allow space in channel, wrong network,
+            #   and wrong location
+            if k is None:
+                matches = [
+                    (i, id) for i, id in enumerate(avail_chans)
+                    if fnmatch.fnmatch(id, pick_chan_wildcarded)]
+                if matches:
+                    k = matches[0][0]
+    if k is None:
+        Logger.debug('Could not find matching trace for pick on %s',
+                     pick.waveform_id.id)
+        return None, None
+    chosen_tr_id = '.'.join([avail_nets[k], pick.waveform_id.station_code,
+                             avail_locs[k], avail_chans[k]])
+    pick.waveform_id.network_code = avail_nets[k]
+    pick.waveform_id.location_code = avail_locs[k]
+    pick.waveform_id.channel_code = avail_chans[k]
+
+    return chosen_tr_id, k
+
 
 def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
                   std_location_code='00', std_channel_prefix='BH',
@@ -437,7 +523,6 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
        alternative channel
      - put P-pick on Z-channel
      - put S-picks on horizontal channels if available
-     
 
     :type template: obspy.core.stream.Stream
     :param template: Template stream to plot
@@ -448,7 +533,6 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
     {plotting_kwargs}
 
     :returns: :class:`obspy.event`
-
 
     """
     #correct PG / SG picks to P / S
@@ -470,17 +554,21 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
         if len(pick.phase_hint) == 0:
             continue
         # Check which channels are available for pick's station in stream
-        available_chans = [tr.stats.channel[-1] for tr in
+        avail_comps = [tr.stats.channel[-1] for tr in
                           stream.select(station=pick.waveform_id.station_code)]
-        if not available_chans:
+        if not avail_comps:
             continue
         # Sort available channels so that Z is the last item
-        available_chans.sort()
+        avail_comps.sort()
         # for no normalization; just do any required channel-switching
         if not normalize_NSLC:
-            std_network_code = pick.waveform_id.network_code
-            std_location_code = pick.waveform_id.location_code
-            std_channel_prefix = pick.waveform_id.channel_code[0:2] or ''
+            matching_tr_id, k = get_matching_trace_for_pick(
+                pick, stream.select(station=pick.waveform_id.station_code))
+            if matching_tr_id is None:
+                continue
+            std_network_code = matching_tr_id.split('.')[0]
+            std_location_code = matching_tr_id.split('.')[2]
+            std_channel_prefix = matching_tr_id.split('.')[3][0:2]
         # Check wether pick is P or S-phase, and normalize network/station/
         # location and channel codes
         if pick.phase_hint.upper()[0]=='P' or pick.phase_hint.upper()[0]=='S':
@@ -496,20 +584,20 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
             #    prefix.
             if len(pick.waveform_id.channel_code) == 0:
                 pick.waveform_id.channel_code = std_channel_prefix +\
-                    available_chans[-1]
+                    avail_comps[-1]
             elif len(pick.waveform_id.channel_code) <= 2:
                 pick.waveform_id.channel_code =\
                     std_channel_prefix + pick.waveform_id.channel_code[-1]
             # 2. Check that channel is available - otherwise switch to suitable
             #    other channel.
-            if pick.waveform_id.channel_code[-1] not in available_chans:
+            if pick.waveform_id.channel_code[-1] not in avail_comps:
                 pick.waveform_id.channel_code =\
-                    std_channel_prefix + available_chans[-1]
+                    std_channel_prefix + avail_comps[-1]
             # 3. If P-pick is not on vertical channel and there exists a 'Z'-
             #    channel, then switch P-pick to Z.
             if pick.phase_hint.upper()[0] == 'P' and\
                     pick.waveform_id.channel_code[-1] != 'Z':
-                if 'Z' in available_chans:
+                if 'Z' in avail_comps:
                     pick.waveform_id.channel_code = std_channel_prefix +'Z'
             # 4. If S-pick is on vertical channel and there exist horizontal
             #    channels, then switch S_pick to the first horizontal.         
@@ -650,7 +738,9 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
                         _init_processing_per_channel, 
                         ((day_st.select(id=id), starttime, endtime)),
                         dict(remove_response=remove_response,
-                            inv=inv.select(station=id.split('.')[1]),
+                            inv=inv.select(station=id.split('.')[1],
+                                           starttime=starttime,
+                                           endtime=endtime),
                             min_segment_length_s=min_segment_length_s,
                             max_sample_rate_diff=max_sample_rate_diff,
                             skip_check_sampling_rates=skip_check_sampling_rates,
@@ -711,7 +801,7 @@ def init_processing_wRotation(
     # net_sta_loc = list(chain.from_iterable(repeat(i, c)
     #                    for i,c in Counter(net_sta_loc).most_common()))
     ### Need to sort list by original order after set()
-    
+
     # Better: Sort by: whether needs rotation; npts per 3-comp stream
     unique_net_sta_loc_list = set(net_sta_loc)
     three_comp_strs = [
@@ -728,11 +818,12 @@ def init_processing_wRotation(
         st = Stream()
         for nsl in unique_net_sta_loc_list:
             Logger.info('Starting initial processing of %s for %s - %s.',
-                         id, str(starttime)[0:19], str(endtime)[0:19])
+                         str(nsl), str(starttime)[0:19], str(endtime)[0:19])
             st += _init_processing_per_channel_wRotation(
                 day_st.select(network=nsl[0], station=nsl[1], location=nsl[2]),
                 starttime, endtime, remove_response=remove_response,
-                inv=inv.select(station=nsl[1]),
+                inv=inv.select(station=nsl[1], starttime=starttime,
+                               endtime=endtime),
                 min_segment_length_s=min_segment_length_s,
                 max_sample_rate_diff=max_sample_rate_diff,
                 skip_check_sampling_rates=skip_check_sampling_rates,
@@ -772,7 +863,9 @@ def init_processing_wRotation(
                             starttime, endtime),
                         kwds=dict(
                             remove_response=remove_response,
-                            inv=inv.select(station=nsl[1]),
+                            inv=inv.select(station=nsl[1],
+                                           starttime=starttime,
+                                           endtime=endtime),
                             sta_translation_file=sta_translation_file,
                             min_segment_length_s=min_segment_length_s,
                             max_sample_rate_diff=max_sample_rate_diff,
@@ -973,7 +1066,7 @@ def _init_processing_per_channel_wRotation(
             'Initial processing of %s traces in stream %s took: {0:.4f}s'.format(
                 outtoc - outtic), str(len(st)), st[0].id)
     except Exception as e:
-        Logger.warn(e)
+        Logger.warning(e)
 
     return st
 
@@ -1210,6 +1303,7 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
         if not found_matching_resp:
             Logger.warning('Finally cannot remove reponse for ' + str(tr) +
                            ' - no match found')
+            # Logger.warning(e)
         else:
             # TODO: what if trace's location code is empty, and there are 
             # multiple instruments at one station that both match the trace in
@@ -1222,8 +1316,8 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
             except Exception as e:
                 found_matching_resp = False
                 Logger.warning('Finally cannot remove reponse for ' + str(tr) +
-                            ', Exception:')
-                Logger.warning(e)
+                               ' - no match found')
+                # Logger.warning(e)
         # IF reponse isn't found, then adjust amplitude to something 
         # similar to the properly corrected traces
         if not found_matching_resp:
@@ -1239,10 +1333,12 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
     tr.stats['distance'] = np.NaN
     # try to set coordinates from channel-info; but using station-info is
     # also ok
+    stachan_info = None
     try:
         stachan_info = sel_inv.networks[0].stations[0]
         stachan_info = sel_inv.networks[0].stations[0].channels[0]
-    except:
+    except Exception as e:
+        Logger.warning('Cannot find metadata for trace %s', tr.id)
         pass
     try:
         tr.stats["coordinates"]["latitude"] = stachan_info.latitude
@@ -1282,6 +1378,19 @@ def try_find_matching_response(tr, inv):
     entory that has the same station code, and check start/endtimes
     of channel - correct trace stats if there's a match.
     :returns: bool, trace, inventory
+    
+    Logic:
+    1. only location code is empty:
+    2. neither location nor network codes are empty, but there is a response
+       for an empty location code.
+    2. network code is empty
+    3. if not found, try again and allow any location code
+    4 if not found, check if the channel code may contain a space in
+       the middle
+       5 if not found, allow space in channel and empty network
+       6 if not found, allow space in channel and empty location
+       7 if not found, allow space in channel, empty network, and 
+         empty location
     """
     found = False
     # 1. only location code is empty:
@@ -1448,7 +1557,8 @@ def return_matching_response(tr, inv, network, station, channel):
 def normalize_NSLC_codes(st, inv, std_network_code="NS",
                          std_location_code="00", std_channel_prefix="BH",
                          parallel=False, cores=None,
-                         sta_translation_file="station_code_translation.txt"):
+                         sta_translation_file="station_code_translation.txt",
+                         forbidden_chan_file="forbidden_chans.txt"):
     """
     1. Correct non-FDSN-standard-complicant channel codes
     2. Rotate to proper ZNE, and hence change codes from [Z12] to [ZNE]
@@ -1457,6 +1567,15 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
     5. Set all location codes to 00.
     """
     import numpy as np
+    # 0. remove forbidden channels that cause particular problems
+    forbidden_chans = load_forbidden_chan_file(file=forbidden_chan_file)
+    st_copy = st.copy()
+    for tr in st_copy:
+        if wcmatch.fnmatch.fnmatch(tr.id, forbidden_chans):
+            st.remove(tr)
+            Logger.info('Removed trace %s because it is a forbidden trace',
+                        tr.id)
+
     # 1.
     for tr in st:
         # Check the channel names and correct if required
@@ -1493,7 +1612,12 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
         st = parallel_rotate(st, inv, cores=cores, method="->ZNE")    
     else:
         st.rotate(method="->ZNE", inventory=inv)
-        
+
+    # Need to merge again here, because rotate may split merged traces if there
+    # are masked arrays (i.e., values filled with None). The merge here will
+    # recreate the masked arrays (after they disappeared during rotate).
+    st = st.merge(method=1, fill_value=None, interpolation_samples=-1)
+
     # 3. +4 +5 Translate station codes, Set network and location codes
     # load list of tuples for station-code translation
     sta_fortransl_dict, sta_backtrans_dict = load_station_translation_dict(
@@ -1502,12 +1626,13 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
         tr.stats.network = std_network_code
         tr.stats.location = std_location_code
         if tr.stats.station in sta_fortransl_dict:
-            tr.stats.station = sta_fortransl_dict.get(tr.stats.station)
-    # Need to merge again here, because rotate may split merged traces if there
-    # are masked arrays (i.e., values filled with None). The merge here will
-    # recreate the masked arrays (after they disappeared during rotate).
-    st = st.merge(method=1, fill_value=None, interpolation_samples=-1)
-    
+            # Make sure not to normalize station/channel-code to a combination
+            # that already exists in stream
+            existing_sta_chans = st.select(station=sta_fortransl_dict.get(
+                tr.stats.station), channel=tr.stats.channel)
+            if len(existing_sta_chans) == 0:
+                tr.stats.station = sta_fortransl_dict.get(tr.stats.station)
+
     return st
 
 
@@ -1519,7 +1644,7 @@ def get_all_relevant_stations(selectedStations, sta_translation_file=
     relevantStations = selectedStations
     sta_fortransl_dict, sta_backtrans_dict = load_station_translation_dict(
         file=sta_translation_file)
-        
+
     for sta in selectedStations:
         if sta in sta_backtrans_dict:
             relevantStations.append(sta_backtrans_dict.get(sta))
@@ -1536,8 +1661,9 @@ def load_station_translation_dict(file="station_code_translation.txt"):
         f = open(file, "r+")
     except Exception as e:
         Logger.error('Cannot load station translation file %s', file)
+        Logger.error(e)
         return station_forw_translation_dict, station_forw_translation_dict
-        
+
     for line in f.readlines()[1:]:
         #station_translation_list.append(tuple(line.strip().split()))
         standard_sta_code, alternative_sta_code = line.strip().split()
@@ -1545,6 +1671,25 @@ def load_station_translation_dict(file="station_code_translation.txt"):
     station_backw_translation_dict = {y:x for x,y in 
                                       station_forw_translation_dict.items()}
     return station_forw_translation_dict, station_backw_translation_dict
+
+
+def load_forbidden_chan_file(file="forbidden_chans.txt"):
+    """
+    reads a list of channels that are to be removed from all EQcorrscan-data,
+    e.g., because of some critical naming conflict (e.g. station NRS as part of
+    the DK network and as Norsar array beam code)
+    """
+    forbidden_chans = []
+    try:
+        f = open(file, "r+")
+    except Exception as e:
+        Logger.error('Cannot load forbidden channel file %s', file)
+        Logger.error(e)
+        return forbidden_chans
+    for line in f.readlines():
+        forbidden_chans.append(line.strip())
+
+    return forbidden_chans
 
 
 def check_template(st, template_length, remove_nan_strict=True,
@@ -1570,7 +1715,6 @@ def check_template(st, template_length, remove_nan_strict=True,
             for j in range(0, k):
                 testSameIDtrace = st[j]
                 if tr.id == testSameIDtrace.id:
-                    #if tr.stats.starttime >= testSameIDtrace.stats.starttime:
                     # remove if the duplicate traces have the same start-time
                     if tr.stats.starttime == testSameIDtrace.stats.starttime\
                             and tr in st:
@@ -1678,9 +1822,14 @@ def multiplot_detection(party, tribe, st, out_folder='DetectionPlots'):
             filename = str(detection.detect_time)[0:19] + '_'\
                 + family.template.name + '.png'
             filename = os.path.join(out_folder, filename.replace('/', ''))
-            fig = detection_multiplot(
-                stream=dst, template=family.template.st, times=times,
-                save=True, savefile=filename, size=(20, 30), show=False)
+            try:
+                fig = detection_multiplot(
+                    stream=dst, template=family.template.st, times=times,
+                    save=True, savefile=filename, size=(20, 30), show=False)
+            except Exception as e:
+                Logger.error('Could not create multi-plot for detection %s',
+                             detection)
+                Logger.error(e)
 
 
 def reevaluate_detections(

@@ -7,7 +7,7 @@ import pandas as pd
 #import matplotlib
 from threadpoolctl import threadpool_limits
 
-from multiprocessing import Pool, cpu_count, current_process
+from multiprocessing import Pool, cpu_count, current_process, get_context
 from multiprocessing.pool import ThreadPool
 
 import numpy as np
@@ -729,8 +729,8 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
             cores = min(len(day_st), cpu_count())
         
         with threadpool_limits(limits=1, user_api='blas'):
-            with pool_boy(Pool=Pool, traces=len(unique_seed_id_list),
-                        cores=cores) as pool:
+            with pool_boy(Pool=get_context("spawn").Pool, traces
+                          =len(unique_seed_id_list),cores=cores) as pool:
                 #params = ((tr, inv, taper_fraction, parallel, cores)
                 #          for tr in st)
                 results =\
@@ -792,9 +792,13 @@ def init_processing_wRotation(
     Logger.info('Starting initial processing for %s - %s.',
                 str(starttime)[0:19], str(endtime)[0:19])
     outtic = default_timer()
-                
+
     net_sta_loc = [(tr.stats.network, tr.stats.station, tr.stats.location)
                    for tr in day_st]
+    if len(net_sta_loc) == 0:
+        Logger.error('There are no traces to do initial processing on %s',
+                     str(starttime))
+        return day_st
     # Sort unique-ID list by most common, so that 3-component stations
     # appear first and are processed first in parallel loop (for better load-
     # balancing)
@@ -853,8 +857,8 @@ def init_processing_wRotation(
         #             + 'processes with up to %s threads each.', str(cores),
         #             str(n_threads))
         with threadpool_limits(limits=1, user_api='blas'):
-            with pool_boy(Pool=Pool, traces=len(unique_net_sta_loc_list),
-                        cores=cores) as pool:
+            with pool_boy(Pool=get_context("spawn").Pool, traces
+                          =len(unique_net_sta_loc_list), cores=cores) as pool:
                 results =\
                     [pool.apply_async(
                         _init_processing_per_channel_wRotation,
@@ -1243,7 +1247,7 @@ def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
         # If this function is called from a subprocess and asked for parallel
         # execution, then open a thread-pool to distribute work further.
         if current_process().name == 'MainProcess':
-            my_pool = Pool
+            my_pool = get_context("spawn").Pool
         else:
             my_pool = ThreadPool
         
@@ -1254,8 +1258,7 @@ def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
                 results = [pool.apply_async(
                     _try_remove_responses,
                     args=(tr, inv.select(station=tr.stats.station),
-                          taper_fraction,
-                          pre_filt, output)
+                          taper_fraction, pre_filt, output)
                     ) for tr in st]
         traces = [res.get() for res in results]
         traces = [tr for tr in traces if tr is not None]

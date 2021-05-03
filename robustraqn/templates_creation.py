@@ -53,21 +53,23 @@ def listdir_fullpath(d):
 
 
 def _create_template_objects(
-    sfiles, selectedStations, template_length, lowcut, highcut, min_snr,
-    prepick, samp_rate, seisanWAVpath, inv=Inventory(), remove_response=False,
-    noise_balancing=False, balance_power_coefficient=2, ground_motion_input=[],
-    min_n_traces=8, write_out=False, make_pretty_plot=False, prefix='',
-    check_template_strict=True, allow_channel_duplication=True,
-    normalize_NSLC=True, sta_translation_file="station_code_translation.txt",
-    std_network_code='NS', std_location_code='00',  std_channel_prefix='BH',
-    parallel=False, cores=1):
+        sfiles, selectedStations, template_length, lowcut, highcut, min_snr,
+        prepick, samp_rate, seisanWAVpath, inv=Inventory(),
+        remove_response=False, noise_balancing=False,
+        balance_power_coefficient=2, ground_motion_input=[],
+        min_n_traces=8, write_out=False, make_pretty_plot=False, prefix='',
+        check_template_strict=True, allow_channel_duplication=True,
+        normalize_NSLC=True,
+        sta_translation_file="station_code_translation.txt",
+        std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
+        parallel=False, cores=1):
     """
     """
     midlat = 60.0
     midlon = 5.0
     radius = 20.0
 
-    sfiles.sort(key = lambda x: x[-6:])
+    sfiles.sort(key=lambda x: x[-6:])
     tribe = Tribe()
     template_names = []
     catalogForTemplates = Catalog()
@@ -81,7 +83,7 @@ def _create_template_objects(
         relevantStations = get_all_relevant_stations(
             selectedStations,
             sta_translation_file="station_code_translation.txt")
-        
+
         origin = select[0].preferred_origin()
         # Check that event within chosen area
         if (origin.longitude < midlon-radius and
@@ -106,16 +108,17 @@ def _create_template_objects(
         if remove_response:
             wavef = try_remove_responses(
                 wavef, inv, taper_fraction=0.15, pre_filt=[0.01, 0.05, 45, 50],
-                parallel=False, cores=cores)
+                parallel=parallel, cores=cores)
         wavef = wavef.detrend(type='simple')
-        
+
         # standardize all codes for network, station, location, channel
         if normalize_NSLC:
             wavef = normalize_NSLC_codes(
                 wavef, inv, sta_translation_file=sta_translation_file,
-                std_network_code=std_network_code, std_location_code
-                =std_location_code, std_channel_prefix=std_channel_prefix)
-        
+                std_network_code=std_network_code,
+                std_location_code=std_location_code,
+                std_channel_prefix=std_channel_prefix)
+
         # Do noise-balancing by the station's PSDPDF average
         if noise_balancing:
             # if not hasattr(wavef, "balance_noise"):
@@ -123,11 +126,12 @@ def _create_template_objects(
             #     wavef.balance_noise = bound_method
             wavef = wavef.filter('highpass', freq=0.1, zerophase=True
                                  ).detrend()
-            wavef = st_balance_noise(wavef, inv, balance_power_coefficient=
-                                     balance_power_coefficient,
-                                     ground_motion_input=ground_motion_input)
+            wavef = st_balance_noise(
+                wavef, inv,
+                balance_power_coefficient=balance_power_coefficient,
+                ground_motion_input=ground_motion_input)
             wavef = wavef.detrend('linear').taper(
-                0.15, type='hann', max_length=30,side='both')
+                0.15, type='hann', max_length=30, side='both')
 
         event = prepare_picks(event=event, stream=wavef,
                               normalize_NSLC=normalize_NSLC)
@@ -136,13 +140,14 @@ def _create_template_objects(
             samp_rate=samp_rate, parallel=False, num_cores=1)
         # data_envelope = obspy.signal.filter.envelope(st_filt[0].data)
 
-        #Make the templates from picks and waveforms
+        # Make the templates from picks and waveforms
         catalogForTemplates += event
-        templateSt = template_gen._template_gen(picks=event.picks, st=wavef,
-            length=template_length, swin='all', prepick=prepick,
-            all_horiz=True, plot=False, delayed=True, min_snr=min_snr)
+        templateSt = template_gen._template_gen(
+            picks=event.picks, st=wavef, length=template_length, swin='all',
+            prepick=prepick, all_horiz=True, plot=False, delayed=True,
+            min_snr=min_snr)
         # quality-control template
-        if len(templateSt)==0:
+        if len(templateSt) == 0:
             continue
         if check_template_strict:
             templateSt = check_template(
@@ -156,11 +161,11 @@ def _create_template_objects(
             .replace(':', '_').replace('.', '_').replace('/', '')
         # templateName = templateName.lower().replace(':','_')
         # templateName = templateName.lower().replace('.','_')
-        # template.write('TemplateObjects/' + templateName + '.mseed', 
+        # template.write('TemplateObjects/' + templateName + '.mseed',
         # format="MSEED")
         template_names.append(templateName)
         # except:
-        #    print("WARNING: There was an issue creating a template for " + 
+        #    print("WARNING: There was an issue creating a template for " +
         # sfile)
         # t = Template().construct(
         #     method=None,picks=event.picks, st=templateSt,length=7.0,
@@ -198,8 +203,8 @@ def _create_template_objects(
 
     return (tribe, wavnames)
 
-    # clusters = cluster(template_list=template_list, show=True, 
-    #       corr_thresh=0.3, allow_shift=True, shift_len=2, save_corrmat=False, 
+    # clusters = cluster(template_list=template_list, show=True,
+    #       corr_thresh=0.3, allow_shift=True, shift_len=2, save_corrmat=False,
     #       cores=16)
     # groups = cluster(template_list=template_list, show=False,
     #                  corr_thresh=0.3, cores=8)
@@ -209,14 +214,16 @@ def _create_template_objects(
 
 
 def create_template_objects(
-    sfiles, selectedStations, template_length, lowcut, highcut, min_snr,
-    prepick, samp_rate, seisanWAVpath, inv=Inventory(), remove_response=False,
-    noise_balancing=False, balance_power_coefficient=2, ground_motion_input=[],
-    min_n_traces=8, write_out=False, prefix='', make_pretty_plot=False,
-    check_template_strict=True, allow_channel_duplication=True,
-    normalize_NSLC=True, sta_translation_file="station_code_translation.txt",
-    std_network_code='NS', std_location_code='00',  std_channel_prefix='BH',
-    parallel=False, cores=1):
+        sfiles, selectedStations, template_length, lowcut, highcut, min_snr,
+        prepick, samp_rate, seisanWAVpath, inv=Inventory(),
+        remove_response=False, noise_balancing=False,
+        balance_power_coefficient=2, ground_motion_input=[],
+        min_n_traces=8, write_out=False, prefix='', make_pretty_plot=False,
+        check_template_strict=True, allow_channel_duplication=True,
+        normalize_NSLC=True,
+        sta_translation_file="station_code_translation.txt",
+        std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
+        parallel=False, cores=1):
     """
       Wrapper for create-template-function
     """
@@ -235,7 +242,7 @@ def create_template_objects(
         # if cores > 2 * len(sfiles):
         #     thread_parallel = True
         #     n_threads = int(cores / len(sfiles))
-        
+
         # Is this I/O or CPU limited task?
         # Test on bigger problem (350 templates):
         # Threadpool: 10 minutes vs Pool: 7 minutes
@@ -269,15 +276,15 @@ def create_template_objects(
                         std_channel_prefix=std_channel_prefix,
                         parallel=thread_parallel, cores=n_threads)
                     ) for sfile in sfiles])
-        #try:
+        # try:
         res_out = [res.get() for res in results]
         tribes = [r[0] for r in res_out if len(r[0]) > 0]
         wavnames = [r[1][0] for r in res_out if len(r[0]) > 0]
         tribe = Tribe(templates=[tri[0] for tri in tribes if len(tri) > 0])
-        #except IndexError:
+        # except IndexError:
         #    tribe = Tribe()
         #    wavnames = ()
-        
+
         # pool.close()
         # pool.join()
         # pool.terminate()
@@ -285,9 +292,9 @@ def create_template_objects(
         (tribe, wavnames) = _create_template_objects(
             sfiles, selectedStations, template_length, lowcut, highcut,
             min_snr, prepick, samp_rate, seisanWAVpath, inv=new_inv,
-            remove_response=remove_response,
-            noise_balancing=noise_balancing, balance_power_coefficient=
-            balance_power_coefficient, ground_motion_input=ground_motion_input,
+            remove_response=remove_response, noise_balancing=noise_balancing,
+            balance_power_coefficient=balance_power_coefficient,
+            ground_motion_input=ground_motion_input,
             min_n_traces=min_n_traces, write_out=write_out, prefix=prefix,
             make_pretty_plot=make_pretty_plot, parallel=False, cores=1,
             check_template_strict=check_template_strict,
@@ -297,7 +304,7 @@ def create_template_objects(
             std_network_code=std_network_code,
             std_location_code=std_location_code,
             std_channel_prefix=std_channel_prefix)
-    
+
     label = ''
     if noise_balancing:
         label = label + 'balNoise_'
@@ -307,7 +314,7 @@ def create_template_objects(
         for templ in tribe:
             templ.write('Templates/' + prefix + templ.name + '.mseed',
                         format="MSEED")
-    
+
     return tribe, wavnames
 
 
@@ -334,7 +341,7 @@ if __name__ == "__main__":
     # selectedStations = ['ASK', 'BER', 'NC602']
     # 'SOFL','OSL',
     invFile = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.xml'
-    # invFile = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.dataless_seed'
+    # invFile='~/Documents2/ArrayWork/Inventory/NorSea_inventory.dataless_seed'
     # inv = read_inventory(os.path.expanduser(invFile))
     inv = get_updated_inventory_with_noise_models(
         os.path.expanduser(invFile),
@@ -346,16 +353,14 @@ if __name__ == "__main__":
     noise_balancing = True
     cores = 20
 
-
     sfiles = glob.glob(os.path.join(seisanREApath, '*L.S??????'))
     # sfiles = glob.glob(os.path.join(seisanREApath, '24-1338-14L.S201909'))
-    #sfiles = glob.glob(os.path.join(seisanREApath, '04-1734-46L.S200706'))
+    # sfiles = glob.glob(os.path.join(seisanREApath, '04-1734-46L.S200706'))
     # sfiles = glob.glob(os.path.join(seisanREApath, '24-0101-20L.S200707'))
     # sfiles = glob.glob(os.path.join(seisanREApath, '20-1814-05L.S201804'))
-    #sfiles = glob.glob(os.path.join(seisanREApath, '01-0545-55L.S201009'))
+    # sfiles = glob.glob(os.path.join(seisanREApath, '01-0545-55L.S201009'))
     # sfiles = glob.glob(os.path.join(seisanREApath, '30-0033-00L.S200806'))
-    sfiles.sort(key = lambda x: x[-6:])
-    sfiles = sfiles[7:9]
+    sfiles.sort(key=lambda x: x[-6:])
 
     highcut = 9.9
     if noise_balancing:
@@ -363,7 +368,6 @@ if __name__ == "__main__":
     else:
         lowcut = 2.5
 
-    
     # create_template_objects(sfiles, selectedStations, inv,
     tribe = create_template_objects(
         sfiles, selectedStations, template_length, lowcut, highcut,
@@ -371,6 +375,3 @@ if __name__ == "__main__":
         remove_response=True, seisanWAVpath=seisanWAVpath,
         noise_balancing=noise_balancing, min_n_traces=3,
         parallel=parallel, cores=cores, write_out=False, make_pretty_plot=True)
-    
-
-# %%

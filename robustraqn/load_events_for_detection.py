@@ -600,21 +600,22 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
                     pick.waveform_id.channel_code = std_channel_prefix +'Z'
             # 4. If S-pick is on vertical channel and there exist horizontal
             #    channels, then switch S_pick to the first horizontal.         
-            elif pick.phase_hint.upper()[0] == 'S' and\
-                pick.waveform_id.channel_code[-1] == 'Z':
-                horizontalTraces = stream.select(station=pick.waveform_id.
-                        station_code, channel=std_channel_prefix+'[EN123]')
+            elif (pick.phase_hint.upper()[0] == 'S' and
+                    pick.waveform_id.channel_code[-1] == 'Z'):
+                horizontalTraces = stream.select(
+                    station=pick.waveform_id.station_code,
+                    channel=std_channel_prefix+'[EN123]')
                 if horizontalTraces:
                     pick.waveform_id.channel_code =\
                         horizontalTraces[0].stats.channel
                 # 4b. If S-pick is on vertical and there is no P-pick, then
                 # remove S-pick.
                 else:
-                    P_picks = [p for p in event.picks
-                               if len(p.phase_hint) > 0
-                                    if p.phase_hint.upper()[0] == 'P' and
-                                    p.waveform_id.station_code ==
-                                    pick.waveform_id.station_code]
+                    P_picks = [
+                        p for p in event.picks if len(p.phase_hint) > 0
+                        if p.phase_hint.upper()[0] == 'P' and
+                        p.waveform_id.station_code ==
+                        pick.waveform_id.station_code]
                     if len(P_picks) == 0:
                         continue
             newEvent.picks.append(pick)
@@ -628,12 +629,12 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
     newEvent.picks = list()
     # TODO check whether Pn / Pg are correctly handled here
     for pick in event.picks:
-        #uncomment to change back to retaining Pn and Pg
-        #pickIDTuple = (pick.waveform_id, pick.phase_hint)
+        # uncomment to change back to retaining Pn and Pg
+        # pickIDTuple = (pick.waveform_id, pick.phase_hint)
         pickIDTuple = (pick.waveform_id.station_code,
                        pick.phase_hint.upper())
-        if not pickIDTuple in pickIDs:
-            #pickIDs.append((pick.waveform_id, pick.phase_hint))
+        if pickIDTuple not in pickIDs:
+            # pickIDs.append((pick.waveform_id, pick.phase_hint))
             pickIDs.append((pick.waveform_id.station_code,
                             pick.phase_hint.upper()))
             newEvent.picks.append(pick)
@@ -651,7 +652,6 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
                         newEvent.picks.append(pick)
     event = newEvent
     return event
-
 
 
 def init_processing(day_st, starttime, endtime, remove_response=False,
@@ -702,7 +702,8 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
                 noise_balancing=noise_balancing,
                 balance_power_coefficient=balance_power_coefficient)
 
-        # # Make a copy of the day-stream to find the values that need to be masked.
+        # Make a copy of the day-stream to find the values that need to be
+        # masked.
         # masked_st = day_st.copy()
         # masked_st.merge(method=0, fill_value=None, interpolation_samples=0)
         # masked_st.trim(starttime=starttime, endtime=endtime, pad=True,
@@ -722,62 +723,61 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
         # # Put masked array into response-corrected stream day_st:
         # for j, tr in enumerate(day_st):
         #     if isinstance(masked_st[j].data, np.ma.MaskedArray):
-        #         tr.data = np.ma.masked_array(tr.data, mask=masked_st[j].data.mask)
+        #         tr.data = np.ma.masked_array(
+        #     tr.data, mask=masked_st[j].data.mask)
     else:
         if cores is None:
             cores = min(len(day_st), cpu_count())
         
         with threadpool_limits(limits=1, user_api='blas'):
-            with pool_boy(Pool=get_context("spawn").Pool, traces
-                          =len(unique_seed_id_list),cores=cores) as pool:
-                #params = ((tr, inv, taper_fraction, parallel, cores)
+            with pool_boy(
+                    Pool=get_context("spawn").Pool,
+                    traces=len(unique_seed_id_list), cores=cores) as pool:
+                # params = ((tr, inv, taper_fraction, parallel, cores)
                 #          for tr in st)
-                results =\
-                    [pool.apply_async(
-                        _init_processing_per_channel, 
-                        ((day_st.select(id=id), starttime, endtime)),
-                        dict(remove_response=remove_response,
-                            inv=inv.select(station=id.split('.')[1],
-                                           starttime=starttime,
-                                           endtime=endtime),
-                            min_segment_length_s=min_segment_length_s,
-                            max_sample_rate_diff=max_sample_rate_diff,
-                            skip_check_sampling_rates=skip_check_sampling_rates,
-                            skip_interp_sample_rate_smaller=
-                            skip_interp_sample_rate_smaller,
-                            interpolation_method=interpolation_method,
-                            detrend_type=detrend_type,
-                            taper_fraction=taper_fraction,
-                            downsampled_max_rate=downsampled_max_rate,
-                            noise_balancing=noise_balancing,
-                            balance_power_coefficient=balance_power_coefficient))
-                    for id in unique_seed_id_list]
-        #args = (st.select(id=id), inv.select(station=id.split('.')[1]),
+                results = ([pool.apply_async(
+                    _init_processing_per_channel,
+                    ((day_st.select(id=id), starttime, endtime)),
+                    dict(remove_response=remove_response,
+                         inv=inv.select(station=id.split('.')[1],
+                                        starttime=starttime, endtime=endtime),
+                         min_segment_length_s=min_segment_length_s,
+                         max_sample_rate_diff=max_sample_rate_diff,
+                         skip_check_sampling_rates=skip_check_sampling_rates,
+                         skip_interp_sample_rate_smaller=
+                         skip_interp_sample_rate_smaller,
+                         interpolation_method=interpolation_method,
+                         detrend_type=detrend_type,
+                         taper_fraction=taper_fraction,
+                         downsampled_max_rate=downsampled_max_rate,
+                         noise_balancing=noise_balancing,
+                         balance_power_coefficient=balance_power_coefficient))
+                    for id in unique_seed_id_list])
+        # args = (st.select(id=id), inv.select(station=id.split('.')[1]),
         #        detrend_type=detrend_type, taper_fraction=taper_fraction)
         streams = [res.get() for res in results]
         st = Stream()
         for trace_st in streams:
             for tr in trace_st:
                 st.append(tr)
-                
+
     outtoc = default_timer()
     Logger.info(
         'Initial processing of %s traces in stream took: {0:.4f}s'.format(
             outtoc - outtic), str(len(st)))
-                
+
     return st
 
 
-
 def init_processing_wRotation(
-    day_st, starttime, endtime, remove_response=False, inv=Inventory(),
-    sta_translation_file='', parallel=False, cores=None,
-    min_segment_length_s=10, max_sample_rate_diff=1,
-    skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
-    skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
-    taper_fraction=0.005, detrend_type='simple', downsampled_max_rate=None,
-    std_network_code="NS", std_location_code="00", std_channel_prefix="BH",
-    noise_balancing=False, balance_power_coefficient=2):
+        day_st, starttime, endtime, remove_response=False, inv=Inventory(),
+        sta_translation_file='', parallel=False, cores=None,
+        min_segment_length_s=10, max_sample_rate_diff=1,
+        skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
+        skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
+        taper_fraction=0.005, detrend_type='simple', downsampled_max_rate=None,
+        std_network_code="NS", std_location_code="00", std_channel_prefix="BH",
+        noise_balancing=False, balance_power_coefficient=2):
     """
     Does an initial processing of the day's stream,
     """
@@ -848,18 +848,18 @@ def init_processing_wRotation(
         # Check if I can allow multithreading in each of the parallelized
         # subprocesses:
         thread_parallel = False
-        n_threads = 1        
-        # if cores > 2 * len(day_st):
-        #     thread_parallel = True
-        #     n_threads = int(cores / len(day_st))
-        # Logger.info('Starting initial 3-component processing with %s parallel '
-        #             + 'processes with up to %s threads each.', str(cores),
-        #             str(n_threads))
+        n_threads = 1
+        if cores > 2 * len(day_st):
+            thread_parallel = True
+            n_threads = int(cores / len(day_st))
+        Logger.info('Starting initial 3-component processing with %s parallel '
+                    'processes with up to %s threads each.', str(cores),
+                    str(n_threads))
         with threadpool_limits(limits=1, user_api='blas'):
             with pool_boy(Pool=get_context("spawn").Pool, traces
                           =len(unique_net_sta_loc_list), cores=cores) as pool:
-                results =\
-                    [pool.apply_async(
+                results = [
+                    pool.apply_async(
                         _init_processing_per_channel_wRotation,
                         args=(day_st.select(network=nsl[0], station=nsl[1],
                                             location=nsl[2]),

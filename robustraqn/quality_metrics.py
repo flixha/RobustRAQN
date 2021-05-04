@@ -10,8 +10,9 @@ for local data; beware of overloading servers with requests).
 
 import os
 import glob
+from signal import signal, SIGSEGV
 
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool, cpu_count, get_context
 from multiprocessing.pool import ThreadPool
 
 import pandas as pd
@@ -29,10 +30,24 @@ import logging
 Logger = logging.getLogger(__name__)
 
 
+def _get_waveforms_bulk(client, bulk):
+    """
+    """
+    st = Stream()
+    for arg in bulk:
+        try:
+            st += client.get_waveforms(*arg)
+        except Exception as e:
+            document_client_read_error(e)
+            continue
+
+    return st
+
+
 def get_waveforms_bulk(client, bulk, parallel=False, cores=None):
     """
     Perform a bulk-waveform request in parallel. Return one stream.
-    
+
     :type client: obspy.obspy.Client
     :param name: Client to request the data from.
     :type bulk: list of tuples
@@ -41,9 +56,59 @@ def get_waveforms_bulk(client, bulk, parallel=False, cores=None):
     :param parallel: Whether to run reading of waveform files in parallel.
     :type cores: int
     :param bulk: Number of parallel processors to use.
-    
+
     :rtype: obspy.core.Stream
     """
+    # signal(SIGSEGV, sigsegv_handler)
+    Logger.info('Start bulk-read')
+    outtic = default_timer()
+    st = Stream()
+    if parallel:
+        if cores is None:
+            cores = min(len(bulk), cpu_count())
+        # There seems to be a negative effect on speed if there's too many
+        # read-threads - For now set limit to 16
+        cores = min(cores, 6)
+
+        # Logger.info('Start bulk-read paralle pool')
+        # Process / spawn handles segmentation fault better?
+        # with pool_boy(Pool=get_context("spawn").Pool, traces=len(bulk),
+        #               cores=cores) as pool:
+        #with pool_boy(Pool=ThreadPool, traces=len(bulk), cores=cores) as pool:
+        with pool_boy(Pool=Pool, traces=len(bulk), cores=cores) as pool:
+            results = [pool.apply_async(
+                _get_waveforms_bulk,
+                args=(client, [arg]))
+                       for arg in bulk]
+        # Concatenate all NSLC-streams into one stream
+        st = Stream()
+        for res in results:
+            st += res.get()
+    else:
+        st = _get_waveforms_bulk(client, bulk)
+
+    outtoc = default_timer()
+    Logger.info('Bulk-reading of waveforms took: {0:.4f}s'.format(
+        outtoc - outtic))
+    return st
+
+
+def get_waveforms_bulk_old(client, bulk, parallel=False, cores=None):
+    """
+    Perform a bulk-waveform request in parallel. Return one stream.
+
+    :type client: obspy.obspy.Client
+    :param name: Client to request the data from.
+    :type bulk: list of tuples
+    :param bulk: Information about the requested data.
+    :type parallel: book
+    :param parallel: Whether to run reading of waveform files in parallel.
+    :type cores: int
+    :param bulk: Number of parallel processors to use.
+
+    :rtype: obspy.core.Stream
+    """
+    # signal(SIGSEGV, sigsegv_handler)
     Logger.info('Start bulk-read')
     outtic = default_timer()
     st = Stream()
@@ -55,12 +120,25 @@ def get_waveforms_bulk(client, bulk, parallel=False, cores=None):
         cores = min(cores, 16)
 
         # Logger.info('Start bulk-read paralle pool')
+        # Process / spawn handles segmentation fault better?
+        # with pool_boy(Pool=get_context("spawn").Pool, traces=len(bulk),
+        #               cores=cores) as pool:
         with pool_boy(Pool=ThreadPool, traces=len(bulk), cores=cores) as pool:
+
+        #with pool_boy(Pool=Pool, traces=len(bulk), cores=cores) as pool:
             results = [pool.apply_async(
                 client.get_waveforms,
                 args=arg,
                 error_callback=document_client_read_error)
-                    for arg in bulk]
+                       for arg in bulk]
+
+        # ORRRR
+        # with pool_boy(Pool=Pool, traces=len(bulk), cores=cores) as pool:
+        #     results = [pool.apply_async(
+        #         get_waveforms_bulk,
+        #         args=(client, [arg]),
+        #         kwds=dict(parallel=False, cores=None))
+        #                for arg in bulk]
         # Need to handle possible read-errors in each request when getting each
         # request-result.
         # Logger.info('Get bulk-read pool results')
@@ -93,12 +171,19 @@ def document_client_read_error(s):
     """
     Function to be called when an exception occurs within one worker in
         `get_waveforms_bulk_parallel`.
-    
+
     :type s: str
     :param s: Error message
     """
     Logger.error("Error reading waveform file - skipping this file.")
     Logger.error(s, exc_info=True)
+
+
+# def sigsegv_handler(sigNum, frame):
+#     """
+#     Segmentation fault handler (can occur in MSEED-read)
+#     """
+#     print("handle signal", sigNum)
 
 
 def get_parallel_waveform_client(waveform_client):
@@ -111,6 +196,8 @@ def get_parallel_waveform_client(waveform_client):
         """
         parallel implementation of get_waveforms_bulk.
         """
+        # signal.signal(signal.SIGSEGV, sigsegv_handler)
+
         st = Stream()
         if parallel:
             if cores is None:
@@ -120,14 +207,15 @@ def get_parallel_waveform_client(waveform_client):
             cores = min(cores, 16)
 
             # Logger.info('Start bulk-read paralle pool')
-            with pool_boy(Pool=ThreadPool, traces=len(bulk), cores=cores) as pool:
+            with pool_boy(
+                    Pool=ThreadPool, traces=len(bulk), cores=cores) as pool:
                 results = [pool.apply_async(
                     self.get_waveforms,
                     args=arg,
                     error_callback=document_client_read_error)
                         for arg in bulk]
-            # Need to handle possible read-errors in each request when getting each
-            # request-result.
+            # Need to handle possible read-errors in each request when getting
+            # each request-result.
             for res in results:
                 try:
                     st += res.get()
@@ -155,8 +243,8 @@ def get_parallel_waveform_client(waveform_client):
 
 # def get_waveform_client(waveform_client):
 #     """
-#     Bind a `get_waveforms_bulk` method to waveform_client if it doesn't already
-#     have one.
+#     Bind a `get_waveforms_bulk` method to waveform_client if it doesn't
+#     already have one.
 #     Copyright Calum Chamberlain, 2020
 #     """
 #     def _get_waveforms_bulk_naive(self, bulk_arg):
@@ -180,7 +268,7 @@ def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
                         parallel=False, cores=1,
                         stations=['*'], location_priority=['??'],
                         band_priority=['B'], instrument_priority=['H'],
-                        components=['Z','N','E','1','2'], **kwargs):
+                        components=['Z', 'N', 'E', '1', '2'], **kwargs):
     """
     stats = read_ispaq_stats(folder, starttime,endtime, networks=['??'],
                              stations=['*'],)
@@ -229,7 +317,7 @@ def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
         Additional arguments that get passed on to
         `quality_metrics.get_station_bulk_request`; mainly the thresholds for
         different quality metrics.
-    
+
     :rtype: list of tuples
     """
     Logger.info('Creating bulk request for %s - %s.', str(starttime)[0:19],
@@ -245,8 +333,8 @@ def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
     reqtime1 = UTCDateTime(mid_t.year, mid_t.month, mid_t.day, 0, 0, 0)
     reqtime2 = UTCDateTime(mid_t.year, mid_t.month, mid_t.day, 23, 59, 59)
 
-    #day_stats = stats.loc[stats['start'] == str(reqtime1)[0:19]]
-    #day_stats = stats.loc[stats['start'].str[0:10] == str(reqtime1)[0:10]]
+    # day_stats = stats.loc[stats['start'] == str(reqtime1)[0:19]]
+    # day_stats = stats.loc[stats['start'].str[0:10] == str(reqtime1)[0:10]]
 
     # Smartly set the index column of dataframes to speed up list selection:
     # Check if the index-column is called "startday", otherwise make it such.
@@ -303,13 +391,12 @@ def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
     return bulk, day_stats
 
 
-
 def get_station_bulk_request(station, location_priority, band_priority,
                              instrument_priority, components, day_stats,
                              request_time, starttime, endtime, **kwargs):
     """
     Inner function to create a bulk-request for one specific day.
-    
+
     :type day_stats: pd.DataFrame
     :param day_stats:
         ispaq-based Mustang-style pandas-dataframe with data quality metrics
@@ -346,7 +433,7 @@ def get_station_bulk_request(station, location_priority, band_priority,
         Additional arguments that get passed on to
         `quality_metrics.get_station_bulk_request`; mainly the thresholds for
         different quality metrics.
-    
+
     :rtype: list of tuples
     """
     bulk = list()
@@ -375,19 +462,19 @@ def get_station_bulk_request(station, location_priority, band_priority,
                         chn_stats = day_stats.loc[short_scnl]
                     except KeyError:
                         continue
-                    #chn_stats = day_stats[day_stats['target'].str[3:-2]\
+                    # chn_stats = day_stats[day_stats['target'].str[3:-2]\
                     #    == short_scnl]
-                    
+
                     try:
-                        availability = chn_stats[chn_stats['metricName']==
-                                                    "percent_availability"]
+                        availability = chn_stats[
+                            chn_stats['metricName'] == "percent_availability"]
                     except Exception as e:
                         Logger.error('Error for %s.%s.%s%s%s on %s', station,
                                      location, band, instrument, component,
                                      request_time)
                         Logger.error(e, exc_info=True)
                         continue
-                        
+
                     # Availability-metric has to exist
                     if len(availability) == 0:
                         add_target_request = False
@@ -418,7 +505,7 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
     Function to check all data quality metrics for one specific day against the
     set thresholds, and return True or False depending on whether the data ful-
     fill all thresholds.
-    
+
     :type day_stats: pd.DataFrame
     :param day_stats:
         ispaq-based Mustang-style pandas-dataframe with data quality metrics
@@ -426,10 +513,10 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
     :type request_time: obspy.UTCDateTime
     :param request_time:
         Time for which the nearest data quality metrics shall be requested.
-    :type availability: pandas.DataFrame 
+    :type availability: pandas.DataFrame
     :param availability:
         ispaq Mustang-style Dataframe listing the availability information.
-    :type min_availability: float 
+    :type min_availability: float
     :param min_availability: Lower threshold for availability
     :type max_spikes: float
     :param max_spikes: Upper threshold for number of spikes.
@@ -462,7 +549,8 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
     :param require_clock_lock: Whether a clock locking shall be required.
     :type max_suspect_time_tag: float
     :param max_suspect_time_tag:
-        Upper threshold for the number of "suspect-time"-tag set in waveform file.
+        Upper threshold for the number of "suspect-time"-tag set in waveform
+        file.
     :type max_dead_channel_lin: float
     :param max_dead_channel_lin: Upper threshold for dead_channel_lin metric.
     :type require_alive_channel_gsn: bool
@@ -486,8 +574,8 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
 
     add_target_request = True
     req_time_str = str(request_time)[0:10]
-       
-    # Check whether there is more than 1 row in metrics - 
+
+    # Check whether there is more than 1 row in metrics -
     # that would imply multiple networks offer the data.
     if len(availability) >= 2:
         max_index = availability['value'].argmax()
@@ -504,14 +592,14 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
         Logger.info('%s, %s: less than %s %% data available, not using.',
                     target, req_time_str, min_availability*100)
         return False, target
-    ## General formulation
+    # General formulation #############
     # check_stat(day_stats, metricName='num_spikes',
     #            min_value, max_value)
-    
+
     # Check whether channel below maximum number of spikes
     # max_spikes < 100 ? 1000? 10000?
-    num_spikes = day_stats[(day_stats['target']==target)
-            & (day_stats['metricName']=='num_spikes')]
+    num_spikes = day_stats[(day_stats['target'] == target)
+                           & (day_stats['metricName'] == 'num_spikes')]
     if len(num_spikes) > 0:
         if num_spikes.iloc[0]['value'] > max_spikes:
             Logger.info('%s, %s: more than %s spikes, not using', target,
@@ -520,9 +608,9 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
 
     # Check whether there is no GPS timing
     # clock_locked == 0
-    clock_locked = day_stats[(day_stats['target']==target)
-            & (day_stats['metricName']=='clock_locked')]
-    if len(clock_locked) > 0  and require_clock_lock:
+    clock_locked = day_stats[(day_stats['target'] == target)
+                             & (day_stats['metricName'] == 'clock_locked')]
+    if len(clock_locked) > 0 and require_clock_lock:
         if clock_locked.iloc[0]['value'] == 0:
             Logger.info('%s, %s: clock not locked, not using', target,
                         req_time_str)
@@ -530,8 +618,8 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
 
     # Check whether masses are pegged
     # sample_mean > 1e7 !!! NEEDS check for instruments
-    sample_mean = day_stats[(day_stats['target']==target)
-            & (day_stats['metricName']=='sample_mean')]    
+    sample_mean = day_stats[(day_stats['target'] == target)
+                            & (day_stats['metricName'] == 'sample_mean')]
     if len(sample_mean) > 0:
         if abs(sample_mean.iloc[0]['value']) > max_abs_sample_mean:
             Logger.info('%s, %s: sample_mean too large, not using', target,
@@ -539,8 +627,9 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
             return False, target
 
     # Check whether channel is dead
-    dead_channel_lin = day_stats[(day_stats['target']==target)
-        & (day_stats['metricName']=='dead_channel_lin')]
+    dead_channel_lin = day_stats[
+        (day_stats['target'] == target)
+        & (day_stats['metricName'] == 'dead_channel_lin')]
     if len(dead_channel_lin) > 0:
         if dead_channel_lin.iloc[0]['value'] < max_dead_channel_lin:
             Logger.info('%s, %s: channel is dead, not using', target,
@@ -548,8 +637,9 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
             return False, target
 
     # dead_channel_gsn == 1 and
-    dead_channel_gsn = day_stats[(day_stats['target']==target)
-        & (day_stats['metricName']=='dead_channel_gsn')]
+    dead_channel_gsn = day_stats[
+        (day_stats['target'] == target)
+        & (day_stats['metricName'] == 'dead_channel_gsn')]
     if len(dead_channel_gsn) > 0 and require_alive_channel_gsn:
         if dead_channel_gsn.iloc[0]['value'] == 1:
             Logger.info('%s, %s: channel is dead, not using', target,
@@ -557,8 +647,8 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
             return False, target
 
     # pct_below_nlnm > 20
-    pct_below_nlnm = day_stats[(day_stats['target']==target)
-        & (day_stats['metricName']=='pct_below_nlnm')]
+    pct_below_nlnm = day_stats[(day_stats['target'] == target)
+                               & (day_stats['metricName'] == 'pct_below_nlnm')]
     if len(pct_below_nlnm) > 0:
         if pct_below_nlnm.iloc[0]['value'] > max_pct_below_nlnm:
             Logger.info('%s, %s: More than %s %% of noise spectrum below NLNM,'
@@ -569,8 +659,8 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
     # Check whether high noise on channel
     # dead_channel_exp / _lin / _gsn < 0.3 and
     # pct_above_nhnm > 20
-    pct_above_nhnm = day_stats[(day_stats['target']==target)
-        & (day_stats['metricName']=='pct_above_nhnm')]
+    pct_above_nhnm = day_stats[(day_stats['target'] == target)
+                               & (day_stats['metricName'] == 'pct_above_nhnm')]
     if len(pct_above_nhnm) > 0:
         if pct_above_nhnm.iloc[0]['value'] > max_pct_above_nhnm:
             Logger.info('%s, %s: More than %s %% of noise spectrum above NHNM,'
@@ -579,18 +669,18 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
             return False, target
 
     # Check number of unique samples
-    sample_unique = day_stats[(day_stats['target']==target)
-            & (day_stats['metricName']=='sample_unique')]
+    sample_unique = day_stats[(day_stats['target'] == target)
+                              & (day_stats['metricName'] == 'sample_unique')]
     if len(sample_unique) > 0:
         if sample_unique.iloc[0]['value'] < min_sample_unique:
             Logger.info('%s, %s: Less than %s unique samples, not using.',
                         target, req_time_str, str(min_sample_unique))
             return False, target
-        
+
     # Check whether high-amplitude on channel
     # sample_rms > 50000 !!! NEEDS check for instruments
-    sample_rms = day_stats[(day_stats['target']==target)
-            & (day_stats['metricName']=='sample_rms')]
+    sample_rms = day_stats[(day_stats['target'] == target)
+                           & (day_stats['metricName'] == 'sample_rms')]
     if len(sample_rms) > 0:
         if sample_rms.iloc[0]['value'] < min_sample_rms:
             Logger.info('%s, %s: sample_rms too small, not using. ', target,
@@ -602,8 +692,8 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
             return False, target
 
     # Maximum number of overlaps
-    num_overlaps = day_stats[(day_stats['target']==target)
-            & (day_stats['metricName']=='num_overlaps')]
+    num_overlaps = day_stats[(day_stats['target'] == target)
+                             & (day_stats['metricName'] == 'num_overlaps')]
     if len(num_overlaps) > 0:
         if num_overlaps.iloc[0]['value'] > max_num_overlaps:
             Logger.info('%s, %s: too many overlaps, not using. ', target,
@@ -611,8 +701,8 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
             return False, target
 
     # Maximum length of overlap
-    max_overlap = day_stats[(day_stats['target']==target)
-            & (day_stats['metricName']=='max_overlap')]
+    max_overlap = day_stats[(day_stats['target'] == target)
+                            & (day_stats['metricName'] == 'max_overlap')]
     if len(max_overlap) > 0:
         if max_overlap.iloc[0]['value'] > max_max_overlap:
             Logger.info('%s, %s: max_overlap too large, not using.',
@@ -620,8 +710,8 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
             return False, target
 
     # Sample median
-    sample_median = day_stats[(day_stats['target']==target)
-            & (day_stats['metricName']=='sample_median')]
+    sample_median = day_stats[(day_stats['target'] == target)
+                              & (day_stats['metricName'] == 'sample_median')]
     if len(sample_median) > 0:
         if sample_median.iloc[0]['value'] > max_sample_median:
             Logger.info('%s, %s: sample median greater than %s, not using.',
@@ -629,8 +719,9 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
             return False, target
 
     # Maximum number of suspect_time_tag-flags
-    suspect_time_tag = day_stats[(day_stats['target']==target)
-            & (day_stats['metricName']=='suspect_time_tag')]
+    suspect_time_tag = day_stats[
+        (day_stats['target'] == target)
+        & (day_stats['metricName'] == 'suspect_time_tag')]
     if len(suspect_time_tag) > 0:
         if suspect_time_tag.iloc[0]['value'] > max_suspect_time_tag:
             Logger.info('%s, %s: Too many suspect-time tags, not using.',
@@ -638,8 +729,8 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
             return False, target
 
     # Maximum cross talk
-    cross_talk = day_stats[(day_stats['target']==target)
-            & (day_stats['metricName']=='cross_talk')]
+    cross_talk = day_stats[(day_stats['target'] == target)
+                           & (day_stats['metricName'] == 'cross_talk')]
     if len(cross_talk) > 0:
         if cross_talk.iloc[0]['value'] > max_cross_talk:
             Logger.info('%s, %s: Cross talk too large, not using.',
@@ -676,7 +767,7 @@ def all_channels_requested(bulk_request, station, requested_components):
     :type requested_components: list
     :param requested_components: list of strings, with each string being a
                                  1-character component code.
-    
+
     :rtype: bool
     """
     self = False
@@ -722,7 +813,6 @@ def same_comp_requested(bulk, station, component):
     return False
 
 
-
 def read_ispaq_stats(folder, networks=['??'], stations=['*'],
                      ispaq_prefixes=['all'], ispaq_suffixes=['simpleMetrics'],
                      file_type='csv', startyear=1970, endyear=2030):
@@ -745,7 +835,7 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
     :type ispaq_suffixes:
         list of suffixes (i.e., the names of a subset of metrics in ispaq,
         e.g., "simpleMetrics") in the filenames for which to load metrics
-    :param ispaq_suffixes: 
+    :param ispaq_suffixes:
     :type file_type: str
     :param file_type: can be 'csv' or "parquet"
     :type startyear: int
@@ -764,7 +854,7 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
         raise TypeError("ispaq_prefixes should be a list")
     if not isinstance(ispaq_suffixes, list):
         raise TypeError("ispaq_suffixes should be a list")
-    
+
     ispaq = pd.DataFrame()
     # check if folder exists
     for network in networks:
@@ -774,7 +864,7 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
                     for ispaq_suffix in ispaq_suffixes:
                         filename = (ispaq_prefix + '_' + network + '.'
                                     + station + '.x.x_'
-                                    + str(year)  + '-??-??_'
+                                    + str(year) + '-??-??_'
                                     + str(year) + '-??-??_'
                                     + ispaq_suffix + '.' + file_type)
                         files = glob.glob(os.path.join(os.path.expanduser(
@@ -792,7 +882,7 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
     ispaq = ispaq.drop_duplicates()
     try:
         ispaq.sort_values(by=['target', 'start'])
-    except:
+    except KeyError:
         Logger.error('No data quality metrics available for years %s - %s',
                      startyear, endyear)
         return ispaq
@@ -801,6 +891,3 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
     ispaq = ispaq.set_index(['startday'])
     ispaq['short_target'] = ispaq['target'].str[3:-2]
     return ispaq
-
-
-

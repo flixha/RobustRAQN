@@ -7,9 +7,9 @@ import pandas as pd
 # import matplotlib
 from threadpoolctl import threadpool_limits
 
-from multiprocessing import Pool, cpu_count, current_process, get_context
-from multiprocessing.pool import ThreadPool
-from joblib import Parallel, delayed
+# from multiprocessing import Pool, cpu_count, current_process, get_context
+# from multiprocessing.pool import ThreadPool
+from joblib import Parallel, delayed, parallel_backend
 
 import numpy as np
 from itertools import chain, repeat
@@ -940,25 +940,25 @@ def init_processing_wRotation(
                 delayed(_init_processing_per_channel_wRotation)
                 (day_st.select(
                     network=nsl[0], station=nsl[1], location=nsl[2]),
-                 starttime, endtime, remove_response=remove_response,
-                 inv=inv.select(
-                     station=nsl[1], starttime=starttime, endtime=endtime),
-                 sta_translation_file=sta_translation_file,
-                 min_segment_length_s=min_segment_length_s,
-                 max_sample_rate_diff=max_sample_rate_diff,
-                 skip_check_sampling_rates=skip_check_sampling_rates,
-                 skip_interp_sample_rate_smaller=
-                 skip_interp_sample_rate_smaller,
-                 interpolation_method=interpolation_method,
-                 std_network_code=std_network_code,
-                 std_location_code=std_location_code,
-                 std_channel_prefix=std_channel_prefix,
-                 detrend_type=detrend_type,
-                 taper_fraction=taper_fraction,
-                 downsampled_max_rate=downsampled_max_rate,
-                 noise_balancing=noise_balancing,
-                 balance_power_coefficient=balance_power_coefficient,
-                 parallel=False, cores=None)
+                    starttime, endtime, remove_response=remove_response,
+                    inv=inv.select(
+                        station=nsl[1], starttime=starttime, endtime=endtime),
+                    sta_translation_file=sta_translation_file,
+                    min_segment_length_s=min_segment_length_s,
+                    max_sample_rate_diff=max_sample_rate_diff,
+                    skip_check_sampling_rates=skip_check_sampling_rates,
+                    skip_interp_sample_rate_smaller=
+                    skip_interp_sample_rate_smaller,
+                    interpolation_method=interpolation_method,
+                    std_network_code=std_network_code,
+                    std_location_code=std_location_code,
+                    std_channel_prefix=std_channel_prefix,
+                    detrend_type=detrend_type,
+                    taper_fraction=taper_fraction,
+                    downsampled_max_rate=downsampled_max_rate,
+                    noise_balancing=noise_balancing,
+                    balance_power_coefficient=balance_power_coefficient,
+                    parallel=False, cores=None)
                 for nsl in unique_net_sta_loc_list)
         st = Stream([tr for trace_st in streams for tr in trace_st])
 

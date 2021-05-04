@@ -9,6 +9,7 @@ from threadpoolctl import threadpool_limits
 
 from multiprocessing import Pool, cpu_count, current_process, get_context
 from multiprocessing.pool import ThreadPool
+from joblib import Parallel, delayed
 
 import numpy as np
 from itertools import chain, repeat
@@ -68,14 +69,14 @@ def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
                          fullWaveFile)
         except FileNotFoundError:
             Logger.error('FileNotFoundError: Could not read waveform file '
-                  + fullWaveFile)
+                         + fullWaveFile)
         except ValueError:
             Logger.error('ValueError: Could not read waveform file' +
                          fullWaveFile)
         except AssertionError:
             Logger.error('AsertionError: Could not read waveform file ' +
                          fullWaveFile)
-            
+
     # REMOVE UNUSABLE CHANNELS
     st_copy = st.copy()
     for tr in st_copy:
@@ -195,8 +196,8 @@ def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
     endtime = starttime + 360
     st.trim(starttime=starttime, endtime=endtime, pad=False,
             nearest_sample=True)
-    
-    #don't use the waveform if more than 5% is zero
+
+    # don't use the waveform if more than 5% is zero
     nonZeroWave = Stream()
     for tr in st:
         n_nonzero = np.count_nonzero(tr.copy().detrend().data)
@@ -210,7 +211,7 @@ def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
 # def prepare_detection_stream(st, parallel=False, cores=None,
 #                              ispaq=pd.DataFrame(), try_despike=False,
 #                              downsampled_max_rate=None):
-    
+
 
 def prepare_detection_stream(st, tribe, parallel=False, cores=None,
                              ispaq=pd.DataFrame(), try_despike=False,
@@ -283,19 +284,21 @@ def prepare_detection_stream(st, tribe, parallel=False, cores=None,
             # starttime = tr.stats.starttime
             # endtime = tr.stats.endtime
             # mid_t = starttime + (endtime - starttime)/2
-            # # The reqtimes are those that are listed in the ispaq-stats per day
+            # # The reqtimes are those that are listed in the ispaq-stats per
+            # # day
             # # (starts on 00:00:00 and ends on 23:59:59).
-            # reqtime1 = UTCDateTime(mid_t.year, mid_t.month, mid_t.day, 0, 0, 0)
-            # reqtime2 = UTCDateTime(mid_t.year, mid_t.month, mid_t.day,23,59,59)
+            # reqtime1 = UTCDateTime(mid_t.year, mid_t.month, mid_t.day,0,0,0)
+            # reqtime2 = UTCDateTime(mid_t.year,mid_t.month,mid_t.day,23,59,59)
 
-            # day_stats = stats[stats['start'].str.contains(str(reqtime1)[0:19])]
+            # day_stats = stats[stats['start'].str.contains(
+            #     str(reqtime1)[0:19])]
             nslc_target = tr.stats.network + "." + tr.stats.station + "."\
                 + tr.stats.location + '.' + tr.stats.channel
             chn_stats = ispaq[ispaq['target'].str.contains(nslc_target)]
             # target = availability.iloc[0]['target']
-            # num_spikes = ispaq[(ispaq['target']==target) & 
+            # num_spikes = ispaq[(ispaq['target']==target) &
             # (day_stats['metricName']=='num_spikes')]
-            num_spikes = chn_stats[chn_stats['metricName']=='num_spikes']
+            num_spikes = chn_stats[chn_stats['metricName'] == 'num_spikes']
             if len(num_spikes) > 0:
                 if num_spikes.iloc[0]['value'] == 0:
                     continue
@@ -305,13 +308,13 @@ def prepare_detection_stream(st, tribe, parallel=False, cores=None,
                 tr = median_filter(tr, multiplier=10, windowlength=0.5,
                                    interp_len=0.1)
                 Logger.warning('Successfully despiked, %s', str(tr))
-                #testStream = Stream()
-                #testStream += testtrace
-                #_spike_test(testStream, percent=0.98, multiplier=5e4)
+                # testStream = Stream()
+                # testStream += testtrace
+                # _spike_test(testStream, percent=0.98, multiplier=5e4)
             except Exception as e:
                 Logger.warning('Failed to despike %s: %s', str(tr))
                 Logger.warning(e)
-        
+
                 # tracelength = (testtrace.stats.npts /
                 #                testtrace.stats.sampling_rate)
                 #         print('Despiking ' + contFile )
@@ -343,12 +346,12 @@ def parallel_detrend(st, parallel=True, cores=None, type='simple'):
     else:
         if cores is None:
             cores = min(len(st), cpu_count())
-        with pool_boy(Pool=Pool, traces=len(st), cores=cores) as pool:
-            results = [pool.apply_async(tr.detrend, {type})
-                       for tr in st]
-        traces = [res.get() for res in results]
+        # with pool_boy(Pool=Pool, traces=len(st), cores=cores) as pool:
+        #     results = [pool.apply_async(tr.detrend, {type})
+        #                for tr in st]
+        # traces = [res.get() for res in results]
+        traces = Parallel(n_jobs=cores)(delayed(tr.detrend)(type) for tr in st)
         st = Stream(traces=traces)
-        
     return st
 
 
@@ -358,14 +361,21 @@ def parallel_merge(st, method=0, fill_value=None, interpolation_samples=0,
     unique_seed_id_list = set(seed_id_list)
 
     stream_list = [st.select(id=seed_id) for seed_id in unique_seed_id_list]
+    # with pool_boy(
+    #         Pool=Pool, traces=len(unique_seed_id_list), cores=cores) as pool:
+    #     results = [pool.apply_async(
+    #         trace_st.merge, {method, fill_value, interpolation_samples})
+    #                 for trace_st in stream_list]
+    # streams = [res.get() for res in results]
+    # st = Stream()
+    # for trace_st in streams:
+    #     for tr in trace_st:
+    #         st.append(tr)
 
-    with pool_boy(
-            Pool=Pool, traces=len(unique_seed_id_list), cores=cores) as pool:
-        results = [pool.apply_async(
-            trace_st.merge, {method, fill_value, interpolation_samples})
-                    for trace_st in stream_list]
-
-    streams = [res.get() for res in results]
+    streams = Parallel(n_jobs=cores)(
+        delayed(trace_st.merge)(method, fill_value, interpolation_samples)
+        for trace_st in stream_list)
+    st = Stream()
     for trace_st in streams:
         for tr in trace_st:
             st.append(tr)
@@ -388,24 +398,34 @@ def parallel_rotate(st, inv, cores=None, method="->ZNE"):
     # Need to sort list by original order after set()
     unique_net_sta_loc_list = sorted(set(net_sta_loc),
                                      key=lambda x: net_sta_loc.index(x))
-
     # stream_list = [st.select(id=seed_id) for seed_id in unique_seed_id_list]
-
     if cores is None:
         cores = min(len(unique_net_sta_loc_list), cpu_count())
-    with pool_boy(Pool=get_context("spawn").Pool,
-                  traces=len(unique_net_sta_loc_list), cores=cores) as pool:
-        results = [pool.apply_async(
-            st.select(network=nsl[0], station=nsl[1], location=nsl[2]).rotate,
-            args=(method,),
-            kwds=dict(inventory=inv.select(network=nsl[0], station=nsl[1],
-                                           location=nsl[2])))
-                   for nsl in unique_net_sta_loc_list]
 
-    streams = [res.get() for res in results]
-    for trace_st in streams:
-        for tr in trace_st:
-            st.append(tr)
+    # with pool_boy(Pool=Pool,
+    #               traces=len(unique_net_sta_loc_list), cores=cores) as pool:
+    #     results = [pool.apply_async(
+    #        st.select(network=nsl[0], station=nsl[1], location=nsl[2]).rotate,
+    #        args=(method,),
+    #        kwds=dict(inventory=inv.select(network=nsl[0], station=nsl[1],
+    #                                        location=nsl[2])))
+    #                for nsl in unique_net_sta_loc_list]
+    # streams = [res.get() for res in results]
+    # st = Stream()
+    # for trace_st in streams:
+    #     for tr in trace_st:
+    #         st.append(tr)
+
+    streams = Parallel(n_jobs=cores)(
+        delayed(
+            st.select(network=nsl[0], station=nsl[1], location=nsl[2]).rotate)
+        (method, inventory=inv.select(
+            network=nsl[0], station=nsl[1], location=nsl[2]))
+        for nsl in unique_net_sta_loc_list)
+    st = Stream([tr for trace_st in streams for tr in trace_st])
+    # for trace_st in streams:
+    #     for tr in trace_st:
+    #         st.append(tr)
 
     # st.merge(method=0, fill_value=None, interpolation_samples=0)
     return st
@@ -442,7 +462,7 @@ def get_matching_trace_for_pick(pick, stream):
     avail_nets_chans = [
         id.split('.')[0] + '.' + id.split('.')[3] for id in avail_tr_ids]
     avail_locs_chans = ['.'.join(id.split('.')[2:]) for id in avail_tr_ids]
-    #for k, code in enumerate(avail_tr_ids):
+    # for k, code in enumerate(avail_tr_ids):
     # Check available traces for suitable network/location/channel
     if pick.waveform_id.id in avail_tr_ids:
         k = avail_tr_ids.index(pick.waveform_id.id)
@@ -547,7 +567,7 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
 
     newEvent = event.copy()
     newEvent.picks = list()
-    #remove all picks for amplitudes etc: keep only P and S
+    # Remove all picks for amplitudes etc: keep only P and S
     for j, pick in enumerate(event.picks):
         # Don't allow picks without phase_hint
         if len(pick.phase_hint) == 0:
@@ -597,9 +617,9 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
             if pick.phase_hint.upper()[0] == 'P' and\
                     pick.waveform_id.channel_code[-1] != 'Z':
                 if 'Z' in avail_comps:
-                    pick.waveform_id.channel_code = std_channel_prefix +'Z'
+                    pick.waveform_id.channel_code = std_channel_prefix + 'Z'
             # 4. If S-pick is on vertical channel and there exist horizontal
-            #    channels, then switch S_pick to the first horizontal.         
+            #    channels, then switch S_pick to the first horizontal.
             elif (pick.phase_hint.upper()[0] == 'S' and
                     pick.waveform_id.channel_code[-1] == 'Z'):
                 horizontalTraces = stream.select(
@@ -619,7 +639,7 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
                     if len(P_picks) == 0:
                         continue
             newEvent.picks.append(pick)
-            #else:
+            # else:
             #    newEvent.picks.append(pick)
     event = newEvent
     # Check for duplicate picks. Remove the later one when they are
@@ -677,7 +697,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
     Logger.info('Starting initial processing for %s - %s.',
                 str(starttime)[0:19], str(endtime)[0:19])
     outtic = default_timer()
-                
+
     seed_id_list = [tr.id for tr in day_st]
     unique_seed_id_list = sorted(set(seed_id_list))
 
@@ -708,7 +728,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
         # masked_st.merge(method=0, fill_value=None, interpolation_samples=0)
         # masked_st.trim(starttime=starttime, endtime=endtime, pad=True,
         #             nearest_sample=True, fill_value=0)
-        
+
         # # Merge daystream without masking
         # day_st.merge(method=0, fill_value=0, interpolation_samples=0)
         # # Correct response (taper should be outside of the main day!)
@@ -719,7 +739,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
         #             nearest_sample=True, fill_value=0)
         # day_st = parallel_detrend(day_st, parallel=True, cores=cores,
         #                         type='simple')
-        
+
         # # Put masked array into response-corrected stream day_st:
         # for j, tr in enumerate(day_st):
         #     if isinstance(masked_st[j].data, np.ma.MaskedArray):
@@ -728,38 +748,59 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
     else:
         if cores is None:
             cores = min(len(day_st), cpu_count())
-        
+
+        # with threadpool_limits(limits=1, user_api='blas'):
+        #     with pool_boy(
+        #             Pool=get_context("spawn").Pool,
+        #             traces=len(unique_seed_id_list), cores=cores) as pool:
+        #         # params = ((tr, inv, taper_fraction, parallel, cores)
+        #         #          for tr in st)
+        #         results = ([pool.apply_async(
+        #             _init_processing_per_channel,
+        #             ((day_st.select(id=id), starttime, endtime)),
+        #             dict(remove_response=remove_response,
+        #                  inv=inv.select(station=id.split('.')[1],
+        #                                starttime=starttime, endtime=endtime),
+        #                  min_segment_length_s=min_segment_length_s,
+        #                  max_sample_rate_diff=max_sample_rate_diff,
+        #                  skip_check_sampling_rates=skip_check_sampling_rates,
+        #                  skip_interp_sample_rate_smaller=
+        #                  skip_interp_sample_rate_smaller,
+        #                  interpolation_method=interpolation_method,
+        #                  detrend_type=detrend_type,
+        #                  taper_fraction=taper_fraction,
+        #                  downsampled_max_rate=downsampled_max_rate,
+        #                  noise_balancing=noise_balancing,
+        #                  balance_power_coefficient=balance_power_coefficient))
+        #             for id in unique_seed_id_list])
+        # # args = (st.select(id=id), inv.select(station=id.split('.')[1]),
+        # #        detrend_type=detrend_type, taper_fraction=taper_fraction)
+        # streams = [res.get() for res in results]
+        # st = Stream()
+        # for trace_st in streams:
+        #     for tr in trace_st:
+        #         st.append(tr)
+
         with threadpool_limits(limits=1, user_api='blas'):
-            with pool_boy(
-                    Pool=get_context("spawn").Pool,
-                    traces=len(unique_seed_id_list), cores=cores) as pool:
-                # params = ((tr, inv, taper_fraction, parallel, cores)
-                #          for tr in st)
-                results = ([pool.apply_async(
-                    _init_processing_per_channel,
-                    ((day_st.select(id=id), starttime, endtime)),
-                    dict(remove_response=remove_response,
-                         inv=inv.select(station=id.split('.')[1],
-                                        starttime=starttime, endtime=endtime),
-                         min_segment_length_s=min_segment_length_s,
-                         max_sample_rate_diff=max_sample_rate_diff,
-                         skip_check_sampling_rates=skip_check_sampling_rates,
-                         skip_interp_sample_rate_smaller=
-                         skip_interp_sample_rate_smaller,
-                         interpolation_method=interpolation_method,
-                         detrend_type=detrend_type,
-                         taper_fraction=taper_fraction,
-                         downsampled_max_rate=downsampled_max_rate,
-                         noise_balancing=noise_balancing,
-                         balance_power_coefficient=balance_power_coefficient))
-                    for id in unique_seed_id_list])
-        # args = (st.select(id=id), inv.select(station=id.split('.')[1]),
-        #        detrend_type=detrend_type, taper_fraction=taper_fraction)
-        streams = [res.get() for res in results]
-        st = Stream()
-        for trace_st in streams:
-            for tr in trace_st:
-                st.append(tr)
+            streams = Parallel(n_jobs=cores)(
+                delayed(_init_processing_per_channel)
+                (day_st.select(id=id), starttime, endtime,
+                 remove_response=remove_response,
+                 inv=inv.select(station=id.split('.')[1], starttime=starttime,
+                                endtime=endtime),
+                 min_segment_length_s=min_segment_length_s,
+                 max_sample_rate_diff=max_sample_rate_diff,
+                 skip_check_sampling_rates=skip_check_sampling_rates,
+                 skip_interp_sample_rate_smaller=
+                 skip_interp_sample_rate_smaller,
+                 interpolation_method=interpolation_method,
+                 detrend_type=detrend_type,
+                 taper_fraction=taper_fraction,
+                 downsampled_max_rate=downsampled_max_rate,
+                 noise_balancing=noise_balancing,
+                 balance_power_coefficient=balance_power_coefficient)
+                for id in unique_seed_id_list)
+            st = Stream([tr for trace_st in streams for tr in trace_st])
 
     outtoc = default_timer()
     Logger.info(
@@ -803,7 +844,7 @@ def init_processing_wRotation(
     # balancing)
     # net_sta_loc = list(chain.from_iterable(repeat(i, c)
     #                    for i,c in Counter(net_sta_loc).most_common()))
-    ### Need to sort list by original order after set()
+    # Need to sort list by original order after set() ##
 
     # Better: Sort by: whether needs rotation; npts per 3-comp stream
     unique_net_sta_loc_list = set(net_sta_loc)
@@ -813,7 +854,7 @@ def init_processing_wRotation(
     sum_npts = [sum([tr.stats.npts for tr in s]) for s in three_comp_strs]
     needs_rotation = [
         '1' in [tr.stats.channel[-1] for tr in s] for s in three_comp_strs]
-    unique_net_sta_loc_list = [x for x,_,_ in sorted(
+    unique_net_sta_loc_list = [x for x, _, _ in sorted(
         zip(unique_net_sta_loc_list, needs_rotation, sum_npts),
         key=lambda y: (y[1], y[2]), reverse=True)]
 
@@ -821,7 +862,7 @@ def init_processing_wRotation(
         st = Stream()
         for nsl in unique_net_sta_loc_list:
             Logger.info('Starting initial processing of %s for %s - %s.',
-                         str(nsl), str(starttime)[0:19], str(endtime)[0:19])
+                        str(nsl), str(starttime)[0:19], str(endtime)[0:19])
             st += _init_processing_per_channel_wRotation(
                 day_st.select(network=nsl[0], station=nsl[1], location=nsl[2]),
                 starttime, endtime, remove_response=remove_response,
@@ -834,17 +875,18 @@ def init_processing_wRotation(
                 skip_interp_sample_rate_smaller,
                 interpolation_method=interpolation_method,
                 sta_translation_file=sta_translation_file,
-                std_network_code=std_network_code, std_location_code=
-                std_location_code, std_channel_prefix=std_channel_prefix,
-                detrend_type=detrend_type, downsampled_max_rate=
-                downsampled_max_rate, taper_fraction=taper_fraction,
+                std_network_code=std_network_code,
+                std_location_code=std_location_code,
+                std_channel_prefix=std_channel_prefix,
+                detrend_type=detrend_type,
+                downsampled_max_rate=downsampled_max_rate,
+                taper_fraction=taper_fraction,
                 noise_balancing=noise_balancing,
                 balance_power_coefficient=balance_power_coefficient)
 
     else:
         if cores is None:
             cores = min(len(day_st), cpu_count())
-        
         # Check if I can allow multithreading in each of the parallelized
         # subprocesses:
         thread_parallel = False
@@ -855,59 +897,85 @@ def init_processing_wRotation(
         Logger.info('Starting initial 3-component processing with %s parallel '
                     'processes with up to %s threads each.', str(cores),
                     str(n_threads))
+        # with threadpool_limits(limits=1, user_api='blas'):
+        #     with pool_boy(Pool=get_context("spawn").Pool, traces
+        #                  =len(unique_net_sta_loc_list), cores=cores) as pool:
+        #         results = [
+        #             pool.apply_async(
+        #                 _init_processing_per_channel_wRotation,
+        #                 args=(day_st.select(network=nsl[0], station=nsl[1],
+        #                                     location=nsl[2]),
+        #                     starttime, endtime),
+        #                 kwds=dict(
+        #                     remove_response=remove_response,
+        #                     inv=inv.select(station=nsl[1],
+        #                                    starttime=starttime,
+        #                                    endtime=endtime),
+        #                     sta_translation_file=sta_translation_file,
+        #                     min_segment_length_s=min_segment_length_s,
+        #                     max_sample_rate_diff=max_sample_rate_diff,
+        #                     skip_check_sampling_rates=skip_check_sampling_rates,
+        #                     skip_interp_sample_rate_smaller=
+        #                     skip_interp_sample_rate_smaller,
+        #                     interpolation_method=interpolation_method,
+        #                     std_network_code=std_network_code,
+        #                     std_location_code=std_location_code,
+        #                     std_channel_prefix=std_channel_prefix,
+        #                     detrend_type=detrend_type,
+        #                     taper_fraction=taper_fraction,
+        #                     downsampled_max_rate=downsampled_max_rate,
+        #                     noise_balancing=noise_balancing,
+        #                     balance_power_coefficient=balance_power_coefficient,
+        #                     parallel=thread_parallel, cores=n_threads))
+        #             for nsl in unique_net_sta_loc_list]
+        # st = Stream()
+        # if len(results) > 0:
+        #     streams = [res.get() for res in results]
+        #     for trace_st in streams:
+        #         for tr in trace_st:
+        #             st.append(tr)
+
         with threadpool_limits(limits=1, user_api='blas'):
-            with pool_boy(Pool=get_context("spawn").Pool, traces
-                          =len(unique_net_sta_loc_list), cores=cores) as pool:
-                results = [
-                    pool.apply_async(
-                        _init_processing_per_channel_wRotation,
-                        args=(day_st.select(network=nsl[0], station=nsl[1],
-                                            location=nsl[2]),
-                            starttime, endtime),
-                        kwds=dict(
-                            remove_response=remove_response,
-                            inv=inv.select(station=nsl[1],
-                                           starttime=starttime,
-                                           endtime=endtime),
-                            sta_translation_file=sta_translation_file,
-                            min_segment_length_s=min_segment_length_s,
-                            max_sample_rate_diff=max_sample_rate_diff,
-                            skip_check_sampling_rates=skip_check_sampling_rates,
-                            skip_interp_sample_rate_smaller=
-                            skip_interp_sample_rate_smaller,
-                            interpolation_method=interpolation_method,
-                            std_network_code=std_network_code,
-                            std_location_code=std_location_code,
-                            std_channel_prefix=std_channel_prefix,
-                            detrend_type=detrend_type,
-                            taper_fraction=taper_fraction,
-                            downsampled_max_rate=downsampled_max_rate,
-                            noise_balancing=noise_balancing,
-                            balance_power_coefficient=balance_power_coefficient,
-                            parallel=thread_parallel, cores=n_threads))
-                    for nsl in unique_net_sta_loc_list]
-        st = Stream()
-        if len(results) > 0:
-            streams = [res.get() for res in results]    
-            for trace_st in streams:
-                for tr in trace_st:
-                    st.append(tr)
-  
+            streams = Parallel(n_jobs=cores)(
+                delayed(_init_processing_per_channel_wRotation)
+                (day_st.select(
+                    network=nsl[0], station=nsl[1], location=nsl[2]),
+                 starttime, endtime, remove_response=remove_response,
+                 inv=inv.select(
+                     station=nsl[1], starttime=starttime, endtime=endtime),
+                 sta_translation_file=sta_translation_file,
+                 min_segment_length_s=min_segment_length_s,
+                 max_sample_rate_diff=max_sample_rate_diff,
+                 skip_check_sampling_rates=skip_check_sampling_rates,
+                 skip_interp_sample_rate_smaller=
+                 skip_interp_sample_rate_smaller,
+                 interpolation_method=interpolation_method,
+                 std_network_code=std_network_code,
+                 std_location_code=std_location_code,
+                 std_channel_prefix=std_channel_prefix,
+                 detrend_type=detrend_type,
+                 taper_fraction=taper_fraction,
+                 downsampled_max_rate=downsampled_max_rate,
+                 noise_balancing=noise_balancing,
+                 balance_power_coefficient=balance_power_coefficient,
+                 parallel=False, cores=None)
+                for nsl in unique_net_sta_loc_list)
+        st = Stream([tr for trace_st in streams for tr in trace_st])
+
     outtoc = default_timer()
     Logger.info('Initial processing of streams took: {0:.4f}s'.format(
         outtoc - outtic))
     return st
 
 
-
 def _init_processing_per_channel(
-    st, starttime, endtime, remove_response=False, inv=Inventory(),
-    min_segment_length_s=10, max_sample_rate_diff=1,
-    skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
-    skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
-    detrend_type='simple', taper_fraction=0.005, pre_filt=None,
-    downsampled_max_rate=None, noise_balancing=False,
-    balance_power_coefficient=2):
+        st, starttime, endtime, remove_response=False, inv=Inventory(),
+        min_segment_length_s=10, max_sample_rate_diff=1,
+        skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
+        skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
+        detrend_type='simple', taper_fraction=0.005, pre_filt=None,
+        downsampled_max_rate=None, noise_balancing=False,
+        balance_power_coefficient=2):
     """
     Inner loop over which the initial processing can be parallelized
     """
@@ -923,17 +991,16 @@ def _init_processing_per_channel(
         interpolation_method=interpolation_method)
     if len(st) == 0:
         return st
-    
+
     # Detrend
     st.detrend(type=detrend_type)
-    
     # Merge, but keep "copy" of the masked array for filling back
     # Make a copy of the day-stream to find the values that need to be masked.
     masked_st = st.copy()
     masked_st.merge(method=0, fill_value=None, interpolation_samples=0)
     masked_st.trim(starttime=starttime, endtime=endtime, pad=True,
                    nearest_sample=True, fill_value=None)
-    
+
     # Merge daystream without masking
     # st.merge(method=0, fill_value=0, interpolation_samples=0)
     # 2021-01-22: changed merge method to below one to fix error with
@@ -950,19 +1017,19 @@ def _init_processing_per_channel(
     # st = st.detrend(type='linear')
 
     if noise_balancing:
-        # Need to do some prefiltering to avoid phase-shift effects when very 
+        # Need to do some prefiltering to avoid phase-shift effects when very
         # low frequencies are boosted
-        st = st.filter('highpass', freq=0.1, zerophase=True) #.detrend()
-        st = st_balance_noise(st, inv, balance_power_coefficient=
-                              balance_power_coefficient)
+        st = st.filter('highpass', freq=0.1, zerophase=True)  # detrend()
+        st = st_balance_noise(
+            st, inv, balance_power_coefficient=balance_power_coefficient)
         st = st.detrend(type='linear').taper(
             0.005, type='hann', max_length=None, side='both')
-        
+
     # Trim to full day and detrend again
     st = st.trim(starttime=starttime, endtime=endtime, pad=True,
                  nearest_sample=True, fill_value=0)
     st = st.detrend(type=detrend_type)
-    
+
     # Put masked array into response-corrected stream st:
     for j, tr in enumerate(st):
         if isinstance(masked_st[j].data, np.ma.MaskedArray):
@@ -978,20 +1045,20 @@ def _init_processing_per_channel(
     return st
 
 
-
 def _init_processing_per_channel_wRotation(
-    st, starttime, endtime, remove_response=False, inv=Inventory(),
-    sta_translation_file='', min_segment_length_s=10, max_sample_rate_diff=1,
-    skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
-    skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
-    std_network_code="NS", std_location_code="00", std_channel_prefix="BH",
-    detrend_type='simple', taper_fraction=0.005, downsampled_max_rate=25,
-    noise_balancing=False, balance_power_coefficient=2, parallel=False,
-    cores=1):
+        st, starttime, endtime, remove_response=False, inv=Inventory(),
+        sta_translation_file='', min_segment_length_s=10,
+        max_sample_rate_diff=1,
+        skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
+        skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
+        std_network_code="NS", std_location_code="00", std_channel_prefix="BH",
+        detrend_type='simple', taper_fraction=0.005, downsampled_max_rate=25,
+        noise_balancing=False, balance_power_coefficient=2, parallel=False,
+        cores=1):
     """
     Inner loop over which the initial processing can be parallelized
     """
-   
+
     outtic = default_timer()
     # First check trace segments for strange sampling rates and segments that
     # are too short:
@@ -1001,7 +1068,7 @@ def _init_processing_per_channel_wRotation(
         skip_check_sampling_rates=skip_check_sampling_rates,
         skip_interp_sample_rate_smaller=skip_interp_sample_rate_smaller,
         interpolation_method=interpolation_method)
-    
+
     # Detrend
     st.detrend(type=detrend_type)
     # Merge, but keep "copy" of the masked array for filling back
@@ -1010,7 +1077,7 @@ def _init_processing_per_channel_wRotation(
     masked_st.merge(method=0, fill_value=None, interpolation_samples=0)
     masked_st.trim(starttime=starttime, endtime=endtime, pad=True,
                    nearest_sample=True, fill_value=None)
-    
+
     # Merge daystream without masking
     # st.merge(method=0, fill_value=0, interpolation_samples=0)
     # 2021-01-22: changed merge method to below one to fix error with
@@ -1031,15 +1098,15 @@ def _init_processing_per_channel_wRotation(
         st, inv, sta_translation_file=sta_translation_file,
         std_network_code=std_network_code, std_location_code=std_location_code,
         std_channel_prefix=std_channel_prefix, parallel=False, cores=1)
-    
+
     # Do noise-balancing by the station's PSDPDF average
     if noise_balancing:
         # if not hasattr(st, "balance_noise"):
         #     bound_method = st_balance_noise.__get__(st)
         #     st.balance_noise = bound_method
         st = st.filter('highpass', freq=0.1, zerophase=True).detrend()
-        st = st_balance_noise(st, inv, balance_power_coefficient=
-                              balance_power_coefficient)
+        st = st_balance_noise(
+            st, inv, balance_power_coefficient=balance_power_coefficient)
         st = st.taper(0.005, type='hann', max_length=None, side='both')
 
     # Put masked array into response-corrected stream st:
@@ -1054,8 +1121,7 @@ def _init_processing_per_channel_wRotation(
                     'Numpy Mask error - this is a problematic exception '
                     + 'because it does not appear to be reproducible. I shall '
                     + 'hence try to process this trace again.')
-                
-                
+
     # Downsample if necessary
     if downsampled_max_rate is not None:
         for tr in st:
@@ -1066,71 +1132,70 @@ def _init_processing_per_channel_wRotation(
     outtoc = default_timer()
     try:
         Logger.debug(
-            'Initial processing of %s traces in stream %s took: {0:.4f}s'.format(
-                outtoc - outtic), str(len(st)), st[0].id)
+            'Initial processing of %s traces in stream %s took: '
+            '{0:.4f}s'.format(outtoc - outtic), str(len(st)), st[0].id)
     except Exception as e:
         Logger.warning(e)
 
     return st
 
 
-
 def check_normalize_sampling_rate(
-    st, inv, min_segment_length_s=10, max_sample_rate_diff=1,
-    skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
-    skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos'):
+        st, inv, min_segment_length_s=10, max_sample_rate_diff=1,
+        skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
+        skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos'):
     """
     Function to check the sampling rates of traces against the response-
         provided sampling rate and the against all other segments from the same
-        NSLC-object in the stream. Traces with mismatching sample-rates are 
+        NSLC-object in the stream. Traces with mismatching sample-rates are
         excluded. If the sample rate is only slightly off, then the trace is
         interpolated onto the response-defined sample rate.
         If there is no matching response, then the traces are checked against
         other traces with the same NSLC-identified id.
         The sample rate can be adjusted without interpolation if it is just
-        very slightly off due to floating-point issues (e.g., 99.9999998 vs 
+        very slightly off due to floating-point issues (e.g., 99.9999998 vs
         100 Hz). A value of 1e-7 implies that for a 100 Hz-sampled channel, the
         sample-wise offset across 24 hours is less than 1 sample.
-        
+
     returns: stream, bool
     """
-    
+
     # First, throw out trace bits that are too short, and hence, likely
     # problematic (e.g., shorter than 10 s):
     keep_st = Stream()
-    #st_copy = st.copy()
+    # st_copy = st.copy()
     st_tr_to_be_removed = Stream()
     for tr in st:
         if tr.stats.npts < min_segment_length_s * tr.stats.sampling_rate:
-            #st_copy.remove(tr)
+            # st_copy.remove(tr)
             st_tr_to_be_removed += tr
     for tr in st_tr_to_be_removed:
         if tr in st:
             st.remove(tr)
-    #st = st_copy
-    
+    # st = st_copy
+
     # Create list of unique Seed-identifiers (NLSC-objects)
     seed_id_list = [tr.id for tr in st]
     unique_seed_id_list = set(seed_id_list)
-    
+
     # Do a quick check: if all sampling rates are the same, and all values are
     # one of the allowed default values, then skip all the other tests.
     channel_rates = [tr.stats.sampling_rate for tr in st]
     if all([cr in skip_check_sampling_rates for cr in channel_rates])\
             and len(set(channel_rates)) <= 1:
         return st, False
-    
+
     # Now do a thorough check of the sampling rates; exclude traces if needed;
     # interpolate if needed.
     new_st = Stream()
     # Check what the trace's sampling rate should be according to the inventory
     for seed_id in unique_seed_id_list:
         # Need to check for the inventory-information only once per seed_id
-        # (Hopefully - I'd rather not do this check for every segment in a 
+        # (Hopefully - I'd rather not do this check for every segment in a
         # mseed-file; in case there are many segments.)
         check_st = st.select(id=seed_id).copy()
         tr = check_st[0]
-        
+
         check_inv = inv.select(
             network=tr.stats.network, station=tr.stats.station,
             location=tr.stats.location,
@@ -1214,7 +1279,7 @@ def check_normalize_sampling_rate(
                     if abs(sample_rate_diff) < skip_interp_sample_rate_smaller:
                         Logger.info('Correcting sampling rate of %s on %s '
                                     + 'by adjusting trace stats.', tr.id,
-                                    str(tr.stats.starttime))                        
+                                    str(tr.stats.starttime))
                         tr.stats.sampling_rate = def_channel_sample_rate
                     else:
                         Logger.info('Correcting sampling rate of %s on %s '
@@ -1226,7 +1291,7 @@ def check_normalize_sampling_rate(
                         if tr.data.dtype is not raw_datatype:
                             tr.data = tr.data.astype(raw_datatype)
         new_st += keep_st
-        
+
     return new_st, True
 
 
@@ -1242,34 +1307,41 @@ def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
     else:
         if cores is None:
             cores = min(len(st), cpu_count())
-            
+
         # If this function is called from a subprocess and asked for parallel
         # execution, then open a thread-pool to distribute work further.
-        if current_process().name == 'MainProcess':
-            my_pool = get_context("spawn").Pool
-        else:
-            my_pool = ThreadPool
-        
-        with threadpool_limits(limits=1, user_api='blas'):
-            with pool_boy(Pool=my_pool, traces=len(st), cores=cores) as pool:
-                #params = ((tr, inv, taper_fraction, parallel, cores)
-                #          for tr in st)
-                results = [pool.apply_async(
-                    _try_remove_responses,
-                    args=(tr, inv.select(station=tr.stats.station),
-                          taper_fraction, pre_filt, output)
-                    ) for tr in st]
-        traces = [res.get() for res in results]
-        traces = [tr for tr in traces if tr is not None]
-        st = Stream(traces=traces)
-        
+        # if current_process().name == 'MainProcess':
+        #     my_pool = get_context("spawn").Pool
+        # else:
+        #     my_pool = ThreadPool
+
+        # with threadpool_limits(limits=1, user_api='blas'):
+        #     with pool_boy(Pool=my_pool, traces=len(st), cores=cores) as pool:
+        #         # params = ((tr, inv, taper_fraction, parallel, cores)
+        #         #          for tr in st)
+        #         results = [pool.apply_async(
+        #             _try_remove_responses,
+        #             args=(tr, inv.select(station=tr.stats.station),
+        #                   taper_fraction, pre_filt, output)
+        #             ) for tr in st]
+        # traces = [res.get() for res in results]
+        # traces = [tr for tr in traces if tr is not None]
+        # st = Stream(traces=traces)
+
         # my_pool().close()
         # my_pool().join()
         # my_pool().terminate()
-        
+
+        with threadpool_limits(limits=1, user_api='blas'):
+            streams = Parallel(n_jobs=cores)(
+                delayed(_try_remove_responses)
+                (tr, inv.select(station=tr.stats.station), taper_fraction,
+                 pre_filt, output) for tr in st)
+        st = Stream([tr for trace_st in streams for tr in trace_st])
+
         # params = ((sub_arr, arr_thresh, trig_int, full_peaks)
         #             for sub_arr, arr_thresh in zip(arr, thresh))
-                
+
         # with pool_boy(Pool, len(stream_dict), cores=max_workers) as pool:
         #     func = partial(
         #         _meta_filter_stream, stream_dict=stream_dict,
@@ -1278,9 +1350,8 @@ def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
         #                 for key in stream_dict.keys()]
         # for result in results:
         #     processed_stream_dict.update(result.get())
-    
-    return st
 
+    return st
 
 
 def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
@@ -1307,10 +1378,10 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
                            ' - no match found')
             # Logger.warning(e)
         else:
-            # TODO: what if trace's location code is empty, and there are 
+            # TODO: what if trace's location code is empty, and there are
             # multiple instruments at one station that both match the trace in
             # a channel code?
-            try: 
+            try:
                 tr.remove_response(inventory=sel_inv, output=output,
                                    water_level=60, pre_filt=pre_filt,
                                    zero_mean=True, taper=True,
@@ -1320,12 +1391,12 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
                 Logger.warning('Finally cannot remove reponse for ' + str(tr) +
                                ' - no match found')
                 # Logger.warning(e)
-        # IF reponse isn't found, then adjust amplitude to something 
+        # IF reponse isn't found, then adjust amplitude to something
         # similar to the properly corrected traces
         if not found_matching_resp:
             tr.data = tr.data / 1e7
 
-    # Set station coordinates 
+    # Set station coordinates
     # initialize
     tr.stats["coordinates"] = {}
     tr.stats["coordinates"]["latitude"] = np.NaN
@@ -1345,31 +1416,31 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
     try:
         tr.stats["coordinates"]["latitude"] = stachan_info.latitude
         tr.stats["coordinates"]["longitude"] = stachan_info.longitude
-        tr.stats["coordinates"]["elevation"] = stachan_info.elevation 
+        tr.stats["coordinates"]["elevation"] = stachan_info.elevation
         tr.stats["coordinates"]["depth"] = stachan_info.depth
     except Exception as e:
-         Logger.warning('Could not set all station coordinates for %s', tr.id)
+        Logger.warning('Could not set all station coordinates for %s', tr.id)
     # Gain all traces to avoid a float16-zero error
     # basically converts from m to nm (for displacement)
     tr.data = tr.data * 1e6
     # Now convert back to 32bit-double to save memory ! (?)
-    #if np.dtype(tr.data[0]) == 'float64':
+    # if np.dtype(tr.data[0]) == 'float64':
     tr.data = np.float32(tr.data)
     # before response removed: tr.data is in int32
     # after response removed, tr.data is in float64)
-    
+
     outtoc = default_timer()
     if (outtoc - outtic) > 3:
         Logger.debug(
             'Response-removal of trace %s took: {0:.4f}s'.format(
                 outtoc - outtic), tr.id)
-    
+
     # Check that data are not NaN:
     if np.isnan(tr.data).any():
         Logger.warning('Data for trace %s contain NaN after response-removal,'
                        + 'will discard this trace.', str(tr))
         return None
-    
+
     return tr
 
 
@@ -1380,7 +1451,7 @@ def try_find_matching_response(tr, inv):
     entory that has the same station code, and check start/endtimes
     of channel - correct trace stats if there's a match.
     :returns: bool, trace, inventory
-    
+
     Logic:
     1. only location code is empty:
     2. neither location nor network codes are empty, but there is a response
@@ -1391,13 +1462,13 @@ def try_find_matching_response(tr, inv):
        the middle
        5 if not found, allow space in channel and empty network
        6 if not found, allow space in channel and empty location
-       7 if not found, allow space in channel, empty network, and 
+       7 if not found, allow space in channel, empty network, and
          empty location
     """
     found = False
     # 1. only location code is empty:
-    if (tr.stats.location == '' or tr.stats.location == '--')\
-        and not tr.stats.network == '':
+    if ((tr.stats.location == '' or tr.stats.location == '--')
+            and not tr.stats.network == ''):
         tempInv = inv.select(network=tr.stats.network,
                              station=tr.stats.station,
                              channel=tr.stats.channel)
@@ -1412,8 +1483,8 @@ def try_find_matching_response(tr, inv):
                         return True, tr, inv
     # 2. neither location nor network codes are empty, but there is a response
     #    for an empty location code.
-    if not (tr.stats.location == '' or tr.stats.location == '--') and\
-      not tr.stats.network == '':
+    if (not (tr.stats.location == '' or tr.stats.location == '--') and
+            not tr.stats.network == ''):
         tempInv = inv.select(network=tr.stats.network,
                              station=tr.stats.station,
                              channel=tr.stats.channel)
@@ -1434,7 +1505,7 @@ def try_find_matching_response(tr, inv):
         found = False
         for network in tempInv.networks:
             for station in network.stations:
-                #chan_codes = [c.code for c in station.channels]
+                # chan_codes = [c.code for c in station.channels]
                 for channel in station.channels:
                     if response_stats_match(tr, channel):
                         tr.stats.network = network.code
@@ -1444,7 +1515,7 @@ def try_find_matching_response(tr, inv):
     # 3. if not found, try again and allow any location code
     if tr.stats.network == '':
         tempInv = inv.select(station=tr.stats.station,
-                                channel=tr.stats.channel)
+                             channel=tr.stats.channel)
         found = False
         for network in tempInv.networks:
             for station in network.stations:
@@ -1458,11 +1529,11 @@ def try_find_matching_response(tr, inv):
     # 4 if not found, check if the channel code may contain a space in
     #   the middle
     if tr.stats.channel[1] == ' ':
-        tempInv = inv.select(network = tr.stats.network,
-                                station=tr.stats.station,
-                                location=tr.stats.location,
-                                channel=tr.stats.channel[0] + '?' +
-                                tr.stats.channel[2])
+        tempInv = inv.select(network=tr.stats.network,
+                             station=tr.stats.station,
+                             location=tr.stats.location,
+                             channel=tr.stats.channel[0] + '?' +
+                             tr.stats.channel[2])
         found = False
         for network in tempInv.networks:
             for station in network.stations:
@@ -1474,9 +1545,9 @@ def try_find_matching_response(tr, inv):
                         return True, tr, inv
         # 5 if not found, allow space in channel and empty network
         tempInv = inv.select(station=tr.stats.station,
-                                location=tr.stats.location,
-                                channel=tr.stats.channel[0] + '?' +
-                                tr.stats.channel[2])
+                             location=tr.stats.location,
+                             channel=tr.stats.channel[0] + '?' +
+                             tr.stats.channel[2])
         found = False
         for network in tempInv.networks:
             for station in network.stations:
@@ -1489,9 +1560,9 @@ def try_find_matching_response(tr, inv):
                         return True, tr, inv
         # 6 if not found, allow space in channel and empty location
         tempInv = inv.select(network=tr.stats.network,
-                                station=tr.stats.station,
-                                channel=tr.stats.channel[0] + '?' +
-                                tr.stats.channel[2])
+                             station=tr.stats.station,
+                             channel=tr.stats.channel[0] + '?' +
+                             tr.stats.channel[2])
         found = False
         for network in tempInv.networks:
             for station in network.stations:
@@ -1502,11 +1573,11 @@ def try_find_matching_response(tr, inv):
                         inv = return_matching_response(tr, inv, network,
                                                        station, channel)
                         return True, tr, inv
-        # 7 if not found, allow space in channel, empty network, and 
+        # 7 if not found, allow space in channel, empty network, and
         #   empty location
         tempInv = inv.select(station=tr.stats.station,
-                                channel=tr.stats.channel[0] + '?' +
-                                tr.stats.channel[2])
+                             channel=tr.stats.channel[0] + '?' +
+                             tr.stats.channel[2])
         found = False
         for network in tempInv.networks:
             for station in network.stations:
@@ -1522,22 +1593,20 @@ def try_find_matching_response(tr, inv):
     return found, tr, Inventory()
 
 
-
 def response_stats_match(tr, channel):
-    #"""
-    #check whether some criteria of the inventory-response and the trace match
-    #tr: obspy.trace
-    #channel: inv.networks.channel
-    #"""
+    """
+    check whether some criteria of the inventory-response and the trace match
+    tr: obspy.trace
+    channel: inv.networks.channel
+    """
     sample_rate_diff = abs(channel.sample_rate - tr.stats.sampling_rate)
-    if (channel.start_date <= tr.stats.starttime 
+    if (channel.start_date <= tr.stats.starttime
             and (channel.end_date >= tr.stats.endtime
                  or channel.end_date is None)
             and sample_rate_diff < 1):
         return True
     else:
         return False
-
 
 
 def return_matching_response(tr, inv, network, station, channel):
@@ -1551,9 +1620,7 @@ def return_matching_response(tr, inv, network, station, channel):
             or len(inv.networks[0].stations[0].channels) > 1:
         Logger.debug('Found more than one matching response for trace, '
                      + 'returning all.')
-            
     return inv
-
 
 
 def normalize_NSLC_codes(st, inv, std_network_code="NS",
@@ -1581,13 +1648,12 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
     # 1.
     for tr in st:
         # Check the channel names and correct if required
-        if len(tr.stats.channel)<=2 and len(tr.stats.location)==1:
+        if len(tr.stats.channel) <= 2 and len(tr.stats.location) == 1:
             tr.stats.channel = tr.stats.channel + tr.stats.location
         chn = tr.stats.channel
         if chn[1] in 'LH10V ':
-        #=='L' or chn[1]=='H' or chn[1]==' ' or\  chn[1]=='1' or chn[1]=='0' or chn[1]=='V':
             tr.stats.channel = std_channel_prefix + chn[2]
-            #tr.stats.location = '00'
+            # tr.stats.location = '00'
     # 2. Rotate to proper ZNE and rename channels to ZNE
     # for tr in st:
     #     if tr.stats.channel[-1] in '12':
@@ -1599,7 +1665,7 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
     #         chn_inv = rot_inv.networks[0].stations[0].channels
     #         if len(chn_inv) > 1:
     #             Logger.info('ZNE rotation: Found more than one matching '
-    #                         + 'responses for %s, %s, returning first response',
+    #                       + 'responses for %s, %s, returning first response',
     #                         chn_inv, str(tr.stats.starttime)[0:10])
     #             chn_inv = chn_inv[0]
     #         if len(chn_inv) == 0:
@@ -1611,7 +1677,7 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
     #                 90 - abs(chn_inv.azimuth) <= rotation_threshold_degrees:
     #             tr.stats.channel[-1] = 'E'
     if parallel:
-        st = parallel_rotate(st, inv, cores=cores, method="->ZNE")    
+        st = parallel_rotate(st, inv, cores=cores, method="->ZNE")
     else:
         st.rotate(method="->ZNE", inventory=inv)
 
@@ -1638,8 +1704,8 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
     return st
 
 
-def get_all_relevant_stations(selectedStations, sta_translation_file=
-                              "station_code_translation.txt"):
+def get_all_relevant_stations(
+        selectedStations, sta_translation_file="station_code_translation.txt"):
     """
     return list of relevant stations
     """
@@ -1667,10 +1733,10 @@ def load_station_translation_dict(file="station_code_translation.txt"):
         return station_forw_translation_dict, station_forw_translation_dict
 
     for line in f.readlines()[1:]:
-        #station_translation_list.append(tuple(line.strip().split()))
+        # station_translation_list.append(tuple(line.strip().split()))
         standard_sta_code, alternative_sta_code = line.strip().split()
         station_forw_translation_dict[alternative_sta_code] = standard_sta_code
-    station_backw_translation_dict = {y:x for x,y in 
+    station_backw_translation_dict = {y: x for x, y in
                                       station_forw_translation_dict.items()}
     return station_forw_translation_dict, station_backw_translation_dict
 
@@ -1733,36 +1799,35 @@ def check_template(st, template_length, remove_nan_strict=True,
 
     st_copy = st.copy()
     for tr in st_copy:
-        #Check that the trace is long enough
+        # Check that the trace is long enough
         if tr.stats.npts < template_length*tr.stats.sampling_rate and tr in st:
             st.remove(tr)
-            Logger.info('Trace ' + tr.stats.network + '.' + tr.stats.station 
+            Logger.info('Trace ' + tr.stats.network + '.' + tr.stats.station
                         + '.' + tr.stats.location + '.' + tr.stats.channel
                         + ' is too short, removing from template.')
         # Check that the trace has no NaNs
         if remove_nan_strict and any(np.isnan(tr.data)) and tr in st:
             st.remove(tr)
-            Logger.info('Trace ' + tr.stats.network + tr.stats.station + 
+            Logger.info('Trace ' + tr.stats.network + tr.stats.station +
                         tr.stats.location + tr.stats.channel
                         + ' contains NaNs, removing from template.')
         # Check that not more than 5 % of the trace is zero:
-        
         n_nonzero = np.count_nonzero(tr.copy().detrend().data)
-        #if sum(tr.copy().detrend().data==0) > tr.data.size*max_perc_zeros\
+        # if sum(tr.copy().detrend().data==0) > tr.data.size*max_perc_zeros\
         if (n_nonzero < tr.data.size * (1-max_perc_zeros) and tr in st):
             st.remove(tr)
-            Logger.info('Trace ' + tr.stats.network + tr.stats.station + 
+            Logger.info('Trace ' + tr.stats.network + tr.stats.station +
                         tr.stats.location + tr.stats.channel
                         + ' contains more than ' + str(max_perc_zeros*100)
                         + ' %% zeros, removing from template.')
         # Correct messed-up location/channel in case of LRW, MOL
-        #if len(tr.stats.channel)<=2 and len(tr.stats.location)==1:
+        # if len(tr.stats.channel)<=2 and len(tr.stats.location)==1:
         #    tr.stats.channel = tr.stats.channel + tr.stats.location
-        #chn = tr.stats.channel
-        #if chn[1]=='L' or chn[1]=='H' or chn[1]==' ':
+        # chn = tr.stats.channel
+        # if chn[1]=='L' or chn[1]=='H' or chn[1]==' ':
         #    tr.stats.channel = 'HH' + chn[2]
         #    tr.stats.location = '00'
-        #tr.stats.network = 'XX'
+        # tr.stats.network = 'XX'
     return st
 
 
@@ -1783,8 +1848,8 @@ def print_error_plots(st, path='ErrorPlots', time_str=''):
             trace.plot(type='dayplot', size=(1900, 1080), outfile=outPlotFile,
                        data_unit='nm')
     except Exception as e:
-        Logger.error('Got an exception when trying to plot '
-                        + 'Error figures for %s', current_day_str)
+        Logger.error('Got an exception when trying to plot Error figures'
+                     'for %s', current_day_str)
         Logger.error(e)
 
 
@@ -1798,7 +1863,7 @@ def multiplot_detection(party, tribe, st, out_folder='DetectionPlots'):
         if len(family) == 0:
             continue
         for detection in family:
-            #times = [d.detect_time for d in family]
+            # times = [d.detect_time for d in family]
             template = [templ for templ in tribe
                         if templ.name == detection.template_name][0]
             templ_starttimes = [tr.stats.starttime for tr in template.st]
@@ -1808,7 +1873,7 @@ def multiplot_detection(party, tribe, st, out_folder='DetectionPlots'):
             first_trace_offset =\
                 min(detection_templ_starttimes) - min(templ_starttimes)
             times = [detection.detect_time + first_trace_offset]
-            
+
             stt = times[0]
             dst = st.copy().trim(starttime=stt-120, endtime=stt+400)
             dst = dst.split()
@@ -1835,14 +1900,15 @@ def multiplot_detection(party, tribe, st, out_folder='DetectionPlots'):
 
 
 def reevaluate_detections(
-    party, short_tribe, stream, threshold_type='MAD', threshold=9,
-    trig_int=40.0, overlap='calculate', plot=False, plotDir='DetectionPlots',
-    daylong=False, fill_gaps=False, ignore_bad_data=False, ignore_length=True,
-    parallel_process=False, cores=None, concurrency='multithread',
-    xcorr_func='fftw', group_size=1, full_peaks=False,
-    save_progress=False, process_cores=None, spike_test=False, min_chans=4,
-    time_difference_threshold=2, detect_value_allowed_error=60,
-    return_party_with_short_templates=False):
+        party, short_tribe, stream, threshold_type='MAD', threshold=9,
+        trig_int=40.0, overlap='calculate', plot=False,
+        plotDir='DetectionPlots', daylong=False, fill_gaps=False,
+        ignore_bad_data=False, ignore_length=True, parallel_process=False,
+        cores=None, concurrency='multithread', xcorr_func='fftw', group_size=1,
+        full_peaks=False, save_progress=False, process_cores=None,
+        spike_test=False, min_chans=4, time_difference_threshold=2,
+        detect_value_allowed_error=60,
+        return_party_with_short_templates=False):
     """
     This function takes a set of detections and reruns the match-filter
     detection with a set of templates that are shortened to XX length. Only if
@@ -1874,7 +1940,7 @@ def reevaluate_detections(
     #     # then use whole day
     #     det_st = stream
     # else:
-    #     #cut around half an hour before earliest and half an hour after latest 
+    #    #cut around half an hour before earliest and half an hour after latest
     #     # detection
     #     tr_start_times = [tr.stats.starttime for tr in stream.traces]
     #     tr_end_times = [tr.stats.endtime for tr in stream.traces]
@@ -1888,8 +1954,8 @@ def reevaluate_detections(
     #         endtime = latest_st_time
     #     det_st = stream.trim(starttime=starttime, endtime=endtime)
     #     daylong = False
-        # for temp in short_tribe:
-        #     temp.process_len = endtime - starttime
+    # for temp in short_tribe:
+    #     temp.process_len = endtime - starttime
 
     # rerun detection
     # TODO: if threshold is MAD, then I would have to set the threshold lower
@@ -1913,7 +1979,7 @@ def reevaluate_detections(
         f.template.name for f in short_party if f is not None]
     for fam in party:
         if fam.template.name not in short_party_templ_names:
-            continue # do not retain the whole family
+            continue  # do not retain the whole family
         # select matching family
         short_fam = short_party.select(fam.template.name)
         if len(short_fam) == 0:
@@ -1921,7 +1987,7 @@ def reevaluate_detections(
             continue
         short_det_times_np = np.array(
             [np.datetime64(d.detect_time.ns, 'ns') for d in short_fam])
-        
+
         # Allow to return either partys with the original templates or the
         # short templates
         if return_party_with_short_templates:

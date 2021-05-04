@@ -74,17 +74,22 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 
-#@processify
-def run_day_detection(tribe, date, ispaq, selectedStations,
-                      parallel=False, cores=1,
-                      remove_response=False, inv=Inventory(),
-                      noise_balancing=False, balance_power_coefficient=2,
-                      trig_int=0, threshold=10, min_chans=10, multiplot=False,
-                      day_st=Stream(), check_array_misdetections=False,
-                      short_tribe=Tribe(), write_party=False,
-                      detection_path='Detections',
-                      redetection_path='ReDetections',
-                      return_stream=True, dump_stream_to_disk=False):
+
+def read_bulk_test(client, bulk, parallel=False, cores=None):
+    # Read in continuous data and prepare for processing
+    st = get_waveforms_bulk(client, bulk, parallel=parallel, cores=cores)
+    return st
+
+
+# @processify
+def run_day_detection(
+        client, tribe, date, ispaq, selectedStations, parallel=False, cores=1,
+        remove_response=False, inv=Inventory(), noise_balancing=False,
+        balance_power_coefficient=2, trig_int=0, threshold=10, min_chans=10,
+        multiplot=False, day_st=Stream(), check_array_misdetections=False, 
+        short_tribe=Tribe(), write_party=False, detection_path='Detections',
+        redetection_path='ReDetections', return_stream=True,
+        dump_stream_to_disk=False):
     """
     Function to run reading, initial processing, detection etc. on one day.
     """
@@ -92,10 +97,9 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
     tribe = tribe.copy()
     short_tribe = short_tribe.copy()
     # Set the path to the folders with continuous data:
-    archive_path = '/data/seismo-wav/SLARCHIVE'
     # archive_path2 = '/data/seismo-wav/EIDA/archive'
-    client = Client(archive_path)
     # client2 = Client(archive_path2)
+
     n_templates_per_run = 20
     n_templates = len(tribe)
     n_runs = math.ceil(n_templates / n_templates_per_run)
@@ -105,7 +109,7 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
     endtime = starttime + 60*60*24
     endtime_req = endtime + 15*60
     current_day_str = date.strftime('%Y-%m-%d')
-    
+
     # keep input safe:
     day_st = day_st.copy()
     if len(day_st) == 0:
@@ -175,16 +179,16 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
         #    skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
         #    taper_fraction=0.005, downsampled_max_rate=None,
         #    noise_balancing=noise_balancing)
-        
+
         # # # #Normalize NSLC codes
         # day_st = normalize_NSLC_codes(
         #     day_st, inv, parallel=False, cores=cores,
         #     std_network_code="NS", std_location_code="00",
         #     std_channel_prefix="BH",
         #     sta_translation_file="station_code_translation.txt")
-    
+
     # daily_plot(day_st, year, month, day, data_unit="counts",
-    #           suffix='resp_removed')            
+    #           suffix='resp_removed')
     # If there is no data for the day, then continue on next day.
     if not day_st.traces:
         Logger.warning('No data for detection on %s, continuing' +
@@ -264,7 +268,7 @@ def run_day_detection(tribe, date, ispaq, selectedStations,
             Logger.error('Missing short templates for detection-reevaluation.')
         else:    
             party = reevaluate_detections(
-                party, short_tribe, stream=day_st, threshold=threshold * 0.6,
+                party, short_tribe, stream=day_st, threshold=threshold * 0.5,
                 trig_int=40.0, threshold_type='MAD', overlap='calculate',
                 plot=False, plotDir='ReDetectionPlots', fill_gaps=True,
                 ignore_bad_data=False, daylong=True, ignore_length=True,
@@ -483,31 +487,3 @@ if __name__ == "__main__":
             threshold=12, check_array_misdetections=check_array_misdetections,
             trig_int=40, short_tribe=short_tribe, multiplot=True,
             write_party=True, min_chans=1)
-
-# %%
-# [party, day_st] = run_day_detection(
-#     tribe=tribe, date=date, ispaq=ispaq, selectedStations=relevantStations,
-#     remove_response=True, inv=inv, parallel=False, cores=cores,
-#     noise_balancing=noise_balancing, trig_int=40, threshold=10,
-#     balance_power_coefficient=balance_power_coefficient,
-#     check_array_misdetections=check_array_misdetections,
-#     short_tribe=short_tribe, multiplot=True, write_party=True)
-
-# party = Party().read('Detections_MAD9/UniqueDet2007-06-21.tgz')
-    # if check_array_misdetections:
-    # if len(short_tribe) < len(tribe):
-    #     Logger.error('Missing short templates for detection-reevaluation.')
-    # else:    
-    #         party = reevaluate_detections(
-    #             party, short_tribe, stream=day_st, threshold_type='MAD',
-    #             threshold=threshold-2, trig_int=3.0, overlap='calculate',
-    #             plot=False, plotDir='ReDetectionPlots', fill_gaps=True,
-    #             ignore_bad_data=False, daylong=True, ignore_length=True,
-    #             concurrency='multiprocess', parallel_process=parallel,
-    #             cores=cores, xcorr_func='time_domain', min_chans=min_chans,
-    #             group_size=n_templates_per_run, process_cores=cores,
-    #             time_difference_threshold=8, detect_value_allowed_error=30,
-    #             return_party_with_short_templates=True)
-
-
-# %%

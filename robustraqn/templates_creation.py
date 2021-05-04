@@ -10,6 +10,7 @@ import glob
 # from importlib import reload
 from multiprocessing import Pool, cpu_count, get_context
 from multiprocessing.pool import ThreadPool
+from joblib import Parallel, delayed, parallel_backend
 
 # from obspy import read_events, read_inventory
 from obspy.core.event import Catalog
@@ -250,34 +251,58 @@ def create_template_objects(
         # processes. inv can be empty Inv, or chosen more carefully for the
         # problem to speed this up.
         # e.g. with : channel='?H?', latitude=59, longitude=2, maxradius=7
-        with pool_boy(Pool=get_context("spawn").Pool, traces=len(sfiles),
-                      n_cores=cores) as pool:
-            results = (
-                [pool.apply_async(
-                    _create_template_objects, 
-                    ([sfile], selectedStations, template_length,
-                        lowcut, highcut, min_snr, prepick, samp_rate,
-                        seisanWAVpath),
-                    dict(
-                        inv=new_inv.select(
-                            time=UTCDateTime(sfile[-6:] + sfile[-19:-9])),
-                        remove_response=remove_response,
-                        noise_balancing=noise_balancing,
-                        balance_power_coefficient=balance_power_coefficient,
-                        ground_motion_input=ground_motion_input,
-                        write_out=False, min_n_traces=min_n_traces,
-                        make_pretty_plot=make_pretty_plot, prefix=prefix,
-                        check_template_strict=check_template_strict,
-                        allow_channel_duplication=allow_channel_duplication,
-                        normalize_NSLC=normalize_NSLC,
-                        sta_translation_file=sta_translation_file,
-                        std_network_code=std_network_code,
-                        std_location_code=std_location_code,
-                        std_channel_prefix=std_channel_prefix,
-                        parallel=thread_parallel, cores=n_threads)
-                    ) for sfile in sfiles])
-        # try:
-        res_out = [res.get() for res in results]
+
+        # with pool_boy(Pool=get_context("spawn").Pool, traces=len(sfiles),
+        #               n_cores=cores) as pool:
+        #     results = (
+        #         [pool.apply_async(
+        #             _create_template_objects,
+        #             ([sfile], selectedStations, template_length,
+        #                 lowcut, highcut, min_snr, prepick, samp_rate,
+        #                 seisanWAVpath),
+        #             dict(
+        #                 inv=new_inv.select(
+        #                     time=UTCDateTime(sfile[-6:] + sfile[-19:-9])),
+        #                 remove_response=remove_response,
+        #                 noise_balancing=noise_balancing,
+        #                 balance_power_coefficient=balance_power_coefficient,
+        #                 ground_motion_input=ground_motion_input,
+        #                 write_out=False, min_n_traces=min_n_traces,
+        #                 make_pretty_plot=make_pretty_plot, prefix=prefix,
+        #                 check_template_strict=check_template_strict,
+        #                 allow_channel_duplication=allow_channel_duplication,
+        #                 normalize_NSLC=normalize_NSLC,
+        #                 sta_translation_file=sta_translation_file,
+        #                 std_network_code=std_network_code,
+        #                 std_location_code=std_location_code,
+        #                 std_channel_prefix=std_channel_prefix,
+        #                 parallel=thread_parallel, cores=n_threads)
+        #             ) for sfile in sfiles])
+        # # try:
+        # res_out = [res.get() for res in results]
+
+        res_out = Parallel(n_jobs=cores)(
+            delayed(_create_template_objects)(
+                [sfile], selectedStations, template_length, lowcut, highcut,
+                min_snr, prepick, samp_rate, seisanWAVpath,
+                inv=new_inv.select(
+                    time=UTCDateTime(sfile[-6:] + sfile[-19:-9])),
+                remove_response=remove_response,
+                noise_balancing=noise_balancing,
+                balance_power_coefficient=balance_power_coefficient,
+                ground_motion_input=ground_motion_input,
+                write_out=False, min_n_traces=min_n_traces,
+                make_pretty_plot=make_pretty_plot, prefix=prefix,
+                check_template_strict=check_template_strict,
+                allow_channel_duplication=allow_channel_duplication,
+                normalize_NSLC=normalize_NSLC,
+                sta_translation_file=sta_translation_file,
+                std_network_code=std_network_code,
+                std_location_code=std_location_code,
+                std_channel_prefix=std_channel_prefix,
+                parallel=thread_parallel, cores=n_threads)
+            for sfile in sfiles)
+
         tribes = [r[0] for r in res_out if len(r[0]) > 0]
         wavnames = [r[1][0] for r in res_out if len(r[0]) > 0]
         tribe = Tribe(templates=[tri[0] for tri in tribes if len(tri) > 0])

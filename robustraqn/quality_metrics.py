@@ -14,6 +14,8 @@ from signal import signal, SIGSEGV
 
 from multiprocessing import Pool, cpu_count, get_context
 from multiprocessing.pool import ThreadPool
+from joblib import Parallel, delayed
+
 
 import pandas as pd
 import fnmatch
@@ -68,22 +70,34 @@ def get_waveforms_bulk(client, bulk, parallel=False, cores=None):
             cores = min(len(bulk), cpu_count())
         # There seems to be a negative effect on speed if there's too many
         # read-threads - For now set limit to 16
-        cores = min(cores, 6)
+        cores = min(cores, 16)
+
+        # Switch to Process Pool for now. Threadpool is quicker, but it is not
+        # stable against errors that need to be caught in Mseed-library. Then
+        # as segmentation fault can crash the whole program. ProcessPool needs
+        # to be spawned, otherwise this can cause a deadlock.
 
         # Logger.info('Start bulk-read paralle pool')
         # Process / spawn handles segmentation fault better?
+        #with pool_boy(Pool=ThreadPool, traces=len(bulk), cores=cores) as pool:
+        # with pool_boy(Pool=Pool, traces=len(bulk), cores=cores) as pool:
+
         # with pool_boy(Pool=get_context("spawn").Pool, traces=len(bulk),
         #               cores=cores) as pool:
-        #with pool_boy(Pool=ThreadPool, traces=len(bulk), cores=cores) as pool:
-        with pool_boy(Pool=Pool, traces=len(bulk), cores=cores) as pool:
-            results = [pool.apply_async(
-                _get_waveforms_bulk,
-                args=(client, [arg]))
-                       for arg in bulk]
+        #     results = [pool.apply_async(
+        #         _get_waveforms_bulk, args=(client, [arg])) for arg in bulk]
+
+        # Use joblib with loky-pools; this is the most stable
+        results = Parallel(n_jobs=cores)(
+            delayed(get_waveforms_bulk)(client, [arg]) for arg in bulk)
         # Concatenate all NSLC-streams into one stream
         st = Stream()
         for res in results:
-            st += res.get()
+            # st += res.get()
+            st += res
+        # pool.close()
+        # pool.join()
+        # pool.terminate()
     else:
         st = _get_waveforms_bulk(client, bulk)
 
@@ -121,11 +135,10 @@ def get_waveforms_bulk_old(client, bulk, parallel=False, cores=None):
 
         # Logger.info('Start bulk-read paralle pool')
         # Process / spawn handles segmentation fault better?
-        # with pool_boy(Pool=get_context("spawn").Pool, traces=len(bulk),
-        #               cores=cores) as pool:
-        with pool_boy(Pool=ThreadPool, traces=len(bulk), cores=cores) as pool:
-
-        #with pool_boy(Pool=Pool, traces=len(bulk), cores=cores) as pool:
+        #with pool_boy(Pool=get_context("spawn").Pool, traces=len(bulk),
+        #              cores=cores) as pool:
+        #with pool_boy(Pool=ThreadPool, traces=len(bulk), cores=cores) as pool:
+        with pool_boy(Pool=Pool, traces=len(bulk), cores=cores) as pool:
             results = [pool.apply_async(
                 client.get_waveforms,
                 args=arg,
@@ -363,19 +376,23 @@ def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
     if parallel:
         if cores is None:
             cores = min(len(stations), cpu_count())
-        with pool_boy(Pool=Pool, traces=len(stations), cores=cores) as pool:
-            results = [pool.apply_async(get_station_bulk_request,
-                                        (station, location_priority,
-                                         band_priority, instrument_priority,
-                                         components, day_stats, reqtime1,
-                                         starttime, endtime),
-                                        kwargs)
-                       for station in stations]
-
-        bulk_lists = [res.get() for res in results]
-        pool.close()
-        pool.join()
-        pool.terminate()
+        # with pool_boy(Pool=Pool, traces=len(stations), cores=cores) as pool:
+        #     results = [pool.apply_async(get_station_bulk_request,
+        #                                 (station, location_priority,
+        #                                  band_priority, instrument_priority,
+        #                                  components, day_stats, reqtime1,
+        #                                  starttime, endtime),
+        #                                 kwargs)
+        #                for station in stations]
+        # bulk_lists = [res.get() for res in results]
+        # pool.close()
+        # pool.join()
+        # pool.terminate()
+        bulk_lists = Parallel(n_jobs=cores)(
+            delayed(get_station_bulk_request)(
+                station, location_priority, band_priority, instrument_priority,
+                components, day_stats, reqtime1, starttime, endtime, **kwargs)
+            for station in stations)
     else:
         bulk_lists = list()
         for station in stations:

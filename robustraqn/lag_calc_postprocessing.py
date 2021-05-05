@@ -14,7 +14,8 @@ import pandas as pd
 # import obspy
 from obspy.core.stream import Stream
 # from obspy.core.util.base import TypeError
-from obspy.core.event import Event, Catalog, Origin, Comment, CreationInfo
+from obspy.core.event import (Event, Catalog, Origin, Comment, CreationInfo,
+                              WaveformStreamID)
 from obspy.io.nordic.core import read_nordic, write_select, _write_nordic
 from obspy import read as obspyread
 from obspy import UTCDateTime
@@ -154,9 +155,7 @@ def postprocess_picked_events(picked_catalog, party, original_stats_stream,
                                                      channel=reqChan)
             if len(reqStream) == 0:
                 continue
-            pick.waveform_id.network_code = reqStream[0].stats.network
-            pick.waveform_id.station_code = reqStream[0].stats.station
-            pick.waveform_id.channel_code = reqStream[0].stats.channel
+            pick.waveform_id = WaveformStreamID(seed_string=reqStream[0].id)
         if len(event.picks) == 0:
             continue
 
@@ -233,10 +232,9 @@ def postprocess_picked_events(picked_catalog, party, original_stats_stream,
     return export_catalog
 
 
-def extract_stream_for_picked_events(catalog, party, template_path, archives,
-                                     request_fdsn=False,
-                                     wav_out_dir='.', extract_len=300,
-                                     all_chans_for_stations=[]):
+def extract_stream_for_picked_events(
+        catalog, party, template_path, archives, request_fdsn=False,
+        wav_out_dir='.', extract_len=300, all_chans_for_stations=[]):
     """
     Extracts a stream object with all channels from the SDS-archive.
     Allows the input of multiple archives as a list

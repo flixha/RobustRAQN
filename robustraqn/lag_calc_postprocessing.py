@@ -1,6 +1,6 @@
 import os
 import getpass
-#import matplotlib
+# import matplotlib
 
 from multiprocessing import Pool, cpu_count
 from multiprocessing.pool import ThreadPool
@@ -9,11 +9,11 @@ import numpy as np
 import pandas as pd
 # import numexpr as ne
 
-#from obspy import read_events, read_inventory
+# from obspy import read_events, read_inventory
 # from obspy.core.event import Catalog
-#import obspy
+# import obspy
 from obspy.core.stream import Stream
-#from obspy.core.util.base import TypeError
+# from obspy.core.util.base import TypeError
 from obspy.core.event import Event, Catalog, Origin, Comment, CreationInfo
 from obspy.io.nordic.core import read_nordic, write_select, _write_nordic
 from obspy import read as obspyread
@@ -23,15 +23,16 @@ from obspy.clients.fdsn import RoutingClient
 from eqcorrscan.utils.correlate import pool_boy
 from eqcorrscan.core.match_filter.party import Party
 # from eqcorrscan.utils.clustering import extract_detections
-#from eqcorrscan.utils.despike import median_filter
-#from obspy import read_nordic
-#import obspy
+# from eqcorrscan.utils.despike import median_filter
+# from obspy import read_nordic
+# import obspy
 
 from robustraqn.quality_metrics import (
     create_bulk_request, get_waveforms_bulk, read_ispaq_stats)
 
 import logging
 Logger = logging.getLogger(__name__)
+
 
 def postprocess_picked_events(picked_catalog, party, original_stats_stream,
                               write_sfiles=False, sfile_path='Sfiles',
@@ -101,7 +102,7 @@ def postprocess_picked_events(picked_catalog, party, original_stats_stream,
     """
     export_catalog = Catalog()
     for event in picked_catalog:
-        #Correct Picks by the pre-Template time
+        # Correct Picks by the pre-Template time
         num_pPicks = 0
         num_sPicks = 0
         num_pPicks_onDetSta = 0
@@ -115,15 +116,15 @@ def postprocess_picked_events(picked_catalog, party, original_stats_stream,
         for pick in event.picks:
             pick_Station = pick.waveform_id.station_code
             pick_Chan = pick.waveform_id.channel_code
-            if not pick_Station in pick_Stations:
+            if pick_Station not in pick_Stations:
                 pick_Stations.append(pick_Station)
-            #Pick-correction not required any more!
-            #pick.time = pick.time + 0.2
+            # Pick-correction not required any more!
+            # pick.time = pick.time + 0.2
             if pick.phase_hint == 'P':
                 num_pPicks += 1
             elif pick.phase_hint == 'S':
                 sPick_Station = pick.waveform_id.station_code
-                if not sPick_Station in sPick_Stations:
+                if sPick_Station not in sPick_Stations:
                     num_sPicks += 1
                     sPick_Stations.append(sPick_Station)
             # Count the number of picks on stations used
@@ -132,7 +133,7 @@ def postprocess_picked_events(picked_catalog, party, original_stats_stream,
                 for detection in family:
                     if detection.id == event.resource_id:
                         if (pick_Station, pick_Chan) in detection.chans:
-                            if not pick_Station in pick_and_detect_Stations:
+                            if pick_Station not in pick_and_detect_Stations:
                                 pick_and_detect_Stations.append(pick_Station)
                             if pick.phase_hint == 'P':
                                 num_pPicks_onDetSta += 1
@@ -158,15 +159,15 @@ def postprocess_picked_events(picked_catalog, party, original_stats_stream,
             pick.waveform_id.channel_code = reqStream[0].stats.channel
         if len(event.picks) == 0:
             continue
-        
+
         # Find hypocenter of template
-        #detection.template_name
+        # detection.template_name
         orig = Origin()
         orig.time = event.picks[0].time
         orig.longitude = origin_longitude
         orig.latitude = origin_latitude
         orig.depth = origin_depth
-        #day_st.slice(dt, dt + 5)
+        # day_st.slice(dt, dt + 5)
         event.origins.append(orig)
         Logger.info('PickCheck: ' + str(event.origins[0].time) + ' P_d: '
                     + str(num_pPicks_onDetSta)
@@ -190,25 +191,26 @@ def postprocess_picked_events(picked_catalog, party, original_stats_stream,
 
     # Sort catalog so that it's in correct order for output
     export_catalog.events = sorted(
-        export_catalog.events, key=lambda d: d.origins[0].time) 
+        export_catalog.events, key=lambda d: d.origins[0].time)
     # Output
     if export_catalog.count() == 0:
         Logger.info(
             'No picked events saved (no detections fulfill pick-criteria).')
         return None
-    # get waveforms for events 
+    # get waveforms for events
     wavefiles = None
     if write_waveforms:
         wavefiles = extract_stream_for_picked_events(
-            export_catalog, party, template_path, archives, request_fdsn=
-            request_fdsn, wav_out_dir=sfile_path, extract_len=extract_len,
+            export_catalog, party, template_path, archives,
+            request_fdsn=request_fdsn, wav_out_dir=sfile_path,
+            extract_len=extract_len,
             all_chans_for_stations=all_channels_for_stations)
-    
+
     # Create Seisan-style Sfiles for the whole day
-    #catalogFile = os.path.join(sfile_path, + str(orig.time.year)\
-    #    + str(orig.time.month).zfill(2) + str(orig.time.day).zfill(2) + ".out")
-    #write_select(export_catalog, catalogFile, userid=operator, evtype='L',
-    #             wavefiles=wavefiles, high_accuracy=False)
+    # catalogFile = os.path.join(sfile_path, + str(orig.time.year)\
+    #   + str(orig.time.month).zfill(2) + str(orig.time.day).zfill(2) + ".out")
+    # write_select(export_catalog, catalogFile, userid=operator, evtype='L',
+    #              wavefiles=wavefiles, high_accuracy=False)
     # Create Seisan-style Sfiles for each event
     # e.g.: 01-0024-07L.S202001
     if write_sfiles:
@@ -225,9 +227,9 @@ def postprocess_picked_events(picked_catalog, party, original_stats_stream,
             _write_nordic(event, catalogFile, userid=operator, evtype='L',
                           wavefiles=wavefiles[j], high_accuracy=False,
                           version='NEW')
-    #export_catalog.write(catalogFile, format="NORDIC", userid=operator,
+    # export_catalog.write(catalogFile, format="NORDIC", userid=operator,
     #                     evtype="L")
-        
+
     return export_catalog
 
 
@@ -260,7 +262,7 @@ def extract_stream_for_picked_events(catalog, party, template_path, archives,
             request_fdsn=request_fdsn, extract_len=extract_len,
             outdir=None, additional_stations=additional_stations)
         list_of_stream_lists.append(stream_list)
-    
+
     stream_list = list()
     # put enough empty stream in stream_list
     for st in list_of_stream_lists[0]:
@@ -270,26 +272,27 @@ def extract_stream_for_picked_events(catalog, party, template_path, archives,
     for sl in list_of_stream_lists:
         for j, st in enumerate(sl):
             stream_list[j] += st
-    
+
     wavefiles = list()
     for stream in stream_list:
         # 2019_09_24t13_38_14
         # 2019-12-15-0323-41S.NNSN__008
         utc_str = str(stream[0].stats.starttime)
-        utc_str = utc_str.lower().replace(':','-').replace('t','-')
+        utc_str = utc_str.lower().replace(':', '-').replace('t', '-')
         waveform_filename = wav_out_dir + '/' + utc_str[0:13] + utc_str[14:19]\
             + 'M.EQCS__' + str(len(stream)).zfill(3)
         wavefiles.append(waveform_filename)
         stream.write(waveform_filename, format='MSEED')
-        
+
     return wavefiles
+
 
 def replace_templates_for_picking(party, tribe, set_sample_rate=100.0):
     """"
     replace the old templates in the detection-families with those for
     picking (these contain more channels)
     """
-    
+
     for family in party.families:
         family.template.samp_rate = set_sample_rate
         for newtemplate in tribe:
@@ -301,8 +304,9 @@ def replace_templates_for_picking(party, tribe, set_sample_rate=100.0):
     for template in tribe:
         templateStreams += (template.st)
         templateNames += template.name
-        
+
     return party
+
 
 def check_duplicate_template_channels(tribe):
     """
@@ -316,7 +320,7 @@ def check_duplicate_template_channels(tribe):
         channelIDs = list()
         for trace in template.st:
             if trace.id in channelIDs:
-                for j in range(0,k):
+                for j in range(0, k):
                     testSameIDtrace = template.st[j]
                     if trace.id == testSameIDtrace.id:
                         if trace.stats.starttime >= testSameIDtrace.stats.\
@@ -327,7 +331,7 @@ def check_duplicate_template_channels(tribe):
             else:
                 channelIDs.append(trace.id)
                 k += 1
-                
+
     return tribe
 
 
@@ -504,11 +508,10 @@ def extract_detections(detections, templates, archive, arc_type,
                 if not os.path.isdir(os.path.join(outdir,
                                                   detection.template_name)):
                     os.makedirs(os.path.join(outdir, detection.template_name))
-                st.write(os.path.join(outdir, detection.template_name,
-                                              detection.detect_time.
-                                              strftime('%Y-%m-%d_%H-%M-%S') +
-                                              '.ms'),
-                                 format='MSEED')
+                st.write(os.path.join(
+                    outdir, detection.template_name,
+                    detection.detect_time.strftime(
+                        '%Y-%m-%d_%H-%M-%S') + '.ms'), format='MSEED')
                 Logger.info(
                     'Written file: %s' % '/'.join(
                         [outdir, detection.template_name,

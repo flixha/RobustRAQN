@@ -15,38 +15,25 @@ import pandas as pd
 from importlib import reload
 import statistics as stats
 
-from obspy import read_events
 from obspy.core.event import Catalog, Event, Origin
-from obspy.core.stream import Stream
 from obspy.core.utcdatetime import UTCDateTime
-from obspy.io.mseed import InternalMSEEDError
-from obspy import read as obspyread
 from obspy import read_inventory, Inventory
 from obspy.clients.filesystem.sds import Client
 
-from eqcorrscan.utils import pre_processing
-from obspy.io.nordic.core import read_nordic, write_select, _write_nordic
-from eqcorrscan.core import lag_calc
-from eqcorrscan.core.lag_calc import LagCalcError
-from eqcorrscan.core.match_filter import (read_detections, MatchFilterError,
-    _spike_test, Template, Tribe, Party, Family)
-
+from eqcorrscan.core.match_filter import (Tribe, Party)
 
 # import quality_metrics, spectral_tools, load_events_for_detection
 # reload(quality_metrics)
 # reload(load_events_for_detection)
-# sys.path.insert(1, os.path.expanduser("~/Documents2/NorthSea/Elgin/Detection"))
 from robustraqn.quality_metrics import (
     create_bulk_request, get_waveforms_bulk, read_ispaq_stats)
 from robustraqn.load_events_for_detection import (
     prepare_detection_stream, init_processing, init_processing_wRotation,
-    print_error_plots, get_all_relevant_stations, normalize_NSLC_codes,
-    reevaluate_detections)
+    get_all_relevant_stations, normalize_NSLC_codes, reevaluate_detections)
 from robustraqn.spectral_tools import (
     Noise_model, get_updated_inventory_with_noise_models)
-from robustraqn.templates_creation import create_template_objects
-from robustraqn.lag_calc_postprocessing import (check_duplicate_template_channels,
-                                     postprocess_picked_events)
+from robustraqn.lag_calc_postprocessing import (
+    check_duplicate_template_channels, postprocess_picked_events)
 from robustraqn.processify import processify
 from robustraqn.fancy_processify import fancy_processify
 
@@ -59,21 +46,20 @@ EQCS_logger = logging.getLogger('EQcorrscan')
 EQCS_logger.setLevel(logging.ERROR)
 
 
-
 # @processify
 def pick_events_for_day(
-    date, det_folder, templatePath, ispaq, client, tribe, short_tribe=Tribe(),
-    only_request_detection_stations=True, relevantStations=[],
-    sta_translation_file='',
-    noise_balancing=False, remove_response=False, inv=Inventory(),
-    parallel=False, cores=None, check_array_misdetections=False,
-    write_party=False, new_threshold=None, n_templates_per_run=1,
-    archives=[], request_fdsn=False,
-    min_det_chans=1, sfile_path='Sfiles', operator='EQC'):
+        date, det_folder, templatePath, ispaq, client, tribe,
+        short_tribe=Tribe(), only_request_detection_stations=True,
+        relevantStations=[], sta_translation_file='',
+        noise_balancing=False, remove_response=False, inv=Inventory(),
+        parallel=False, cores=None, check_array_misdetections=False,
+        write_party=False, new_threshold=None, n_templates_per_run=1,
+        archives=[], request_fdsn=False,
+        min_det_chans=1, sfile_path='Sfiles', operator='EQC'):
     """
     Day-loop for picker
     """
-    
+
     # Read in party of detections and check whether to proceeed
     dayparty = Party()
     current_day_str = date.strftime('%Y-%m-%d')
@@ -113,7 +99,7 @@ def pick_events_for_day(
                                 for tr in fam.template.st])
         requiredStations = list(
             set(relevantStations).intersection(requiredStations))
-        #requiredStations = set.intersection(relevantStations, requiredStations)
+        # requiredStations =set.intersection(relevantStations,requiredStations)
         requiredStations = get_all_relevant_stations(
             requiredStations, sta_translation_file=sta_translation_file)
     # Start reading in data for day
@@ -127,9 +113,9 @@ def pick_events_for_day(
     bulk, day_stats = create_bulk_request(
         starttime_req, endtime_req, stats=ispaq,
         parallel=parallel, cores=cores,
-        stations=requiredStations, location_priority=['10','00',''],
-        band_priority=['B','H','S','E','N'], instrument_priority=['H'],
-        components=['Z','N','E','1','2'],
+        stations=requiredStations, location_priority=['10', '00', ''],
+        band_priority=['B', 'H', 'S', 'E', 'N'], instrument_priority=['H'],
+        components=['Z', 'N', 'E', '1', '2'],
         min_availability=0.8, max_cross_talk=1,
         max_spikes=1000, max_glitches=1000, max_num_gaps=500,
         max_num_overlaps=1000, max_max_overlap=86400,
@@ -153,20 +139,20 @@ def pick_events_for_day(
     day_st = prepare_detection_stream(
         day_st, tribe, parallel=parallel, cores=cores,
         try_despike=False)
-    #daily_plot(day_st, year, month, day, data_unit="counts",
-    #           suffix='resp_removed')
+    # daily_plot(day_st, year, month, day, data_unit="counts",
+    #            suffix='resp_removed')
 
     day_st = init_processing(
         day_st, starttime=starttime, endtime=endtime,
         remove_response=remove_response, inv=inv, parallel=parallel,
         cores=cores, min_segment_length_s=10,
         max_sample_rate_diff=1, skip_interp_sample_rate_smaller=1e-7,
-        interpolation_method='lanczos', 
+        interpolation_method='lanczos',
         skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
         taper_fraction=0.005, downsampled_max_rate=None,
         noise_balancing=noise_balancing, balance_power_coefficient=2)
     original_stats_stream = day_st.copy()
-    
+
     # WHY NEEDED HERE????
     # day_st.merge(method=0, fill_value=0, interpolation_samples=0)
     # Normalize NSLC codes
@@ -174,11 +160,11 @@ def pick_events_for_day(
         day_st, inv, sta_translation_file=sta_translation_file,
         std_network_code="NS", std_location_code="00",
         std_channel_prefix="BH")
-    
+
     # If there is no data for the day, then continue on next day.
     if not day_st.traces:
-        Logger.warning('No data for detection on %s, continuing' +
-                    ' with next day.', current_day_str)
+        Logger.warning('No data for detection on %s, continuing'
+                       ' with next day.', current_day_str)
         return
 
     # Check for erroneous detections of real signals (mostly caused by smaller
@@ -191,8 +177,8 @@ def pick_events_for_day(
                 'Missing short templates for detection-reevaluation.')
         else:
             dayparty = reevaluate_detections(
-                dayparty, short_tribe, stream=day_st, threshold
-                =new_threshold-2, trig_int=3.0, threshold_type='MAD',
+                dayparty, short_tribe, stream=day_st,
+                threshold=new_threshold-2, trig_int=3.0, threshold_type='MAD',
                 overlap='calculate', plotDir='ReDetectionPlots',
                 plot=False, fill_gaps=True, ignore_bad_data=True,
                 daylong=True, ignore_length=True, min_chans=min_det_chans,
@@ -216,7 +202,7 @@ def pick_events_for_day(
     # avg_cc = stats.mean(
     #     [d.detect_val / d.no_chans for f in dayparty for d in f])
 
-    #min_cc = avg_cc + (1 - avg_cc) * avg_cc * 3
+    # min_cc = avg_cc + (1 - avg_cc) * avg_cc * 3
     # min_cc = avg_cc * 0.8 #/ 2
     # TODO: would be better to make min_cc depend on the average CC and
     #       the standard deviation of CC across the channels, but then I
@@ -224,9 +210,9 @@ def pick_events_for_day(
 
     # min_cc = min(abs(avg_cc * 0.6), 0.5)
     # Logger.info('I will run lag-calc with min_cc of %s', str(min_cc))
-    
+
     # Use the same filtering and sampling parameters as with templates!
-    #day_st = pre_processing.dayproc(
+    # day_st = pre_processing.dayproc(
     #    day_st, lowcut=2.5, highcut=8.0, filt_order=4, samp_rate=100,
     #    debug=0, starttime=starttime, ignore_length=True,
     #    seisan_chan_names=False, parallel=True, num_cores=cores)
@@ -239,7 +225,7 @@ def pick_events_for_day(
         parallel=parallel, cores=cores, daylong=True, ignore_bad_data=True,
         ignore_length=True)
     # try:
-    #except LagCalcError:
+    # except LagCalcError:
     #    pass
     #    Logger.error("LagCalc Error on " + str(year) +
     #           str(month).zfill(2) + str(day).zfill(2))
@@ -252,16 +238,13 @@ def pick_events_for_day(
         template_path=templatePath, min_pick_stations=8,
         min_picks_on_detection_stations=3, origin_longitude=7.92,
         origin_latitude=59.85, origin_depth=200)
-    
+
     return export_catalog
 
 
-
-
 # %% Now run the day-loop
-
 if __name__ == "__main__":
-    #Set the path to the folders with continuous data:
+    # Set the path to the folders with continuous data:
     archive_path = '/data/seismo-wav/SLARCHIVE'
     # archive_path2 = '/data/seismo-wav/EIDA/archive'
     client = Client(archive_path)

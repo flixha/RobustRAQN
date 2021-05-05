@@ -213,10 +213,43 @@ def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
 #                              downsampled_max_rate=None):
 
 
-def prepare_detection_stream(st, tribe, parallel=False, cores=None,
-                             ispaq=pd.DataFrame(), try_despike=False,
-                             downsampled_max_rate=None):
+def prepare_detection_stream(
+        st, tribe, parallel=False, cores=None, ispaq=pd.DataFrame(),
+        try_despike=False, downsampled_max_rate=None,
+        accepted_band_codes='HBSENM', forbidden_instrument_codes='NGAL',
+        accepted_component_codes='ZNE0123ABC'):
     """
+    Prepare the streams for being used in EQcorrscan. The following criteria
+    are being considered:
+     - channel code is not empty
+     - sampling rate is not much lower than the sampling rate of the tribes
+     - band code is in list of allowed characters
+     - instrument code is not in list of forbidden characters
+     - component code is in list of allowed characters
+     - despiking can be done when ispaq-stats indicate there are spikes
+
+    :type st: obspy.core.stream.Stream
+    :param st: the day's streams
+    :type tribe: eqcorrscan.
+    :param tribe: Trinbe of templates
+    :type parallel: boolean
+    :param parallel: Whether to run some processing steps in parallel
+    :type cores: int
+    :param cores: number of cores
+    :type ispaq: pandas.DataFrame()
+    :param ispaq:
+        ispaq/Mustang-generated data quality metrics, including 'num_spikes'.
+    :type try_despike: bool
+    :param try_despike:
+        Whether to try to despike the data. Not always successful.
+    :type accepted_band_codes: str
+    :param accepted_band_codes: string of the acceptable band codes
+    :type forbidden_instrument_codes: str
+    :param forbidden_instrument_codes: string of the forbidden instrument codes
+    :type accepted_component_codes: str
+    :param accepted_component_codes: string of the acceptable component codes
+
+    :returns: :class:`obspy.core.stream.Stream`
     """
     min_samp_rate = min(list(set([tr.stats.sampling_rate
                                   for templ in tribe for tr in templ.st])))
@@ -228,25 +261,37 @@ def prepare_detection_stream(st, tribe, parallel=False, cores=None,
         # channels with empty channel code:
         if len(tr.stats.channel) == 0:
             st_of_tr_to_be_removed += tr
+            Logger.info('Removing trace %s because the channel code is empty',
+                        tr.id)
             continue
         # channels with undecipherable channel names
         # potential names: MIC, SLZ, S Z, M, ALE, MSF, TC
-        if tr.stats.channel[0] not in 'HBSENM':
+        if tr.stats.channel[0] not in accepted_band_codes:
             # st = st.remove(tr)
             st_of_tr_to_be_removed += tr
+            Logger.info('Removing trace %s because the band code is not in %s',
+                        tr.id, accepted_band_codes)
             continue
-        if tr.stats.channel[-1] not in 'ZNE0123ABC':
+        if tr.stats.channel[-1] not in accepted_component_codes:
             # st = st.remove(tr)
             st_of_tr_to_be_removed += tr
+            Logger.info('Removing trace %s because the component code is not '
+                        'in %s', tr.id, accepted_band_codes)
             continue
         # channels from accelerometers/ gravimeters/ tiltmeter/low-gain seism.
         if len(tr.stats.channel) == 3:
-            if tr.stats.channel[1] in 'NGAL':
+            if tr.stats.channel[1] in forbidden_instrument_codes:
                 # st = st.remove(tr)
                 st_of_tr_to_be_removed += tr
+                Logger.info('Removing trace %s because the instrument code is '
+                            'in %s', tr.id, forbidden_instrument_codes)
                 continue
-        if tr.stats.sampling_rate < min_samp_rate:
+        # Here we still need to allow somewhat incorrect sampling rates
+        if tr.stats.sampling_rate < min_samp_rate * 0.95:
             st_of_tr_to_be_removed += tr
+            Logger.info('Removing trace %s because the sampling rate is too '
+                        'low: %s', tr.id, tr.stats.sampling_rate)
+            continue
         # ADJUST unsupported, but decipherable codes
         # Adjust single-letter location codes:
         if len(tr.stats.location) == 1:

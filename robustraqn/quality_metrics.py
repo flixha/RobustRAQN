@@ -30,6 +30,9 @@ from eqcorrscan.utils.correlate import pool_boy
 
 import logging
 Logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 
 
 def _get_waveforms_bulk(client, bulk):
@@ -42,7 +45,6 @@ def _get_waveforms_bulk(client, bulk):
         except Exception as e:
             document_client_read_error(e)
             continue
-
     return st
 
 
@@ -89,7 +91,7 @@ def get_waveforms_bulk(client, bulk, parallel=False, cores=None):
 
         # Use joblib with loky-pools; this is the most stable
         results = Parallel(n_jobs=cores)(
-            delayed(get_waveforms_bulk)(client, [arg]) for arg in bulk)
+            delayed(_get_waveforms_bulk)(client, [arg]) for arg in bulk)
         # Concatenate all NSLC-streams into one stream
         st = Stream()
         for res in results:

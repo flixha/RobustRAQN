@@ -495,12 +495,18 @@ def extract_detections(detections, templates, archive, arc_type,
                 existing_stations = list(set([tr.stats.station for tr in st]))
                 other_stations = list(
                     set(all_stations).difference(existing_stations))
-                Logger.info('Requesting %s additional stations from FDSN-'
-                            + 'routing client.', len(other_stations))
-                bulk = [('*', sta, '*', '*', t1, t2) for sta in other_stations]
-                add_st = routing_client.get_waveforms_bulk(bulk)
-                add_st = add_st.select(channel='[NDSEHBM]??').trim(t1, t2)
-                st += add_st
+                if len(other_stations) > 0:
+                    Logger.info('Requesting %s additional stations from FDSN-'
+                                'routing client.', len(other_stations))
+                    bulk = [
+                        ('*', sta, '*', '*', t1, t2) for sta in other_stations]
+                    add_st = routing_client.get_waveforms_bulk(bulk)
+                    if add_st:
+                        add_st = add_st.select(
+                            channel='[NDSEHBM]??').trim(t1, t2)
+                        st += add_st
+                    else:
+                        Logger.info('FDSN-request did not return data.')
 
             if outdir:
                 if not os.path.isdir(os.path.join(outdir,

@@ -228,10 +228,10 @@ def prepare_detection_stream(
      - component code is in list of allowed characters
      - despiking can be done when ispaq-stats indicate there are spikes
 
-    :type st: obspy.core.stream.Stream
+    :type st: :class:`obspy.core.stream.Stream`
     :param st: the day's streams
-    :type tribe: eqcorrscan.
-    :param tribe: Trinbe of templates
+    :type tribe: :class:`eqcorrscan.core.match_filter.Tribe`
+    :param tribe: Tribe of templates
     :type parallel: boolean
     :param parallel: Whether to run some processing steps in parallel
     :type cores: int
@@ -1226,8 +1226,8 @@ def check_normalize_sampling_rate(
     # Do a quick check: if all sampling rates are the same, and all values are
     # one of the allowed default values, then skip all the other tests.
     channel_rates = [tr.stats.sampling_rate for tr in st]
-    if all([cr in skip_check_sampling_rates for cr in channel_rates])\
-            and len(set(channel_rates)) <= 1:
+    if (all([cr in skip_check_sampling_rates for cr in channel_rates])
+            and len(set(channel_rates)) <= 1):
         return st, False
 
     # Now do a thorough check of the sampling rates; exclude traces if needed;
@@ -1268,8 +1268,8 @@ def check_normalize_sampling_rate(
                 if abs(sample_rate_diff) > max_sample_rate_diff:
                     Logger.warning(
                         'Big sampling rate mismatch between trace segment %s '
-                        + '(%s Hz) starting on %s and channel response '
-                        + 'information (%s Hz), removing offending traces.',
+                        '(%s Hz) starting on %s and channel response '
+                        'information (%s Hz), removing offending traces.',
                         tr.id, tr.stats.sampling_rate,
                         str(tr.stats.starttime)[0:19], def_channel_sample_rate)
                 else:
@@ -1298,13 +1298,12 @@ def check_normalize_sampling_rate(
                     tr.stats.sampling_rate - def_channel_sample_rate
                 if abs(sample_rate_diff) > max_sample_rate_diff:
                     Logger.warning(
-                        'There are traces with differing sampling rates '
-                        + 'for %s on %s. There is no response that defines'
-                        + ' the correct sampling rate for this channel, '
-                        + 'so I am keeping only those traces with the most '
-                        + 'common sampling rate for this channel (%s Hz).',
-                        tr.id, str(tr.stats.starttime)[0:19],
-                        def_channel_sample_rate)
+                        'There are traces with differing sampling rates for '
+                        '%s on %s. There is no response that defines the '
+                        'correct sampling rate for this channel, so I am '
+                        'keeping only those traces with the most common '
+                        'sampling rate for this channel (%s Hz).', tr.id,
+                        str(tr.stats.starttime)[0:19], def_channel_sample_rate)
                 else:
                     keep_st += tr
         else:
@@ -1316,20 +1315,22 @@ def check_normalize_sampling_rate(
         channel_rates = [tr.stats.sampling_rate for tr in keep_st]
         if any(cr != def_channel_sample_rate for cr in channel_rates):
             for tr in keep_st:
-                sample_rate_diff =\
-                    tr.stats.sampling_rate - def_channel_sample_rate
+                sample_rate_diff = (
+                    tr.stats.sampling_rate - def_channel_sample_rate)
                 if 0 < abs(sample_rate_diff) <= max_sample_rate_diff:
                     # If difference is very small, then only adjust sample-rate
                     # description.
                     if abs(sample_rate_diff) < skip_interp_sample_rate_smaller:
-                        Logger.info('Correcting sampling rate of %s on %s '
-                                    + 'by adjusting trace stats.', tr.id,
-                                    str(tr.stats.starttime))
+                        Logger.info(
+                            'Correcting sampling rate (%s Hz) of %s on %s by '
+                            'adjusting trace stats.', tr.stats.sampling_rate,
+                            tr.id, str(tr.stats.starttime))
                         tr.stats.sampling_rate = def_channel_sample_rate
                     else:
-                        Logger.info('Correcting sampling rate of %s on %s '
-                                    + 'with interpolation.', tr.id,
-                                    str(tr.stats.starttime))
+                        Logger.info(
+                            'Correcting sampling rate (%s Hz) of %s on %s with'
+                            ' interpolation.', tr.stats.sampling_rate, tr.id,
+                            str(tr.stats.starttime))
                         tr.interpolate(sampling_rate=def_channel_sample_rate,
                                        method=interpolation_method, a=25)
                         # Make sure data have the same datatype as before

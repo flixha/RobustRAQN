@@ -35,23 +35,25 @@ import logging
 Logger = logging.getLogger(__name__)
 
 
-def postprocess_picked_events(picked_catalog, party, original_stats_stream,
-                              write_sfiles=False, sfile_path='Sfiles',
-                              operator='feha', all_channels_for_stations=[],
-                              extract_len=300, min_pick_stations=4,
-                              min_picks_on_detection_stations=6,
-                              write_waveforms=False, archives=list(),
-                              request_fdsn=False, template_path=None,
-                              origin_longitude=1.7, origin_latitude=57.0,
-                              origin_depth=10000):
+def postprocess_picked_events(
+        picked_catalog, party, tribe, original_stats_stream,
+        write_sfiles=False, sfile_path='Sfiles', operator='feha',
+        all_channels_for_stations=[], extract_len=300, min_pick_stations=4,
+        min_picks_on_detection_stations=6, write_waveforms=False,
+        archives=list(), request_fdsn=False, template_path=None,
+        origin_longitude=None, origin_latitude=None, origin_depth=None):
     """
     :type picked_catalog: :class:`obspy.core.Catalog`
     :param picked_catalog: Catalog of events picked, e.g., with lag_calc.
-    :type party: :class:`eqcorrscan.core.party`
+    :type party: :class:`eqcorrscan.core.match_filter.party.Party`
     :param party:
         Party containing all :class:`eqcorrscan.core.match_filter.Detection`
         that were used for picking events.
-    :type original_stats_stream: :class:``
+    :type tribe: :class:`eqcorrscan.core.match_filter.Tribe`
+    :param tribe:
+        Tribe which contains the template that was used to pick the
+        picked_catalog.
+    :type original_stats_stream: :class:`obspy.core.Stream`
     :param original_stats_stream:
     :type write_sfiles: bool
     :param write_sfiles: Whether to output Nordic S-files
@@ -111,6 +113,20 @@ def postprocess_picked_events(picked_catalog, party, original_stats_stream,
         pick_Stations = []
         sPick_Stations = []
         pick_and_detect_Stations = []
+
+        # Select detection
+        detection = None
+        for family in party:
+            for det in family:
+                if det.id == event.resource_id:
+                    detection = det
+                    break
+        # Alternative: (not working now)
+        # detection = party[event.resource_id.id[0:28]][0]
+        # SHOULD BE: ????
+        # detection = party[event.resource_id.id][0]
+        if not detection:
+            continue
         # Count number of unique P- and S-picks (i.e., on different stations)
         # Also differentiates picks based on whether the station was also used
         # for detection or only for picking.
@@ -130,17 +146,14 @@ def postprocess_picked_events(picked_catalog, party, original_stats_stream,
                     sPick_Stations.append(sPick_Station)
             # Count the number of picks on stations used
             # during match-filter detection
-            for family in party:
-                for detection in family:
-                    if detection.id == event.resource_id:
-                        if (pick_Station, pick_Chan) in detection.chans:
-                            if pick_Station not in pick_and_detect_Stations:
-                                pick_and_detect_Stations.append(pick_Station)
-                            if pick.phase_hint == 'P':
-                                num_pPicks_onDetSta += 1
-                            elif pick.phase_hint == 'S':
-                                num_sPicks_onDetSta += 1
-                        break
+
+            if (pick_Station, pick_Chan) in detection.chans:
+                if pick_Station not in pick_and_detect_Stations:
+                    pick_and_detect_Stations.append(pick_Station)
+                if pick.phase_hint == 'P':
+                    num_pPicks_onDetSta += 1
+                elif pick.phase_hint == 'S':
+                    num_sPicks_onDetSta += 1
             # Put the original (non-normalized) channel information back into
             # the pick's stats.
             # Make sure to check for [1,2,etc]-channels if the data were
@@ -161,17 +174,18 @@ def postprocess_picked_events(picked_catalog, party, original_stats_stream,
 
         # Find hypocenter of template
         # detection.template_name
+        template_orig = tribe[detection.template_name].event.preferred_origin()
         orig = Origin()
         orig.time = event.picks[0].time
-        orig.longitude = origin_longitude
-        orig.latitude = origin_latitude
-        orig.depth = origin_depth
+        orig.longitude = origin_longitude or template_orig.longitude
+        orig.latitude = origin_latitude or template_orig.latitude
+        orig.depth = origin_depth or template_orig.depth
         # day_st.slice(dt, dt + 5)
         event.origins.append(orig)
-        Logger.info('PickCheck: ' + str(event.origins[0].time) + ' P_d: '
-                    + str(num_pPicks_onDetSta)
-                    + ' S_d ' + str(num_sPicks_onDetSta) + ' P: '
-                    + str(num_pPicks) + ' S: ' + str(num_sPicks))
+        Logger.info(
+            'PickCheck: ' + str(event.origins[0].time) + ' P_d: ' +
+            str(num_pPicks_onDetSta) + ' S_d ' + str(num_sPicks_onDetSta) +
+            ' P: ' + str(num_pPicks) + ' S: ' + str(num_sPicks))
 
         # Add comment to event to save detection-id
         event.comments.append(Comment(

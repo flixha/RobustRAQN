@@ -231,13 +231,12 @@ def pick_events_for_day(
     #           str(month).zfill(2) + str(day).zfill(2))
 
     export_catalog = postprocess_picked_events(
-        picked_catalog, dayparty, original_stats_stream,
+        picked_catalog, dayparty, tribe, original_stats_stream,
         write_sfiles=True, sfile_path=sfile_path, operator=operator,
         all_channels_for_stations=relevantStations, extract_len=240,
         write_waveforms=True, archives=archives, request_fdsn=request_fdsn,
         template_path=templatePath, min_pick_stations=8,
-        min_picks_on_detection_stations=3, origin_longitude=7.92,
-        origin_latitude=59.85, origin_depth=200)
+        min_picks_on_detection_stations=3)
 
     return export_catalog
 

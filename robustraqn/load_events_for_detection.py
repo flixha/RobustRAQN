@@ -39,6 +39,9 @@ from robustraqn.spectral_tools import st_balance_noise, Noise_model
 from timeit import default_timer
 import logging
 Logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 
 # from eqcorrscan.utils.catalog_utils import filter_picks
 
@@ -224,7 +227,9 @@ def prepare_detection_stream(
      - channel code is not empty
      - sampling rate is not much lower than the sampling rate of the tribes
      - band code is in list of allowed characters
-     - instrument code is not in list of forbidden characters
+     - instrument code is not in list of forbidden characters (a list of
+       forbidden chars is used because in Old Seisan files, this is often "0",
+       rather than indicating a real instrument)
      - component code is in list of allowed characters
      - despiking can be done when ispaq-stats indicate there are spikes
 

@@ -85,7 +85,9 @@ def read_bulk_test(client, bulk, parallel=False, cores=None):
 def run_day_detection(
         client, tribe, date, ispaq, selectedStations, parallel=False, cores=1,
         remove_response=False, inv=Inventory(), noise_balancing=False,
-        balance_power_coefficient=2, trig_int=0, threshold=10, min_chans=10,
+        balance_power_coefficient=2, n_templates_per_run=20, xcorr_func='fftw',
+        concurrency='multithread', arch='precise', trig_int=0, threshold=10,
+        min_chans=10,
         multiplot=False, day_st=Stream(), check_array_misdetections=False, 
         short_tribe=Tribe(), write_party=False, detection_path='Detections',
         redetection_path='ReDetections', return_stream=True,
@@ -100,7 +102,6 @@ def run_day_detection(
     # archive_path2 = '/data/seismo-wav/EIDA/archive'
     # client2 = Client(archive_path2)
 
-    n_templates_per_run = 20
     n_templates = len(tribe)
     n_runs = math.ceil(n_templates / n_templates_per_run)
 
@@ -210,7 +211,8 @@ def run_day_detection(
             ignore_bad_data=False, ignore_length=True, 
             parallel_process=parallel, cores=cores,
             # concurrency='multiprocess', xcorr_func='time_domain',
-            xcorr_func='fftw', concurrency='multithread',
+            xcorr_func=xcorr_func, concurrency=concurrency, arch=arch,
+            # xcorr_func='fftw', concurrency='multithread',
             # parallel_process=False, #concurrency=None,
             group_size=n_templates_per_run, full_peaks=False,
             save_progress=False, process_cores=cores, spike_test=False)
@@ -272,8 +274,10 @@ def run_day_detection(
                 trig_int=40.0, threshold_type='MAD', overlap='calculate',
                 plot=False, plotDir='ReDetectionPlots', fill_gaps=True,
                 ignore_bad_data=False, daylong=True, ignore_length=True,
-                concurrency='multiprocess', parallel_process=parallel,
-                cores=cores, xcorr_func='time_domain', min_chans=min_chans,
+                parallel_process=parallel, cores=cores, xcorr_func=xcorr_func,
+                concurrency=concurrency,
+                #xcorr_func='time_domain', concurrency='multiprocess', 
+                # min_chans=min_chans,
                 group_size=n_templates_per_run, process_cores=cores,
                 time_difference_threshold=12, detect_value_allowed_error=60,
                 return_party_with_short_templates=True)

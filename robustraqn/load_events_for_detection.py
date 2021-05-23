@@ -1678,7 +1678,7 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
                          std_location_code="00", std_channel_prefix="BH",
                          parallel=False, cores=None,
                          sta_translation_file="station_code_translation.txt",
-                         forbidden_chan_file="forbidden_chans.txt"):
+                         forbidden_chan_file=""):
     """
     1. Correct non-FDSN-standard-complicant channel codes
     2. Rotate to proper ZNE, and hence change codes from [Z12] to [ZNE]
@@ -1688,13 +1688,14 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
     """
     import numpy as np
     # 0. remove forbidden channels that cause particular problems
-    forbidden_chans = load_forbidden_chan_file(file=forbidden_chan_file)
-    st_copy = st.copy()
-    for tr in st_copy:
-        if wcmatch.fnmatch.fnmatch(tr.id, forbidden_chans):
-            st.remove(tr)
-            Logger.info('Removed trace %s because it is a forbidden trace',
-                        tr.id)
+    if forbidden_chan_file != "":
+        forbidden_chans = load_forbidden_chan_file(file=forbidden_chan_file)
+        st_copy = st.copy()
+        for tr in st_copy:
+            if wcmatch.fnmatch.fnmatch(tr.id, forbidden_chans):
+                st.remove(tr)
+                Logger.info('Removed trace %s because it is a forbidden trace',
+                            tr.id)
 
     # 1.
     for tr in st:

@@ -1956,10 +1956,10 @@ def reevaluate_detections(
         trig_int=40.0, overlap='calculate', plot=False,
         plotDir='DetectionPlots', daylong=False, fill_gaps=False,
         ignore_bad_data=False, ignore_length=True, parallel_process=False,
-        cores=None, concurrency='multithread', xcorr_func='fftw', group_size=1,
-        full_peaks=False, save_progress=False, process_cores=None,
-        spike_test=False, min_chans=4, time_difference_threshold=2,
-        detect_value_allowed_error=60,
+        cores=None, xcorr_func='fftw', concurrency=None, arch='precise',
+        group_size=1, full_peaks=False, save_progress=False,
+        process_cores=None, spike_test=False, min_chans=4,
+        time_difference_threshold=2, detect_value_allowed_error=60,
         return_party_with_short_templates=False):
     """
     This function takes a set of detections and reruns the match-filter

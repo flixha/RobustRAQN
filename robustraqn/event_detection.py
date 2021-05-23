@@ -86,7 +86,7 @@ def run_day_detection(
         client, tribe, date, ispaq, selectedStations, parallel=False, cores=1,
         remove_response=False, inv=Inventory(), noise_balancing=False,
         balance_power_coefficient=2, n_templates_per_run=20, xcorr_func='fftw',
-        concurrency='multithread', arch='precise', trig_int=0, threshold=10,
+        concurrency=None, arch='precise', trig_int=0, threshold=10,
         min_chans=10,
         multiplot=False, day_st=Stream(), check_array_misdetections=False, 
         short_tribe=Tribe(), write_party=False, detection_path='Detections',

@@ -204,7 +204,8 @@ def postprocess_picked_events(
 
     # Sort catalog so that it's in correct order for output
     export_catalog.events = sorted(
-        export_catalog.events, key=lambda d: d.origins[0].time)
+        export_catalog.events, key=lambda d: d.preferred_origings()[0].time)
+    #                                        d.origins[0].time
     # Output
     if export_catalog.count() == 0:
         Logger.info(

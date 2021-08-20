@@ -174,7 +174,13 @@ def postprocess_picked_events(
 
         # Find hypocenter of template
         # detection.template_name
-        template_orig = tribe[detection.template_name].event.preferred_origin()
+        try:
+            template_orig = tribe[
+                detection.template_name].event.preferred_origin()
+        except AttributeError:
+            Logger.error(
+                'Could not find template %s for related detection, did you '
+                'provide the correct tribe?', detection.template_name)
         orig = Origin()
         orig.time = event.picks[0].time
         orig.longitude = origin_longitude or template_orig.longitude
@@ -182,6 +188,7 @@ def postprocess_picked_events(
         orig.depth = origin_depth or template_orig.depth
         # day_st.slice(dt, dt + 5)
         event.origins.append(orig)
+        event.preferred_origin_id = orig.resource_id
         Logger.info(
             'PickCheck: ' + str(event.origins[0].time) + ' P_d: ' +
             str(num_pPicks_onDetSta) + ' S_d ' + str(num_sPicks_onDetSta) +
@@ -204,7 +211,7 @@ def postprocess_picked_events(
 
     # Sort catalog so that it's in correct order for output
     export_catalog.events = sorted(
-        export_catalog.events, key=lambda d: d.preferred_origings()[0].time)
+        export_catalog.events, key=lambda d: d.preferred_origin().time)
     #                                        d.origins[0].time
     # Output
     if export_catalog.count() == 0:
@@ -240,7 +247,7 @@ def postprocess_picked_events(
                 orig_time = orig_time + 1
             _write_nordic(event, catalogFile, userid=operator, evtype='L',
                           wavefiles=wavefiles[j], high_accuracy=False,
-                          version='NEW')
+                          nordic_format='NEW')
     # export_catalog.write(catalogFile, format="NORDIC", userid=operator,
     #                     evtype="L")
 

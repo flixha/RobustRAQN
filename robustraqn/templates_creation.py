@@ -336,6 +336,7 @@ def create_template_objects(
     if write_out:
         tribe.write('TemplateObjects/' + prefix + 'Templates_min'
                     + str(min_n_traces) + 'tr_' + label + str(len(tribe)))
+                    #max_events_per_file=10)
         for templ in tribe:
             templ.write('Templates/' + prefix + templ.name + '.mseed',
                         format="MSEED")

@@ -819,7 +819,7 @@ def attach_noise_models(inv, pdf_dir, outfile='inv.pickle',
                 inv, pdf_dir, network="*", station=seisarray_prefix+'*',
                 location="*", channel="[BHSE]H?",
                 plot_station_pdf=plot_station_pdf)
-        except Exeption as e:
+        except Exception as e:
             Logger.warning('Cannot add noise model for array %s: %s',
                            seisarray_prefix, e)
 

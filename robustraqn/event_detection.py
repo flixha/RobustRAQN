@@ -87,7 +87,7 @@ def run_day_detection(
         remove_response=False, inv=Inventory(), noise_balancing=False,
         balance_power_coefficient=2, n_templates_per_run=20, xcorr_func='fftw',
         concurrency=None, arch='precise', trig_int=0, threshold=10,
-        min_chans=10,
+        re_eval_thresh_factor=0.6, min_chans=10,
         multiplot=False, day_st=Stream(), check_array_misdetections=False, 
         short_tribe=Tribe(), write_party=False, detection_path='Detections',
         redetection_path='ReDetections', return_stream=True,
@@ -270,7 +270,8 @@ def run_day_detection(
             Logger.error('Missing short templates for detection-reevaluation.')
         else:    
             party = reevaluate_detections(
-                party, short_tribe, stream=day_st, threshold=threshold * 0.5,
+                party, short_tribe, stream=day_st,
+                threshold=threshold * re_eval_thresh_factor,
                 trig_int=40.0, threshold_type='MAD', overlap='calculate',
                 plot=False, plotDir='ReDetectionPlots', fill_gaps=True,
                 ignore_bad_data=False, daylong=True, ignore_length=True,

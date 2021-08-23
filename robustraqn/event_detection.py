@@ -90,7 +90,7 @@ def run_day_detection(
         re_eval_thresh_factor=0.6, min_chans=10,
         multiplot=False, day_st=Stream(), check_array_misdetections=False, 
         short_tribe=Tribe(), write_party=False, detection_path='Detections',
-        redetection_path='ReDetections', return_stream=True,
+        redetection_path='ReDetections', return_stream=False,
         dump_stream_to_disk=False):
     """
     Function to run reading, initial processing, detection etc. on one day.
@@ -247,8 +247,10 @@ def run_day_detection(
         return_st = Stream()
         if return_stream:
             return_st = day_st
-        Logger.info('Size of party is: %s', len(pickle.dumps(party)))
-        Logger.info('Size of return_st is: %s', len(pickle.dumps(return_st)))
+            Logger.info(
+                'Size of party is: %s', len(pickle.dumps(party)))
+            Logger.info(
+                'Size of return_st is: %s', len(pickle.dumps(return_st)))
         if not return_stream and dump_stream_to_disk:
             return
         else:

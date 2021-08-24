@@ -247,9 +247,9 @@ def run_day_detection(
         return_st = Stream()
         if return_stream:
             return_st = day_st
-            Logger.info(
+            Logger.debug(
                 'Size of party is: %s', len(pickle.dumps(party)))
-            Logger.info(
+            Logger.debug(
                 'Size of return_st is: %s', len(pickle.dumps(return_st)))
         if not return_stream and dump_stream_to_disk:
             return
@@ -313,8 +313,8 @@ def run_day_detection(
     return_st = Stream()
     if return_stream:
         return_st = day_st
-    Logger.info('Size of party is: %s', len(pickle.dumps(party)))
-    Logger.info('Size of return_st is: %s', len(pickle.dumps(return_st)))
+    Logger.debug('Size of party is: %s', len(pickle.dumps(party)))
+    Logger.debug('Size of return_st is: %s', len(pickle.dumps(return_st)))
     if not return_stream and dump_stream_to_disk:
         return
     else:

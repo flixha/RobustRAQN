@@ -518,7 +518,7 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
                   require_clock_lock=True, max_suspect_time_tag=86400,
                   max_dead_channel_lin=3, require_alive_channel_gsn=False,
                   max_pct_below_nlnm=20, max_pct_above_nhnm=20,
-                  max_cross_talk=0.99):
+                  max_cross_talk=0.99, **kwargs):
     """
     Function to check all data quality metrics for one specific day against the
     set thresholds, and return True or False depending on whether the data ful-

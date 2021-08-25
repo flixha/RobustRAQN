@@ -48,9 +48,11 @@ def _get_waveforms_bulk(client, bulk):
     return st
 
 
-def get_waveforms_bulk(client, bulk, parallel=False, cores=None):
+def get_waveforms_bulk(client, bulk, parallel=False, cores=16):
     """
     Perform a bulk-waveform request in parallel. Return one stream.
+    There seems to be a negative effect on speed if there's too many read-
+    threads - for now set default to 16.
 
     :type client: obspy.obspy.Client
     :param name: Client to request the data from.
@@ -70,9 +72,6 @@ def get_waveforms_bulk(client, bulk, parallel=False, cores=None):
     if parallel:
         if cores is None:
             cores = min(len(bulk), cpu_count())
-        # There seems to be a negative effect on speed if there's too many
-        # read-threads - For now set limit to 16
-        cores = min(cores, 16)
 
         # Switch to Process Pool for now. Threadpool is quicker, but it is not
         # stable against errors that need to be caught in Mseed-library. Then

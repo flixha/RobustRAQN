@@ -122,7 +122,7 @@ def run_day_detection(
         # the quality metrics criteria and that best match the priorities.
         bulk, day_stats = create_bulk_request(
             starttime_req, endtime_req, stats=ispaq,
-            parallel=parallel, cores=cores,
+            parallel=parallel, cores=cores, io_cores=16,
             stations=selectedStations, location_priority=['00', '10', ''],
             band_priority=['B', 'H', 'S', 'E', 'N'], instrument_priority=['H'],
             components=['Z', 'N', 'E', '1', '2'],
@@ -145,7 +145,7 @@ def run_day_detection(
 
         # Read in continuous data and prepare for processing
         day_st = get_waveforms_bulk(client, bulk, parallel=parallel,
-                                    cores=cores)
+                                    cores=io_cores)
 
         Logger.info('Successfully read in %s traces for bulk request of %s'
                     + ' NSLC-objects for %s - %s.', len(day_st), len(bulk),

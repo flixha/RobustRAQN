@@ -83,7 +83,8 @@ def read_bulk_test(client, bulk, parallel=False, cores=None):
 
 # @processify
 def run_day_detection(
-        client, tribe, date, ispaq, selectedStations, parallel=False, cores=1,
+        client, tribe, date, ispaq, selectedStations,
+        parallel=False, cores=1, io_cores=1,
         remove_response=False, inv=Inventory(), noise_balancing=False,
         balance_power_coefficient=2, n_templates_per_run=20, xcorr_func='fftw',
         concurrency=None, arch='precise', trig_int=0, threshold=10,

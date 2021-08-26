@@ -28,6 +28,7 @@ if not run_from_ipython:
 from importlib import reload
 import numpy as np
 import pickle
+import hashlib
 
 from timeit import default_timer
 import logging
@@ -81,13 +82,15 @@ def read_bulk_test(client, bulk, parallel=False, cores=None):
     return st
 
 
-def append_list_completed_days(file, date, settings_hash):
+def append_list_completed_days(file, date, hash):
     """
     """
     # setting_hash = hashlib.md5()
     # setting_hash.update(kwargs)
-    with open(file, "a") as list_completed_days:
-        list_completed_days.write(str(date) + ', ' + settings_hash)
+    if file is None:
+        return
+    with open(file, "a+") as list_completed_days:
+        list_completed_days.write(str(date) + ', ' + str(hash))
 
 
 def get_multi_obj_hash(hash_object_list):
@@ -102,7 +105,7 @@ def get_multi_obj_hash(hash_object_list):
             pass
         if hash is None:
             try:
-                hash = hashlib.md5(obj.__str__(extended=True))
+                hash = hashlib.md5(obj.__str__(extended=True).encode('utf-8'))
             except TypeError:
                 pass
         if hash is None:
@@ -110,8 +113,8 @@ def get_multi_obj_hash(hash_object_list):
                 hash = hashlib.md5(str(obj).encode('utf-8'))
             except ValueError:
                 pass
-        hash_list.append(hash)
-    settings_hash = hashlib.md5(str(hash_list).encode('utf-8'))
+        hash_list.append(hash.hexdigest())
+    settings_hash = hashlib.md5(str(hash_list).encode('utf-8')).hexdigest()
     return settings_hash
 
 
@@ -126,7 +129,7 @@ def run_day_detection(
         multiplot=False, day_st=Stream(), check_array_misdetections=False,
         short_tribe=Tribe(), write_party=False, detection_path='Detections',
         redetection_path='ReDetections', return_stream=False,
-        dump_stream_to_disk=False, day_hash_list='list_completed_days.dat'):
+        dump_stream_to_disk=False, day_hash_file=None):
     """
     Function to run reading, initial processing, detection etc. on one day.
     """
@@ -146,22 +149,28 @@ def run_day_detection(
     endtime_req = endtime + 15*60
     current_day_str = date.strftime('%Y-%m-%d')
 
-    # Check if this date has already been processed with the same settings -
-    # i.e., the current date and a settings-based hash exist already in file
-    settings_hash = get_multi_obj_hash(
-        [tribe, client, selectedStations, remove_response, inv,
-         noise_balancing, balance_power_coefficient, xcorr_func, trig_int,
-         threshold, re_eval_thresh_factor, min_chans, multiplot,
-         check_array_misdetections, short_tribe, write_party, detection_path,
-         redetection_path])
-    # Check hash against existing list
-    day_hash_df = pandas.read_csv(day_hash_file, names=["date", "hash"])
-    if ((day_hash_df['date'] == current_day_str) &
-            (day_hash_df['hash'] == settings_hash)).any():
-        if not return_stream and dump_stream_to_disk:
-            return
-        else:
-            return [Party(), Stream()]
+    if day_hash_file is not None:
+        # Check if this date has already been processed with the same settings
+        # i.e., current date and a settings-based hash exist already in file
+        settings_hash = get_multi_obj_hash(
+            [tribe, client, selectedStations, remove_response, inv,
+            noise_balancing, balance_power_coefficient, xcorr_func, arch,
+            trig_int, threshold, re_eval_thresh_factor, min_chans, multiplot,
+            check_array_misdetections, short_tribe, write_party,
+            detection_path, redetection_path])
+        # Check hash against existing list
+        try:
+            day_hash_df = pd.read_csv(day_hash_file, names=["date", "hash"])
+            if ((day_hash_df['date'] == current_day_str) &
+                    (day_hash_df['hash'] == settings_hash)).any():
+                Logger.info('Day already processed: Date and hash match entry '
+                            'in date-hash list, skipping this day.')
+                if not return_stream and dump_stream_to_disk:
+                    return
+                else:
+                    return [Party(), Stream()]
+        except FileNotFoundError:
+            pass
 
     # keep input safe:
     day_st = day_st.copy()
@@ -325,7 +334,11 @@ def run_day_detection(
     if check_array_misdetections:
         if len(short_tribe) < len(tribe):
             Logger.error('Missing short templates for detection-reevaluation.')
-        else:    
+        else:
+            # Need to scale factor slightly for fftw vs time-domain
+            # (based on empirical observation)
+            if xcorr_func == 'fftw':
+                re_eval_thresh_factor = re_eval_thresh_factor * 1.1
             party = reevaluate_detections(
                 party, short_tribe, stream=day_st,
                 threshold=threshold * re_eval_thresh_factor,

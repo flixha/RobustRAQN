@@ -24,7 +24,7 @@ from numpy.core.numeric import True_
 from os import times
 import pandas as pd
 if not run_from_ipython:
-    matplotlib.use('Agg') # to plot figures directly for print to file
+    matplotlib.use('Agg')  # to plot figures directly for print to file
 from importlib import reload
 import numpy as np
 import pickle
@@ -81,6 +81,40 @@ def read_bulk_test(client, bulk, parallel=False, cores=None):
     return st
 
 
+def append_list_completed_days(file, date, settings_hash):
+    """
+    """
+    # setting_hash = hashlib.md5()
+    # setting_hash.update(kwargs)
+    with open(file, "a") as list_completed_days:
+        list_completed_days.write(str(date) + ', ' + settings_hash)
+
+
+def get_multi_obj_hash(hash_object_list):
+    """
+    """
+    hash_list = []
+    for obj in hash_object_list:
+        hash = None
+        try:
+            hash = obj.__hash__
+        except AttributeError:
+            pass
+        if hash is None:
+            try:
+                hash = hashlib.md5(obj.__str__(extended=True))
+            except TypeError:
+                pass
+        if hash is None:
+            try:
+                hash = hashlib.md5(str(obj).encode('utf-8'))
+            except ValueError:
+                pass
+        hash_list.append(hash)
+    settings_hash = hashlib.md5(str(hash_list).encode('utf-8'))
+    return settings_hash
+
+
 # @processify
 def run_day_detection(
         client, tribe, date, ispaq, selectedStations,
@@ -89,10 +123,10 @@ def run_day_detection(
         balance_power_coefficient=2, n_templates_per_run=20, xcorr_func='fftw',
         concurrency=None, arch='precise', trig_int=0, threshold=10,
         re_eval_thresh_factor=0.6, min_chans=10,
-        multiplot=False, day_st=Stream(), check_array_misdetections=False, 
+        multiplot=False, day_st=Stream(), check_array_misdetections=False,
         short_tribe=Tribe(), write_party=False, detection_path='Detections',
         redetection_path='ReDetections', return_stream=False,
-        dump_stream_to_disk=False):
+        dump_stream_to_disk=False, day_hash_list='list_completed_days.dat'):
     """
     Function to run reading, initial processing, detection etc. on one day.
     """
@@ -111,6 +145,23 @@ def run_day_detection(
     endtime = starttime + 60*60*24
     endtime_req = endtime + 15*60
     current_day_str = date.strftime('%Y-%m-%d')
+
+    # Check if this date has already been processed with the same settings -
+    # i.e., the current date and a settings-based hash exist already in file
+    settings_hash = get_multi_obj_hash(
+        [tribe, client, selectedStations, remove_response, inv,
+         noise_balancing, balance_power_coefficient, xcorr_func, trig_int,
+         threshold, re_eval_thresh_factor, min_chans, multiplot,
+         check_array_misdetections, short_tribe, write_party, detection_path,
+         redetection_path])
+    # Check hash against existing list
+    day_hash_df = pandas.read_csv(day_hash_file, names=["date", "hash"])
+    if ((day_hash_df['date'] == current_day_str) &
+            (day_hash_df['hash'] == settings_hash)).any():
+        if not return_stream and dump_stream_to_disk:
+            return
+        else:
+            return [Party(), Stream()]
 
     # keep input safe:
     day_st = day_st.copy()
@@ -242,10 +293,13 @@ def run_day_detection(
     party = party.decluster(trig_int=trig_int, timing='detect',
                             metric='thresh_exc', min_chans=min_chans,
                             absolute_values=True)
-    
+
     if not party:
         Logger.warning('Party of families of detections is empty')
         return_st = Stream()
+        append_list_completed_days(
+            file=day_hash_file, date=current_day_str, hash=settings_hash)
+
         if return_stream:
             return_st = day_st
             Logger.debug(
@@ -285,6 +339,10 @@ def run_day_detection(
                 group_size=n_templates_per_run, process_cores=cores,
                 time_difference_threshold=12, detect_value_allowed_error=60,
                 return_party_with_short_templates=True)
+
+            append_list_completed_days(
+                file=day_hash_file, date=current_day_str, hash=settings_hash)
+
             if not party:
                 Logger.warning('Party of families of detections is empty')
                 return_st = Stream()

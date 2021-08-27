@@ -90,7 +90,7 @@ def append_list_completed_days(file, date, hash):
     if file is None:
         return
     with open(file, "a+") as list_completed_days:
-        list_completed_days.write(str(date) + ', ' + str(hash) + '\n')
+        list_completed_days.write(str(date) + ',' + str(hash) + '\n')
 
 
 def get_multi_obj_hash(hash_object_list):
@@ -166,7 +166,7 @@ def run_day_detection(
         # Check if this date has already been processed with the same settings
         # i.e., current date and a settings-based hash exist already in file
         settings_hash = get_multi_obj_hash(
-            [tribe.templates, selectedStations, remove_response, inv,
+            [tribe.templates, selectedStations, remove_response, inv, ispaq,
             noise_balancing, balance_power_coefficient, xcorr_func, arch,
             trig_int, threshold, re_eval_thresh_factor, min_chans, multiplot,
             check_array_misdetections, short_tribe, write_party,
@@ -176,8 +176,9 @@ def run_day_detection(
             day_hash_df = pd.read_csv(day_hash_file, names=["date", "hash"])
             if ((day_hash_df['date'] == current_day_str) &
                     (day_hash_df['hash'] == settings_hash)).any():
-                Logger.info('Day already processed: Date and hash match entry '
-                            'in date-hash list, skipping this day.')
+                Logger.info(
+                    'Day %s already processed: Date and hash match entry in '
+                    'date-hash list, skipping this day.', current_day_str)
                 if not return_stream and dump_stream_to_disk:
                     return
                 else:

@@ -113,7 +113,11 @@ def get_multi_obj_hash(hash_object_list):
                 hash = hashlib.md5(str(obj).encode('utf-8'))
             except ValueError:
                 pass
-        hash_list.append(hash.hexdigest())
+        try:
+            hash = hash.hexdigest()
+        except AttributeError:
+            pass
+        hash_list.append(hash)
     settings_hash = hashlib.md5(str(hash_list).encode('utf-8')).hexdigest()
     return settings_hash
 

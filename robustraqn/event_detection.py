@@ -90,7 +90,7 @@ def append_list_completed_days(file, date, hash):
     if file is None:
         return
     with open(file, "a+") as list_completed_days:
-        list_completed_days.write(str(date) + ', ' + str(hash))
+        list_completed_days.write(str(date) + ', ' + str(hash) + '\n')
 
 
 def get_multi_obj_hash(hash_object_list):
@@ -99,10 +99,18 @@ def get_multi_obj_hash(hash_object_list):
     hash_list = []
     for obj in hash_object_list:
         hash = None
-        try:
-            hash = obj.__hash__
-        except AttributeError:
-            pass
+        # # Some objects have __hash__ as a method that returns a string
+        # try:
+        #     hash = obj.__hash__()
+        # except (AttributeError, TypeError):
+        #     pass
+        # # Some objects have __hash__ as an attribute
+        # if hash is None:
+        #     try:
+        #         hash = obj.__hash__
+        #     except AttributeError:
+        #         pass
+        # # Some objects have no __hash__, so hash their string-representation
         if hash is None:
             try:
                 hash = hashlib.md5(obj.__str__(extended=True).encode('utf-8'))
@@ -113,11 +121,12 @@ def get_multi_obj_hash(hash_object_list):
                 hash = hashlib.md5(str(obj).encode('utf-8'))
             except ValueError:
                 pass
-        try:
-            hash = hash.hexdigest()
-        except AttributeError:
-            pass
-        hash_list.append(hash)
+        if hash is not None:
+            try:
+                hash = hash.hexdigest()
+            except AttributeError:
+                pass
+            hash_list.append(hash)
     settings_hash = hashlib.md5(str(hash_list).encode('utf-8')).hexdigest()
     return settings_hash
 
@@ -157,7 +166,7 @@ def run_day_detection(
         # Check if this date has already been processed with the same settings
         # i.e., current date and a settings-based hash exist already in file
         settings_hash = get_multi_obj_hash(
-            [tribe, client, selectedStations, remove_response, inv,
+            [tribe.templates, selectedStations, remove_response, inv,
             noise_balancing, balance_power_coefficient, xcorr_func, arch,
             trig_int, threshold, re_eval_thresh_factor, min_chans, multiplot,
             check_array_misdetections, short_tribe, write_party,

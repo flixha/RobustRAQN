@@ -66,9 +66,9 @@ def _create_template_objects(
         parallel=False, cores=1):
     """
     """
-    midlat = 60.0
-    midlon = 5.0
-    radius = 20.0
+    # midlat = 60.0
+    # midlon = 5.0
+    # radius = 20.0
 
     sfiles.sort(key=lambda x: x[-6:])
     tribe = Tribe()
@@ -87,11 +87,11 @@ def _create_template_objects(
 
         origin = select[0].preferred_origin()
         # Check that event within chosen area
-        if (origin.longitude < midlon-radius and
-                origin.longitude > midlon+radius and
-                origin.latitude < midlat-radius and
-                origin.latitude > midlat+radius):
-            continue
+        # if (origin.longitude < midlon-radius and
+        #         origin.longitude > midlon+radius and
+        #         origin.latitude < midlat-radius and
+        #         origin.latitude > midlat+radius):
+        #     continue
         # Load picks and normalize
         tempCatalog = filter_picks(select, stations=relevantStations)
         if not tempCatalog:

@@ -641,6 +641,7 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
         # Check wether pick is P or S-phase, and normalize network/station/
         # location and channel codes
         if pick.phase_hint.upper()[0] in 'PS':
+            previous_chan_id = pick.waveform_id.channel_code
             pick.waveform_id.network_code = std_network_code
             pick.waveform_id.location_code = std_location_code
             # Check station code for altnerative code, change to the standard
@@ -652,20 +653,20 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
             #    channel (Z>N>E>2>1) for now; otherwise just normalize channel-
             #    prefix.
             if len(pick.waveform_id.channel_code) == 0:
-                pick.waveform_id.channel_code = std_channel_prefix +\
-                    avail_comps[-1]
+                pick.waveform_id.channel_code = (
+                    std_channel_prefix + avail_comps[-1])
             elif len(pick.waveform_id.channel_code) <= 2:
-                pick.waveform_id.channel_code =\
-                    std_channel_prefix + pick.waveform_id.channel_code[-1]
+                pick.waveform_id.channel_code = (
+                    std_channel_prefix + pick.waveform_id.channel_code[-1])
             # 2. Check that channel is available - otherwise switch to suitable
             #    other channel.
             if pick.waveform_id.channel_code[-1] not in avail_comps:
-                pick.waveform_id.channel_code =\
-                    std_channel_prefix + avail_comps[-1]
+                pick.waveform_id.channel_code = (
+                    std_channel_prefix + avail_comps[-1])
             # 3. If P-pick is not on vertical channel and there exists a 'Z'-
             #    channel, then switch P-pick to Z.
-            if pick.phase_hint.upper()[0] == 'P' and\
-                    pick.waveform_id.channel_code[-1] != 'Z':
+            if (pick.phase_hint.upper()[0] == 'P' and
+                    pick.waveform_id.channel_code[-1] != 'Z'):
                 if 'Z' in avail_comps:
                     pick.waveform_id.channel_code = std_channel_prefix + 'Z'
             # 4. If S-pick is on vertical channel and there exist horizontal
@@ -676,8 +677,8 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
                     station=pick.waveform_id.station_code,
                     channel=std_channel_prefix+'[EN123]')
                 if horizontalTraces:
-                    pick.waveform_id.channel_code =\
-                        horizontalTraces[0].stats.channel
+                    pick.waveform_id.channel_code = (
+                        horizontalTraces[0].stats.channel)
                 # 4b. If S-pick is on vertical and there is no P-pick, then
                 # remove S-pick.
                 else:
@@ -688,6 +689,10 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
                         pick.waveform_id.station_code]
                     if len(P_picks) == 0:
                         continue
+            # If not fixed yet, make sure to always fix codes
+            if pick.waveform_id.channel_code == previous_chan_id:
+                pick.waveform_id.channel_code = (
+                    std_channel_prefix + pick.waveform_id.channel_code[-1])
             newEvent.picks.append(pick)
             # else:
             #    newEvent.picks.append(pick)

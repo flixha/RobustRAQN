@@ -7,7 +7,7 @@ import pandas as pd
 # import matplotlib
 from threadpoolctl import threadpool_limits
 
-# from multiprocessing import Pool, cpu_count, current_process, get_context
+from multiprocessing import Pool, cpu_count, current_process, get_context
 # from multiprocessing.pool import ThreadPool
 from joblib import Parallel, delayed, parallel_backend
 
@@ -47,18 +47,18 @@ logging.basicConfig(
 
 
 def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
-                      min_samp_rate=np.nan):
+                      clients=[], min_samp_rate=np.nan, pre_event_time=30,
+                      template_length=300):
     """
     Load the waveforms for an event file (here: Nordic file) while performing
     some checks for duplicates, incompleteness, etc.
     """
-    origin = event.preferred_origin()
+    origin = event.preferred_origin() or event.origins[0]
     # Stop event processing if there are no waveform files
     select, wavname = read_nordic(sfile, return_wavnames=True)
     wavfilenames = wavname[0]
     if not wavfilenames:
         Logger.warning('Event ' + sfile + ': no waveform files found')
-        return None
     st = Stream()
     for wavefile in wavfilenames:
         # Check that there are proper mseed/SEISAN7.0 waveform files
@@ -79,6 +79,21 @@ def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
         except AssertionError:
             Logger.error('AsertionError: Could not read waveform file ' +
                          fullWaveFile)
+
+    # Request waveforms from client
+    latest_pick = max([p.time for p in event.picks])
+    t1 = origin.time - pre_event_time
+    t2 = (latest_pick + template_length + 10) or (
+        origin.time + template_length * 2)
+    bulk_request = [("??", s, "*", "?H?", t1, t2) for s in selectedStations]
+    for client in clients:
+        Logger.info('Requestion waveforms from client %s', client)
+        add_st = client.get_waveforms_bulk(bulk_request)
+        Logger.info('Received %s traces from the client.', len(add_st))
+        st += add_st
+    if len(st) == 0:
+        Logger.warning('Did not find any waveforms for sfile %s', sfile)
+        return None
 
     # REMOVE UNUSABLE CHANNELS
     st_copy = st.copy()
@@ -434,6 +449,21 @@ def parallel_merge(st, method=0, fill_value=None, interpolation_samples=0,
     return st
 
 
+def robust_rotate(stream, inventory, method="->ZNE"):
+    """
+    Rotation with error catching for parallel execution.
+    """
+    try:
+        stream = stream.rotate(method, inventory=inventory)
+    except Exception as e:
+        try:
+            Logger.warning('Cannot rotate traces for station %s on %s: %s',
+                        stream[0].id, str(stream[0].id.starttime)[0:19], e)
+        except IndexError:
+            Logger.warning('Cannot rotate traces', e)
+    return stream
+
+
 def parallel_rotate(st, inv, cores=None, method="->ZNE"):
     """
     wrapper function to rotate 3-component seismograms in a stream in parallel.
@@ -466,11 +496,17 @@ def parallel_rotate(st, inv, cores=None, method="->ZNE"):
     #     for tr in trace_st:
     #         st.append(tr)
 
-    streams = Parallel(n_jobs=cores)(
-        delayed(
-            st.select(network=nsl[0], station=nsl[1], location=nsl[2]).rotate)
-        (method, inventory=inv.select(
-            network=nsl[0], station=nsl[1], location=nsl[2]))
+    # streams = Parallel(n_jobs=cores)(
+    #     delayed(st.select(network=nsl[0], station=nsl[1], location=nsl[2]).rotate)
+    #     (method, inventory=inv.select(
+    #         network=nsl[0], station=nsl[1], location=nsl[2]))
+    #     for nsl in unique_net_sta_loc_list)
+    
+    streams = Parallel(n_jobs=cores)(delayed(
+        robust_rotate)(
+            st.select(network=nsl[0], station=nsl[1], location=nsl[2]),
+            inv.select(network=nsl[0], station=nsl[1], location=nsl[2]),
+            method="->ZNE")
         for nsl in unique_net_sta_loc_list)
     st = Stream([tr for trace_st in streams for tr in trace_st])
     # for trace_st in streams:
@@ -1736,7 +1772,9 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
     if parallel:
         st = parallel_rotate(st, inv, cores=cores, method="->ZNE")
     else:
-        st.rotate(method="->ZNE", inventory=inv)
+        # st.rotate(method="->ZNE", inventory=inv)
+        # Use parallel-function to initiate error-catching rotation
+        st = parallel_rotate(st, inv, cores=1, method="->ZNE")
 
     # Need to merge again here, because rotate may split merged traces if there
     # are masked arrays (i.e., values filled with None). The merge here will

@@ -55,7 +55,7 @@ def listdir_fullpath(d):
 
 def _create_template_objects(
         sfiles, selectedStations, template_length, lowcut, highcut, min_snr,
-        prepick, samp_rate, seisanWAVpath, inv=Inventory(),
+        prepick, samp_rate, seisanWAVpath, inv=Inventory(), clients=[],
         remove_response=False, noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
         min_n_traces=8, write_out=False, make_pretty_plot=False, prefix='',
@@ -104,8 +104,10 @@ def _create_template_objects(
         catalog += event
         #######################################################################
         # Load and quality-control stream and picks for event
-        wavef = load_event_stream(event, sfile, seisanWAVpath,
-                                  relevantStations, min_samp_rate=samp_rate)
+        wavef = load_event_stream(
+            event, sfile, seisanWAVpath, relevantStations, clients=clients,
+            min_samp_rate=samp_rate, pre_event_time=prepick,
+            template_length=template_length)
         if remove_response:
             wavef = try_remove_responses(
                 wavef, inv, taper_fraction=0.15, pre_filt=[0.01, 0.05, 45, 50],
@@ -216,7 +218,7 @@ def _create_template_objects(
 
 def create_template_objects(
         sfiles, selectedStations, template_length, lowcut, highcut, min_snr,
-        prepick, samp_rate, seisanWAVpath, inv=Inventory(),
+        prepick, samp_rate, seisanWAVpath, clients=[], inv=Inventory(),
         remove_response=False, noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
         min_n_traces=8, write_out=False, prefix='', make_pretty_plot=False,
@@ -263,6 +265,7 @@ def create_template_objects(
         #             dict(
         #                 inv=new_inv.select(
         #                     time=UTCDateTime(sfile[-6:] + sfile[-19:-9])),
+        #                 clients=clients,
         #                 remove_response=remove_response,
         #                 noise_balancing=noise_balancing,
         #                 balance_power_coefficient=balance_power_coefficient,
@@ -284,7 +287,7 @@ def create_template_objects(
         res_out = Parallel(n_jobs=cores)(
             delayed(_create_template_objects)(
                 [sfile], selectedStations, template_length, lowcut, highcut,
-                min_snr, prepick, samp_rate, seisanWAVpath,
+                min_snr, prepick, samp_rate, seisanWAVpath, clients=clients,
                 inv=new_inv.select(
                     time=UTCDateTime(sfile[-6:] + sfile[-19:-9])),
                 remove_response=remove_response,
@@ -317,6 +320,7 @@ def create_template_objects(
         (tribe, wavnames) = _create_template_objects(
             sfiles, selectedStations, template_length, lowcut, highcut,
             min_snr, prepick, samp_rate, seisanWAVpath, inv=new_inv,
+            clients=clients,
             remove_response=remove_response, noise_balancing=noise_balancing,
             balance_power_coefficient=balance_power_coefficient,
             ground_motion_input=ground_motion_input,

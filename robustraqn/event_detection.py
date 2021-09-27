@@ -162,6 +162,11 @@ def run_day_detection(
     endtime_req = endtime + 15*60
     current_day_str = date.strftime('%Y-%m-%d')
 
+    if not os.path.exists(detection_path):
+        os.mkdir(detection_path)
+    if not os.path.exists(redetection_path):
+        os.mkdir(redetection_path)
+
     if day_hash_file is not None:
         # Check if this date has already been processed with the same settings
         # i.e., current date and a settings-based hash exist already in file

@@ -45,7 +45,7 @@ def balance_noise(self, inv, balance_power_coefficient=2,
     """
     if len(self.data) == 0:
         Logger.warning('Cannot balance trace by noise PDF, there is no data '
-                       'for ' + str(self))
+                       'for %s', str(self))
         return self
     else:
         Logger.debug('Balancing noise with power coefficient: %s',
@@ -89,8 +89,8 @@ def balance_noise(self, inv, balance_power_coefficient=2,
         # Logger.warning('Cannot balance trace by noise PDF, there is no noise'
         #                ' model available for %s', str(self))
         Logger.warning('Cannot balance trace by noise PDF, there is no noise '
-                       'model available for %s, using dummy bandpass filter '
-                       ' 3-50 Hz', str(self))
+                       'model available for %s %s. Using dummy bandpass filter '
+                       '3-50 Hz', self.id, str(self.stats.starttime))
         f_filter = np.array([1, 3, 50, 100])
         amp_filter = np.array([10e5, 1, 1, 10e5])
         # return self
@@ -795,7 +795,8 @@ def attach_noise_models(inv, pdf_dir, outfile='inv.pickle',
     single_station_list = station_list.copy()
     seisarray_prefixes = [
         'NAO*', 'NBO*', 'NB2*', 'NC2*', 'NC3*', 'NC4*', 'NC6*', 'AR[ABCD]?',
-        'SP[ABC]?', 'BEA[123456]', 'OSE*', 'EKO*', 'GRA*', '@(EKB|EKR|ESK)*']
+        'SP[ABC]?', 'BEA[123456]', 'OSE*', 'EKO*', 'GRA*', '@(EKB|EKR|ESK)*',
+        'IL??', 'YKA*']
     # alternative pattern 'E*K!(O)*' (works only  in wcmatch, not glob)
     # ''E*K[!O]*'
     for seisarray_prefix in seisarray_prefixes:

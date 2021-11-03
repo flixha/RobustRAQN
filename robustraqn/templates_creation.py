@@ -15,6 +15,7 @@ from joblib import Parallel, delayed, parallel_backend
 # from obspy import read_events, read_inventory
 from obspy.core.event import Catalog
 from obspy.core.utcdatetime import UTCDateTime
+from obspy.geodetics.base import gps2dist_azimuth
 # from obspy.core.stream import Stream
 # from obspy.core.util.base import TypeError
 # from obspy.core.event import Event
@@ -63,7 +64,7 @@ def _create_template_objects(
         normalize_NSLC=True,
         sta_translation_file="station_code_translation.txt",
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
-        parallel=False, cores=1):
+        parallel=False, cores=1, *args, **kwargs):
     """
     """
     # midlat = 60.0
@@ -82,8 +83,7 @@ def _create_template_objects(
         Logger.info('Working on S-file: ' + sfile)
         select, wavname = read_nordic(sfile, return_wavnames=True)
         relevantStations = get_all_relevant_stations(
-            selectedStations,
-            sta_translation_file="station_code_translation.txt")
+            selectedStations, sta_translation_file=sta_translation_file)
 
         origin = select[0].preferred_origin()
         # Check that event within chosen area
@@ -108,10 +108,25 @@ def _create_template_objects(
             event, sfile, seisanWAVpath, relevantStations, clients=clients,
             min_samp_rate=samp_rate, pre_event_time=prepick,
             template_length=template_length)
+        if wavef is None or len(wavef) == 0:
+            Logger.error('Event %s for sfile %s has no waveforms available',
+                         event.short_str(), sfile)
+            return None
+
         if remove_response:
             wavef = try_remove_responses(
                 wavef, inv, taper_fraction=0.15, pre_filt=[0.01, 0.05, 45, 50],
                 parallel=parallel, cores=cores)
+            for tr in wavef:
+                try:
+                    tr.stats.distance = gps2dist_azimuth(
+                        origin.latitude, origin.longitude,
+                        tr.stats.coordinates.latitude,
+                        tr.stats.coordinates.longitude)[0]
+                except Exception as e:
+                    Logger.warning('Could not compute distance for event %s -'
+                                   ' trace %s', event.short_str(), tr.id)
+                    Logger.warning(e)
         wavef = wavef.detrend(type='simple')
 
         # standardize all codes for network, station, location, channel
@@ -136,8 +151,10 @@ def _create_template_objects(
             wavef = wavef.detrend('linear').taper(
                 0.15, type='hann', max_length=30, side='both')
 
-        event = prepare_picks(event=event, stream=wavef,
-                              normalize_NSLC=normalize_NSLC)
+        event = prepare_picks(
+            event=event, stream=wavef, normalize_NSLC=normalize_NSLC, inv=inv,
+            *args, **kwargs)
+
         wavef = pre_processing.shortproc(
             st=wavef, lowcut=lowcut, highcut=highcut, filt_order=4,
             samp_rate=samp_rate, parallel=False, num_cores=1)
@@ -145,6 +162,7 @@ def _create_template_objects(
 
         # Make the templates from picks and waveforms
         catalogForTemplates += event
+        ### TODO : this is where a lot of calculated picks are thrown out
         templateSt = template_gen._template_gen(
             picks=event.picks, st=wavef, length=template_length, swin='all',
             prepick=prepick, all_horiz=True, plot=False, delayed=True,
@@ -226,7 +244,7 @@ def create_template_objects(
         normalize_NSLC=True,
         sta_translation_file="station_code_translation.txt",
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
-        parallel=False, cores=1):
+        parallel=False, cores=1, *args, **kwargs):
     """
       Wrapper for create-template-function
     """
@@ -289,12 +307,12 @@ def create_template_objects(
                 [sfile], selectedStations, template_length, lowcut, highcut,
                 min_snr, prepick, samp_rate, seisanWAVpath, clients=clients,
                 inv=new_inv.select(
-                    time=UTCDateTime(sfile[-6:] + sfile[-19:-9])),
+                    time=UTCDateTime(sfile[-6:] + sfile[-19:-14])),
                 remove_response=remove_response,
                 noise_balancing=noise_balancing,
                 balance_power_coefficient=balance_power_coefficient,
                 ground_motion_input=ground_motion_input,
-                write_out=False, min_n_traces=min_n_traces,
+                write_out=write_out, min_n_traces=min_n_traces,
                 make_pretty_plot=make_pretty_plot, prefix=prefix,
                 check_template_strict=check_template_strict,
                 allow_channel_duplication=allow_channel_duplication,
@@ -303,7 +321,8 @@ def create_template_objects(
                 std_network_code=std_network_code,
                 std_location_code=std_location_code,
                 std_channel_prefix=std_channel_prefix,
-                parallel=thread_parallel, cores=n_threads)
+                parallel=thread_parallel, cores=n_threads,
+                *args, **kwargs)
             for sfile in sfiles)
 
         tribes = [r[0] for r in res_out if len(r[0]) > 0]
@@ -325,14 +344,15 @@ def create_template_objects(
             balance_power_coefficient=balance_power_coefficient,
             ground_motion_input=ground_motion_input,
             min_n_traces=min_n_traces, write_out=write_out, prefix=prefix,
-            make_pretty_plot=make_pretty_plot, parallel=False, cores=1,
-            check_template_strict=check_template_strict,
+            make_pretty_plot=make_pretty_plot, parallel=parallel,
+            cores=cores, check_template_strict=check_template_strict,
             allow_channel_duplication=allow_channel_duplication,
             normalize_NSLC=normalize_NSLC,
             sta_translation_file=sta_translation_file,
             std_network_code=std_network_code,
             std_location_code=std_location_code,
-            std_channel_prefix=std_channel_prefix)
+            std_channel_prefix=std_channel_prefix,
+            *args, **kwargs)
 
     label = ''
     if noise_balancing:

@@ -2,7 +2,6 @@ import os
 import glob
 import fnmatch
 import wcmatch
-from eqcorrscan.utils.plotting import detection_multiplot
 import pandas as pd
 # import matplotlib
 from threadpoolctl import threadpool_limits
@@ -14,24 +13,25 @@ from joblib import Parallel, delayed, parallel_backend
 import numpy as np
 from itertools import chain, repeat
 from collections import Counter
-# import numexpr as ne
 
-# from obspy import read_events, read_inventory
-# from obspy.core.event import Catalog
-# import obspy
+from obspy.core.event import (Catalog, Pick, Arrival, WaveformStreamID,
+                              CreationInfo)
 from obspy.core.stream import Stream
 from obspy.core.inventory.inventory import Inventory
-# from obspy.core.util.base import TypeError
-# from obspy.core.event import Event
 from obspy.io.nordic.core import read_nordic
 from obspy import read as obspyread
 from obspy import UTCDateTime
+from obspy.geodetics.base import degrees2kilometers, locations2degrees
 
-from eqcorrscan.utils.correlate import pool_boy
-from eqcorrscan.utils.despike import median_filter
 from eqcorrscan.core.match_filter import Tribe
 from eqcorrscan.core.match_filter.party import Party
 from eqcorrscan.core.match_filter.family import Family
+from eqcorrscan.utils.correlate import pool_boy
+from eqcorrscan.utils.despike import median_filter
+from eqcorrscan.utils.mag_calc import _max_p2t
+from eqcorrscan.utils.plotting import detection_multiplot
+
+from obsplus.events.validate import attach_all_resource_ids
 
 # import obustraqn.spectral_tools
 from robustraqn.spectral_tools import st_balance_noise, Noise_model
@@ -44,6 +44,30 @@ logging.basicConfig(
     format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 
 # from eqcorrscan.utils.catalog_utils import filter_picks
+
+
+def read_seisan_database(database_path, cores=1):
+    """
+    Reads all S-files in Seisan database, which can be either a folder
+    containing all Sfiles or a YYYY/MM/Sfiles-structure.
+    Outputs a catalog of events, with
+    """
+    sfiles = glob.glob(os.path.join(database_path, '*L.S??????'))
+    sfiles += glob.glob(os.path.join(database_path, '????', '??', '*.S??????'))
+    sfiles.sort(key=lambda x: x[-6:])
+
+    cats = Parallel(n_jobs=cores)(delayed(read_nordic)(sfile)
+                                  for sfile in sfiles)
+    cat = Catalog([cat[0] for cat in cats])
+    for event, sfile in zip(cat, sfiles):
+        extra = {'sfile_name': {'value': sfile}}
+        event.extra = extra
+        attach_all_resource_ids(event)
+    # attach_all_resource_ids(cat)
+    # validate_catalog(cat)
+        # event.comments.append(Comment(text='Sfile-name: ' + sfile))
+
+    return cat
 
 
 def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
@@ -458,7 +482,7 @@ def robust_rotate(stream, inventory, method="->ZNE"):
     except Exception as e:
         try:
             Logger.warning('Cannot rotate traces for station %s on %s: %s',
-                        stream[0].id, str(stream[0].id.starttime)[0:19], e)
+                           stream[0].id, str(stream[0].id.starttime)[0:19], e)
         except IndexError:
             Logger.warning('Cannot rotate traces', e)
     return stream
@@ -497,11 +521,11 @@ def parallel_rotate(st, inv, cores=None, method="->ZNE"):
     #         st.append(tr)
 
     # streams = Parallel(n_jobs=cores)(
-    #     delayed(st.select(network=nsl[0], station=nsl[1], location=nsl[2]).rotate)
+    #     delayed(st.select(network=nsl[0], station=nsl[1],
+    #                       location=nsl[2]).rotate)
     #     (method, inventory=inv.select(
     #         network=nsl[0], station=nsl[1], location=nsl[2]))
     #     for nsl in unique_net_sta_loc_list)
-    
     streams = Parallel(n_jobs=cores)(delayed(
         robust_rotate)(
             st.select(network=nsl[0], station=nsl[1], location=nsl[2]),
@@ -614,9 +638,169 @@ def get_matching_trace_for_pick(pick, stream):
     return chosen_tr_id, k
 
 
-def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
-                  std_location_code='00', std_channel_prefix='BH',
-                  sta_translation_file="station_code_translation.txt"):
+def _make_append_new_pick_and_arrival(
+        origin, tr, phase, new_picks, new_arrivals, app_vel, dist_deg,
+        min_snr=1, pre_pick=0, winlen=2, *args, **kwargs):
+    """
+    creates a new pick from an apparent velocity and adds it to the picks- and
+    arrivals-list.
+    """
+    tr = tr.copy()
+    if tr.stats.station in [p.waveform_id.station_code for p in new_picks
+                            if p.phase_hint[0] == phase[0]]:
+        return new_picks, new_arrivals
+    dist_km = degrees2kilometers(dist_deg)
+    new_pick = Pick(phase_hint=phase, force_resource_id=True,
+                    time=origin.time + dist_km / app_vel,
+                    waveform_id=WaveformStreamID(seed_string=tr.id),
+                    # tr.stats.network, tr.stats.station,
+                    # tr.stats.location, tr.stats.channel),
+                    evaluation_mode='automatic', onset='emergent',
+                    creation_info=CreationInfo(agency_id='RR', author=''))
+    # if min_snr is not None:
+    #     # compute SNR of pick window
+    #     trim_start = new_pick.time - pre_pick
+    #     trim_end = new_pick.time + winlen
+    #     tr = tr.trim(trim_start, trim_end)
+    #     if len(tr.data) <= 10 or np.isnan(tr.data):
+    #         Logger.warning(f'Insufficient data for {tr.id}')
+    #         return new_picks, new_arrivals
+    #     # Get the amplitude
+    #     try:
+    #         amplitude, period, delay, peak, trough = _max_p2t(
+    #             tr.data, tr.stats.delta, return_peak_trough=True)
+    #     except ValueError as e:
+    #         Logger.error(e)
+    #         Logger.error(f'No amplitude picked for tr {tr.id}')
+    #         return new_picks, new_arrivals
+    #     # Calculate the normalized noise amplitude
+    #     snr = amplitude / np.sqrt(np.mean(np.square(tr.data)))
+    #     if snr < min_snr:
+    #         return new_picks, new_arrivals
+    new_arrival = Arrival(phase=phase, pick_id=new_pick.resource_id,
+                          force_resource_id=True, distance=dist_deg)
+    new_picks.append(new_pick)
+    new_arrivals.append(new_arrival)
+    return new_picks, new_arrivals
+
+
+def compute_picks_from_app_velocity(
+        event, origin, stream=Stream(), pick_calculation=None,
+        crossover_distance_km=100, app_vel_Pg=7.2, app_vel_Sg=4.1,
+        app_vel_Pn=8.1, app_vel_Sn=4.6, *args, **kwargs):
+    """
+    Computes theoretical arrival-picks based on apparent velocities of Pg/Pn/
+    Sg/Sn for all traces associated with an event. This is useful when one
+    wants to correlate all available traces for cross-correlation based
+    relocation, and when there's plenty more traces than picks available that
+    may be useful. Make sure to exclude low-CCC observations at some later
+    point in the earthquake relocation process.
+
+    :type pick_calculation: string
+    :param:
+        one of 'filter_direct', 'only_direct', 'filter_refracted',
+        'only_refracted'
+    """
+    Logger.info('Computing theoretical picks for %s arrivals',
+                pick_calculation)
+    # For stations closer than XX km: assume that first arrival is Pg / Sg
+    # For stations farther than XX km: Check if there is a picked Pg / Sg,
+    # otherwise get approximate times of the direct arrivals based on group
+    # velocities.
+    new_picks = []
+    new_arrivals = []
+    # FIRST, deal with existing Picks
+    for pick in event.picks:
+        arrivals = [arr for arr in origin.arrivals
+                    if arr.pick_id == pick.resource_id]
+        if pick is None or len(arrivals) == 0:
+            continue
+        arr = arrivals[0]
+        dist_km = degrees2kilometers(arr.distance)
+        add_pick = False
+        if pick_calculation == 'only_direct':
+            if dist_km is not None and dist_km >= crossover_distance_km:
+                if pick.phase_hint in ['Pg', 'Sg']:
+                    add_pick = True
+                elif pick.phase_hint in ['P', 'Pn']:
+                    pick.time = origin.time + dist_km / app_vel_Pg
+                    pick.phase_hint = 'Pg'
+                    add_pick = True
+                elif pick.phase_hint in ['S', 'Sn']:
+                    pick.time = origin.time + dist_km / app_vel_Sg
+                    pick.phase_hint = 'Sg'
+                    add_pick = True
+            elif pick.phase_hint in ['P', 'S', 'Pg', 'Sg']:
+                add_pick = True
+        elif pick_calculation == 'only_refracted':
+            if dist_km is not None and dist_km >= crossover_distance_km:
+                if pick.phase_hint in ['Pg', 'Sg']:
+                    add_pick = True
+                elif pick.phase_hint in ['P', 'Pg']:
+                    pick.time = origin.time + dist_km / app_vel_Pn
+                    pick.phase_hint = 'Pg'
+                    add_pick = True
+                elif pick.phase_hint in ['S', 'Sg']:
+                    pick.time = origin.time + dist_km / app_vel_Sn
+                    pick.phase_hint = 'Sg'
+                    add_pick = True
+            elif pick.phase_hint in ['P', 'S', 'Pn', 'Sn']:
+                add_pick = True
+        if add_pick:
+            # if pick was moved, make clear that residual and takeoff
+            # aren't known any more
+            if arr.phase != pick.phase_hint:
+                arr.time_residual = None
+                arr.takeoff_angle = None
+                arr.phase = pick.phase_hint
+            arr.pick_id = pick.resource_id
+            new_arrivals.append(arr)
+            new_picks.append(pick)
+
+    # SECOND deal with traces where there's no picks:
+    for tr in stream:
+        # found_matching_resp, tr, sel_inv = try_find_matching_response(tr,inv)
+        # if not found_matching_resp:
+        #     continue
+        # chan = inv.network[0].stations[0].channels[0]
+        if (not tr.stats.coordinates.latitude or
+                not tr.stats.coordinates.longitude):
+            continue
+        dist_deg = locations2degrees(
+            origin.latitude, origin.longitude,
+            tr.stats.coordinates.latitude, tr.stats.coordinates.longitude)
+        dist_km = degrees2kilometers(dist_deg)
+        if not dist_deg or np.isnan(dist_deg) or np.isnan(dist_km):
+            continue
+        if pick_calculation == 'only_direct':
+            # then get theoretical p -pick
+            new_picks, new_arrivals = _make_append_new_pick_and_arrival(
+                origin=origin, tr=tr, phase='Pg', new_picks=new_picks,
+                new_arrivals=new_arrivals, app_vel=app_vel_Pg,
+                dist_deg=dist_deg, *args, **kwargs)
+            new_picks, new_arrivals = _make_append_new_pick_and_arrival(
+                origin=origin, tr=tr, phase='Sg', new_picks=new_picks,
+                new_arrivals=new_arrivals, app_vel=app_vel_Sg,
+                dist_deg=dist_deg, *args, **kwargs)
+        elif (pick_calculation == 'only_refracted'
+                and dist_km > crossover_distance_km):
+            new_picks, new_arrivals = _make_append_new_pick_and_arrival(
+                origin=origin, tr=tr, phase='Pn', new_picks=new_picks,
+                new_arrivals=new_arrivals, app_vel=app_vel_Pn,
+                dist_deg=dist_deg, *args, **kwargs)
+            new_picks, new_arrivals = _make_append_new_pick_and_arrival(
+                origin=origin, tr=tr, phase='Sn', new_picks=new_picks,
+                new_arrivals=new_arrivals, app_vel=app_vel_Sn,
+                dist_deg=dist_deg, *args, **kwargs)
+    event.picks = new_picks
+    origin.arrivals = new_arrivals
+    return event, origin
+
+
+def prepare_picks(
+        event, stream, normalize_NSLC=True, std_network_code='NS',
+        std_location_code='00', std_channel_prefix='BH',
+        sta_translation_file="station_code_translation.txt", *args, **kwargs):
     """
     Prepare the picks for being used in EQcorrscan. The following criteria are
     being considered:
@@ -636,6 +820,10 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
     :type picks: list
     :param picks: List of :class:`obspy.core.event.origin.Pick` picks.
     {plotting_kwargs}
+    :type pick_calculation: string
+    :param:
+        one of 'filter_direct', 'only_direct', 'filter_refracted',
+        'only_refracted'
 
     :returns: :class:`obspy.event`
 
@@ -658,9 +846,13 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
         # Don't allow picks without phase_hint
         if len(pick.phase_hint) == 0:
             continue
+        request_station = pick.waveform_id.station_code
+        if normalize_NSLC:
+            if request_station in sta_fortransl_dict:
+                request_station = sta_fortransl_dict.get(request_station)
         # Check which channels are available for pick's station in stream
         avail_comps = [tr.stats.channel[-1] for tr in
-                       stream.select(station=pick.waveform_id.station_code)]
+                       stream.select(station=request_station)]
         if not avail_comps:
             continue
         # Sort available channels so that Z is the last item
@@ -680,10 +872,11 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
             previous_chan_id = pick.waveform_id.channel_code
             pick.waveform_id.network_code = std_network_code
             pick.waveform_id.location_code = std_location_code
-            # Check station code for altnerative code, change to the standard
-            if pick.waveform_id.station_code in sta_fortransl_dict:
-                pick.waveform_id.station_code = sta_fortransl_dict.get(
-                    pick.waveform_id.station_code)
+            # Check station code for alternative code, change to the standard
+            if normalize_NSLC:
+                if pick.waveform_id.station_code in sta_fortransl_dict:
+                    pick.waveform_id.station_code = sta_fortransl_dict.get(
+                        pick.waveform_id.station_code)
             # Check channel codes
             # 1. If pick has no channel information, then put it a preferred
             #    channel (Z>N>E>2>1) for now; otherwise just normalize channel-
@@ -733,6 +926,14 @@ def prepare_picks(event, stream, normalize_NSLC=True, std_network_code='NS',
             # else:
             #    newEvent.picks.append(pick)
     event = newEvent
+
+    # Select a subset of picks based on user choice
+    origin = event.preferred_origin()
+    pick_calculation = kwargs.get('pick_calculation')
+    if pick_calculation is not None:
+        event, origin = compute_picks_from_app_velocity(
+            event, origin, stream=stream, *args, **kwargs)
+
     # Check for duplicate picks. Remove the later one when they are
     # on the same channel
     pickIDs = list()
@@ -1391,6 +1592,10 @@ def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
                          parallel=False, cores=None, output='DISP'):
     """
     """
+    if len(st) == 0:
+        Logger.warning('Stream is empty')
+        return st
+
     # remove response
     if not parallel:
         for tr in st:
@@ -1429,7 +1634,8 @@ def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
                 delayed(_try_remove_responses)
                 (tr, inv.select(station=tr.stats.station), taper_fraction,
                  pre_filt, output) for tr in st)
-        st = Stream([tr for trace_st in streams for tr in trace_st])
+        # st = Stream([tr for trace_st in streams for tr in trace_st])
+        st = Stream([tr for tr in streams])
 
         # params = ((sub_arr, arr_thresh, trig_int, full_peaks)
         #             for sub_arr, arr_thresh in zip(arr, thresh))
@@ -1727,7 +1933,6 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
     4. Set all network codes to NS.
     5. Set all location codes to 00.
     """
-    import numpy as np
     # 0. remove forbidden channels that cause particular problems
     if forbidden_chan_file != "":
         forbidden_chans = load_forbidden_chan_file(file=forbidden_chan_file)
@@ -1811,6 +2016,7 @@ def get_all_relevant_stations(
     for sta in selectedStations:
         if sta in sta_backtrans_dict:
             relevantStations.append(sta_backtrans_dict.get(sta))
+    relevantStations = sorted(set(relevantStations))
     return relevantStations
 
 

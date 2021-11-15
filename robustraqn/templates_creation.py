@@ -67,10 +67,6 @@ def _create_template_objects(
         parallel=False, cores=1, *args, **kwargs):
     """
     """
-    # midlat = 60.0
-    # midlon = 5.0
-    # radius = 20.0
-
     sfiles.sort(key=lambda x: x[-6:])
     tribe = Tribe()
     template_names = []
@@ -84,14 +80,8 @@ def _create_template_objects(
         select, wavname = read_nordic(sfile, return_wavnames=True)
         relevantStations = get_all_relevant_stations(
             selectedStations, sta_translation_file=sta_translation_file)
-
         origin = select[0].preferred_origin()
-        # Check that event within chosen area
-        # if (origin.longitude < midlon-radius and
-        #         origin.longitude > midlon+radius and
-        #         origin.latitude < midlat-radius and
-        #         origin.latitude > midlat+radius):
-        #     continue
+
         # Load picks and normalize
         tempCatalog = filter_picks(select, stations=relevantStations)
         if not tempCatalog:
@@ -391,25 +381,24 @@ if __name__ == "__main__":
     # selectedStations = ['ASK', 'BER', 'NC602']
     # 'SOFL','OSL',
     invFile = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.xml'
-    # invFile='~/Documents2/ArrayWork/Inventory/NorSea_inventory.dataless_seed'
-    # inv = read_inventory(os.path.expanduser(invFile))
     inv = get_updated_inventory_with_noise_models(
         os.path.expanduser(invFile),
-        pdf_dir='~/repos/ispaq/WrapperScripts/PDFs/',
-        outfile='inv.pickle', check_existing=True)
+        pdf_dir='~/repos/ispaq/WrapperScripts/PDFs/', check_existing=True,
+        outfile=os.path.expanduser('~/Documents2/ArrayWork/Inventory/inv.pickle'))
 
-    template_length = 120.0
+    template_length = 40.0
     parallel = True
-    noise_balancing = True
+    noise_balancing = False
     cores = 20
 
     sfiles = glob.glob(os.path.join(seisanREApath, '*L.S??????'))
-    # sfiles = glob.glob(os.path.join(seisanREApath, '24-1338-14L.S201909'))
+    sfiles = glob.glob(os.path.join(seisanREApath, '24-1338-14L.S201909'))
     # sfiles = glob.glob(os.path.join(seisanREApath, '04-1734-46L.S200706'))
     # sfiles = glob.glob(os.path.join(seisanREApath, '24-0101-20L.S200707'))
     # sfiles = glob.glob(os.path.join(seisanREApath, '20-1814-05L.S201804'))
     # sfiles = glob.glob(os.path.join(seisanREApath, '01-0545-55L.S201009'))
     # sfiles = glob.glob(os.path.join(seisanREApath, '30-0033-00L.S200806'))
+    sfiles = glob.glob(os.path.join(seisanREApath, '05-1741-44L.S202101'))
     sfiles.sort(key=lambda x: x[-6:])
 
     highcut = 9.9
@@ -419,9 +408,11 @@ if __name__ == "__main__":
         lowcut = 2.5
 
     # create_template_objects(sfiles, selectedStations, inv,
-    tribe = create_template_objects(
+    tribe, wavenames = create_template_objects(
         sfiles, selectedStations, template_length, lowcut, highcut,
         min_snr=4.0, prepick=0.2, samp_rate=20.0, inv=inv,
         remove_response=True, seisanWAVpath=seisanWAVpath,
         noise_balancing=noise_balancing, min_n_traces=3,
         parallel=parallel, cores=cores, write_out=False, make_pretty_plot=True)
+
+# %%

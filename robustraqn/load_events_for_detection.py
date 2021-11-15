@@ -43,7 +43,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 
-# from eqcorrscan.utils.catalog_utils import filter_picks
+from eqcorrscan.utils.catalog_utils import filter_picks
 
 
 def read_seisan_database(database_path, cores=1):
@@ -51,6 +51,14 @@ def read_seisan_database(database_path, cores=1):
     Reads all S-files in Seisan database, which can be either a folder
     containing all Sfiles or a YYYY/MM/Sfiles-structure.
     Outputs a catalog of events, with
+
+    :type database_path: str
+    :param database_path: path to Seisan-database
+    :type cores: int
+    :param cores: number of cores to use for reading multiple S-files.
+
+    :returns: Catalog of events
+    :rtype: :class:`obspy.core.event.Catalog`
     """
     sfiles = glob.glob(os.path.join(database_path, '*L.S??????'))
     sfiles += glob.glob(os.path.join(database_path, '????', '??', '*.S??????'))
@@ -639,48 +647,38 @@ def get_matching_trace_for_pick(pick, stream):
 
 
 def _make_append_new_pick_and_arrival(
-        origin, tr, phase, new_picks, new_arrivals, app_vel, dist_deg,
+        origin, st, tr, phase, new_picks, new_arrivals, app_vel, dist_deg,
         min_snr=1, pre_pick=0, winlen=2, *args, **kwargs):
     """
     creates a new pick from an apparent velocity and adds it to the picks- and
     arrivals-list.
     """
     tr = tr.copy()
-    if tr.stats.station in [p.waveform_id.station_code for p in new_picks
-                            if p.phase_hint[0] == phase[0]]:
+    if tr.stats.station in [
+        p.waveform_id.station_code for p in new_picks
+        if (p.phase_hint == phase or p.phase_hint == phase[0])]:
         return new_picks, new_arrivals
     dist_km = degrees2kilometers(dist_deg)
-    new_pick = Pick(phase_hint=phase, force_resource_id=True,
-                    time=origin.time + dist_km / app_vel,
-                    waveform_id=WaveformStreamID(seed_string=tr.id),
-                    # tr.stats.network, tr.stats.station,
-                    # tr.stats.location, tr.stats.channel),
-                    evaluation_mode='automatic', onset='emergent',
-                    creation_info=CreationInfo(agency_id='RR', author=''))
-    # if min_snr is not None:
-    #     # compute SNR of pick window
-    #     trim_start = new_pick.time - pre_pick
-    #     trim_end = new_pick.time + winlen
-    #     tr = tr.trim(trim_start, trim_end)
-    #     if len(tr.data) <= 10 or np.isnan(tr.data):
-    #         Logger.warning(f'Insufficient data for {tr.id}')
-    #         return new_picks, new_arrivals
-    #     # Get the amplitude
-    #     try:
-    #         amplitude, period, delay, peak, trough = _max_p2t(
-    #             tr.data, tr.stats.delta, return_peak_trough=True)
-    #     except ValueError as e:
-    #         Logger.error(e)
-    #         Logger.error(f'No amplitude picked for tr {tr.id}')
-    #         return new_picks, new_arrivals
-    #     # Calculate the normalized noise amplitude
-    #     snr = amplitude / np.sqrt(np.mean(np.square(tr.data)))
-    #     if snr < min_snr:
-    #         return new_picks, new_arrivals
-    new_arrival = Arrival(phase=phase, pick_id=new_pick.resource_id,
-                          force_resource_id=True, distance=dist_deg)
-    new_picks.append(new_pick)
-    new_arrivals.append(new_arrival)
+    hor_chans = st.select(id=tr.id[0:-1] + '[NERT12XY]')
+    if (phase[0] == 'S' and
+            (tr.stats.channel[-1] in 'NERT12XY' or len(hor_chans) == 0)):
+        chans = hor_chans or st.select(id=tr.id[0:-1] + 'Z')
+    elif phase[0] == 'P':
+        chans = st.select(id=tr.id[0:-1] + 'Z')
+    else:
+        return new_picks, new_arrivals
+    for chan in chans:
+        new_pick = Pick(
+            phase_hint=phase, force_resource_id=True,
+            time=origin.time + dist_km / app_vel,
+            waveform_id=WaveformStreamID(seed_string=chan.id),
+            evaluation_mode='automatic', onset='emergent',
+            creation_info=CreationInfo(agency_id='RR', author=''))
+        new_arrival = Arrival(phase=phase, pick_id=new_pick.resource_id,
+                            force_resource_id=True, distance=dist_deg)
+        new_picks.append(new_pick)
+        new_arrivals.append(new_arrival)
+
     return new_picks, new_arrivals
 
 
@@ -758,6 +756,7 @@ def compute_picks_from_app_velocity(
             new_picks.append(pick)
 
     # SECOND deal with traces where there's no picks:
+    st = stream
     for tr in stream:
         # found_matching_resp, tr, sel_inv = try_find_matching_response(tr,inv)
         # if not found_matching_resp:
@@ -775,21 +774,21 @@ def compute_picks_from_app_velocity(
         if pick_calculation == 'only_direct':
             # then get theoretical p -pick
             new_picks, new_arrivals = _make_append_new_pick_and_arrival(
-                origin=origin, tr=tr, phase='Pg', new_picks=new_picks,
+                origin=origin, st=st, tr=tr, phase='Pg', new_picks=new_picks,
                 new_arrivals=new_arrivals, app_vel=app_vel_Pg,
                 dist_deg=dist_deg, *args, **kwargs)
             new_picks, new_arrivals = _make_append_new_pick_and_arrival(
-                origin=origin, tr=tr, phase='Sg', new_picks=new_picks,
+                origin=origin, st=st, tr=tr, phase='Sg', new_picks=new_picks,
                 new_arrivals=new_arrivals, app_vel=app_vel_Sg,
                 dist_deg=dist_deg, *args, **kwargs)
         elif (pick_calculation == 'only_refracted'
                 and dist_km > crossover_distance_km):
             new_picks, new_arrivals = _make_append_new_pick_and_arrival(
-                origin=origin, tr=tr, phase='Pn', new_picks=new_picks,
+                origin=origin, st=st, tr=tr, phase='Pn', new_picks=new_picks,
                 new_arrivals=new_arrivals, app_vel=app_vel_Pn,
                 dist_deg=dist_deg, *args, **kwargs)
             new_picks, new_arrivals = _make_append_new_pick_and_arrival(
-                origin=origin, tr=tr, phase='Sn', new_picks=new_picks,
+                origin=origin, st=st, tr=tr, phase='Sn', new_picks=new_picks,
                 new_arrivals=new_arrivals, app_vel=app_vel_Sn,
                 dist_deg=dist_deg, *args, **kwargs)
     event.picks = new_picks

@@ -39,13 +39,13 @@ def _growclust_event_str(event, event_id):
 
     event_str = (
         "{year:4d} {month:02d} {day:02d} {hour:2d} {minute:02d} "
-        "{seconds:06.3f}  {latitude:8.5f} {longitude:10.5f}"
+        "{seconds:02d}.{microseconds:03d}  {latitude:8.5f} {longitude:10.5f}"
         " {depth:7.3f}   {magnitude:5.2f} {x_err:6.3f} {z_err:6.3f} "
         "{time_err:6.3f} {event_id:9d}".format(
             year=origin.time.year, month=origin.time.month,
             day=origin.time.day, hour=origin.time.hour,
             minute=origin.time.minute, seconds=origin.time.second,
-            # microseconds=round(origin.time.microsecond / 1e4),
+            microseconds=round(origin.time.microsecond / 1e3),
             latitude=origin.latitude, longitude=origin.longitude,
             depth=origin.depth / 1000., magnitude=magnitude,
             x_err=x_err, z_err=z_err, time_err=time_error, event_id=event_id))

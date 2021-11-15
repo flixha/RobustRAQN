@@ -110,17 +110,22 @@ def postprocess_picked_events(
         num_sPicks = 0
         num_pPicks_onDetSta = 0
         num_sPicks_onDetSta = 0
-        pick_Stations = []
+        pick_stations = []
         sPick_Stations = []
         pick_and_detect_Stations = []
 
         # Select detection
         detection = None
-        for family in party:
-            for det in family:
+        found_det_fam = False
+        for fam in party:
+            family = fam
+            for det in fam:
                 if det.id == event.resource_id:
                     detection = det
+                    found_det_fam = True
                     break
+            if found_det_fam:
+                break
         # Alternative: (not working now)
         # detection = party[event.resource_id.id[0:28]][0]
         # SHOULD BE: ????
@@ -131,15 +136,28 @@ def postprocess_picked_events(
         # Also differentiates picks based on whether the station was also used
         # for detection or only for picking.
         for pick in event.picks:
-            pick_Station = pick.waveform_id.station_code
-            pick_Chan = pick.waveform_id.channel_code
-            if pick_Station not in pick_Stations:
-                pick_Stations.append(pick_Station)
+            pick_net = pick.waveform_id.network_code
+            pick_station = pick.waveform_id.station_code
+            pick_chan = pick.waveform_id.channel_code
+            if pick_station not in pick_stations:
+                pick_stations.append(pick_station)
             # Pick-correction not required any more!
+            # May need to adjust pick's phase hint for Pg / Pn / Sg / Sn
+            matching_picks = [
+                p for p in family.template.event.picks
+                if (p.waveform_id.network_code == pick_net and
+                    p.waveform_id.station_code == pick_station and
+                    p.waveform_id.channel_code[0:2] == pick_chan[0:2] and
+                    p.phase_hint[0] == pick.phase_hint[0])]
+            matching_picks = sorted(matching_picks, key=lambda p: p.time)
+            if matching_picks:
+                if len(matching_picks[0].phase_hint) > 1:
+                    pick.phase_hint = matching_picks[0].phase_hint
+
             # pick.time = pick.time + 0.2
-            if pick.phase_hint == 'P':
+            if pick.phase_hint[0] == 'P':
                 num_pPicks += 1
-            elif pick.phase_hint == 'S':
+            elif pick.phase_hint[0] == 'S':
                 sPick_Station = pick.waveform_id.station_code
                 if sPick_Station not in sPick_Stations:
                     num_sPicks += 1
@@ -147,12 +165,12 @@ def postprocess_picked_events(
             # Count the number of picks on stations used
             # during match-filter detection
 
-            if (pick_Station, pick_Chan) in detection.chans:
-                if pick_Station not in pick_and_detect_Stations:
-                    pick_and_detect_Stations.append(pick_Station)
-                if pick.phase_hint == 'P':
+            if (pick_station, pick_chan) in detection.chans:
+                if pick_station not in pick_and_detect_Stations:
+                    pick_and_detect_Stations.append(pick_station)
+                if pick.phase_hint[0] == 'P':
                     num_pPicks_onDetSta += 1
-                elif pick.phase_hint == 'S':
+                elif pick.phase_hint[0] == 'S':
                     num_sPicks_onDetSta += 1
             # Put the original (non-normalized) channel information back into
             # the pick's stats.
@@ -164,7 +182,7 @@ def postprocess_picked_events(
             elif pick_chan_comp == 'E':
                 pick_chan_comp = '[' + pick_chan_comp + '2]'
             reqChan = '??' + pick_chan_comp
-            reqStream = original_stats_stream.select(station=pick_Station,
+            reqStream = original_stats_stream.select(station=pick_station,
                                                      channel=reqChan)
             if len(reqStream) == 0:
                 continue
@@ -182,7 +200,7 @@ def postprocess_picked_events(
                 'Could not find template %s for related detection, did you '
                 'provide the correct tribe?', detection.template_name)
         orig = Origin()
-        orig.time = event.picks[0].time
+        orig.time = min([p.time for p in event.picks])
         orig.longitude = origin_longitude or template_orig.longitude
         orig.latitude = origin_latitude or template_orig.latitude
         orig.depth = origin_depth or template_orig.depth
@@ -199,12 +217,12 @@ def postprocess_picked_events(
             text='EQC_detection_id: ' + detection.id,
             creation_info=CreationInfo(agency='eqcorrscan',
                                        author=getpass.getuser())))
-        # if (len(pick_Stations) >= 3\
+        # if (len(pick_stations) >= 3\
         #     and num_pPicks_onDetSta >= 2\
         #     and num_pPicks_onDetSta + num_sPicks_onDetSta >= 6)\
-        #     or (len(pick_Stations) >= 4\
+        #     or (len(pick_stations) >= 4\
         #     and num_sPicks_onDetSta >= 5):
-        if ((len(pick_Stations) >= min_pick_stations) and (
+        if ((len(pick_stations) >= min_pick_stations) and (
                 num_pPicks_onDetSta + num_sPicks_onDetSta >=
                 min_picks_on_detection_stations)):
             export_catalog += event

@@ -315,8 +315,9 @@ def create_template_objects(
                 *args, **kwargs)
             for sfile in sfiles)
 
-        tribes = [r[0] for r in res_out if len(r[0]) > 0]
-        wavnames = [r[1][0] for r in res_out if len(r[0]) > 0]
+        tribes = [r[0] for r in res_out if r is not None and len(r[0]) > 0]
+        wavnames = [r[1][0] for r in res_out
+                    if r is not None and len(r[0]) > 0]
         tribe = Tribe(templates=[tri[0] for tri in tribes if len(tri) > 0])
         # except IndexError:
         #    tribe = Tribe()

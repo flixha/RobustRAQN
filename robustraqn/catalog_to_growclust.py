@@ -1,6 +1,8 @@
 
 from eqcorrscan.utils.catalog_to_dd import _generate_event_id_mapper
 import logging
+
+from obspy.geodetics.base import degrees2kilometers
 Logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
@@ -32,9 +34,10 @@ def _growclust_event_str(event, event_id):
         time_error = 0.0
 
     z_err = (origin.depth_errors.uncertainty or 0.0) / 1000.
-    # Note that these should be in degrees, but GeoNet uses meters.
-    x_err = (origin.longitude_errors.uncertainty or 0.0) / 1000.
-    y_err = (origin.latitude_errors.uncertainty or 0.0) / 1000.
+    # Errors are in degrees
+    x_err = degrees2kilometers(origin.longitude_errors.uncertainty or 0.0)
+    y_err = degrees2kilometers(origin.latitude_errors.uncertainty or 0.0)
+    x_err = (x_err + y_err) / 2
     x_err = max(x_err, y_err)
 
     event_str = (

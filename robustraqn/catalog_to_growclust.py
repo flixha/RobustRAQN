@@ -1,8 +1,11 @@
 
-from eqcorrscan.utils.catalog_to_dd import _generate_event_id_mapper
-import logging
+import pandas as pd
 
-from obspy.geodetics.base import degrees2kilometers
+from obspy.core import UTCDateTime
+from obspy.geodetics.base import degrees2kilometers, kilometers2degrees
+from eqcorrscan.utils.catalog_to_dd import _generate_event_id_mapper
+
+import logging
 Logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
@@ -117,3 +120,68 @@ def write_station(inventory, use_elevation=False, filename="stlist.txt"):
             station_strings.append(formatter.format(**parts))
     with open(filename, "w") as f:
         f.write("\n".join(station_strings))
+
+
+def read_gc_cat_to_df(gc_cat_file):
+    """
+    Read Growclust-output catalog into a dataframe.
+    """
+    gc_header_list = [
+        'year', 'month', 'day', 'hour', 'minute', 'second', 'evid', 'latR',
+        'lonR', 'depR', 'mag', 'qID', 'cID', 'nbranch', 'qnpair', 'qndiffP',
+        'qndiffS', 'rmsP', 'rmsS', 'eh', 'ez', 'et', 'latC', 'lonC', 'depC']
+
+    gc_df = pd.read_csv(gc_cat_file, delim_whitespace=True,
+                        names=gc_header_list)
+    return gc_df
+
+
+def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
+    """
+    """
+    cat_backup = cat.copy()
+    gc_df = read_gc_cat_to_df(gc_cat_file)
+    gc_df['timestamp'] = pd.to_datetime(
+        gc_df[['year', 'month', 'day', 'hour', 'minute', 'second']])
+    gc_df['datetime'] = pd.to_datetime(gc_df.timestamp)
+    gc_df['utcdatetime'] = [UTCDateTime(gc_df.datetime.iloc[nr])
+                            for nr in range(len(gc_df))]
+
+    # put back arrivals
+    for event, event_backup in zip(cat, cat_backup):
+        event.preferred_origin().arrivals = event_backup.preferred_origin(
+            ).arrivals
+
+    # Code to sort in the new locations from growclust into catalog
+    for event in cat:
+        gc_orig = event.preferred_origin().copy()
+        lower_dtime = (gc_orig.time - max_diff_seconds)._get_datetime()
+        upper_dtime = (gc_orig.time + max_diff_seconds)._get_datetime()
+
+        tmp_cat_df = gc_df.loc[
+            (gc_df.datetime > lower_dtime) & (gc_df.datetime < upper_dtime)]
+        if len(tmp_cat_df) > 0:
+            # Only change relocated events
+            if (tmp_cat_df.eh.iloc[0] != -1 and
+                    tmp_cat_df.ez.iloc[0] != -1 and
+                    tmp_cat_df.et.iloc[0] != -1):
+                gc_orig.latitude = tmp_cat_df.latR.iloc[0]
+                gc_orig.longitude = tmp_cat_df.lonR.iloc[0]
+                gc_orig.depth = tmp_cat_df.depR.iloc[0] * 1000
+                gc_orig.time = tmp_cat_df.datetime.iloc[0]
+                gc_orig.latitude_errors.uncertainty = kilometers2degrees(
+                    tmp_cat_df.eh.iloc[0])
+                gc_orig.longitude_errors.uncertainty = kilometers2degrees(
+                    tmp_cat_df.eh.iloc[0])
+                gc_orig.depth_errors.uncertainty = (tmp_cat_df.ez.iloc[0])
+                gc_orig.time_errors.uncertainty = (tmp_cat_df.et.iloc[0])
+                Logger.info(
+                    'Added origin solution from Growclust for event %s',
+                    event.short_str())
+                # TODO: update arrivals list
+                # TODO: add growclust clustering and RMS output to origin
+                event.origins.append(gc_orig)
+                event.preferred_origin_id = gc_orig.resource_id
+    return cat
+
+

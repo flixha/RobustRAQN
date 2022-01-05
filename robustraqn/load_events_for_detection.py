@@ -1691,7 +1691,7 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
         # IF reponse isn't found, then adjust amplitude to something
         # similar to the properly corrected traces
         if not found_matching_resp:
-            tr.data = tr.data / 1e7
+            tr.data = tr.data / 1e6
 
     # Set station coordinates
     # initialize
@@ -1718,7 +1718,7 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
     except Exception as e:
         Logger.warning('Could not set all station coordinates for %s', tr.id)
     # Gain all traces to avoid a float16-zero error
-    # basically converts from m to nm (for displacement)
+    # basically converts from m to um (for displacement) - nm
     tr.data = tr.data * 1e6
     # Now convert back to 32bit-double to save memory ! (?)
     # if np.dtype(tr.data[0]) == 'float64':

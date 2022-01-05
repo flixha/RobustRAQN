@@ -882,12 +882,22 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
                     for ispaq_suffix in ispaq_suffixes:
                         filename = (ispaq_prefix + '_' + network + '.'
                                     + station + '.x.x_'
-                                    + str(year) + '-??-??_'
-                                    + str(year) + '-??-??_'
+                                    + '????-??-??_????-??-??_'
                                     + ispaq_suffix + '.' + file_type)
                         files = glob.glob(os.path.join(os.path.expanduser(
                             folder), filename))
+                        # Allow filenames to cover several years - check
+                        # those years are within requested range.
+                        relevant_files = []
                         for file in files:
+                            file_startyear = int(file.split('.')[-2].split(
+                                '_')[1].split('-')[0])
+                            file_endyear = int(file.split('.')[-2].split(
+                                '_')[2].split('-')[0])
+                            if (file_startyear <= startyear
+                                    and file_endyear >= endyear):
+                                relevant_files.append(file)
+                        for file in relevant_files:
                             if file_type == 'csv':
                                 in_df = pd.read_csv(file)
                             elif file_type == 'parquet':

@@ -6,6 +6,7 @@ from multiprocessing import Pool, cpu_count
 from multiprocessing.pool import ThreadPool
 
 import numpy as np
+import difflib
 import pandas as pd
 # import numexpr as ne
 
@@ -199,6 +200,20 @@ def postprocess_picked_events(
             Logger.error(
                 'Could not find template %s for related detection, did you '
                 'provide the correct tribe?', detection.template_name)
+            template_names = [templ.name for templ in tribe]
+            template_name_match = difflib.get_close_matches(
+                detection.template_name, template_names)
+            if len(template_name_match) >= 1:
+                template_name_match = template_name_match[0]
+                template_orig = tribe[
+                    template_name_match].event.preferred_origin()
+                Logger.warning(
+                    'Found template with name %s, using instead of %s',
+                    template_name_match, detection.template_name)
+            else:
+                Logger.warning('Aborting picking for detection with template '
+                               + '%s', detection.template_name)
+                continue
         orig = Origin()
         orig.time = min([p.time for p in event.picks])
         orig.longitude = origin_longitude or template_orig.longitude

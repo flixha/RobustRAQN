@@ -119,7 +119,7 @@ def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
         origin.time + template_length * 2)
     bulk_request = [("??", s, "*", "?H?", t1, t2) for s in selectedStations]
     for client in clients:
-        Logger.info('Requestion waveforms from client %s', client)
+        Logger.info('Requesting waveforms from client %s', client)
         add_st = client.get_waveforms_bulk(bulk_request)
         Logger.info('Received %s traces from the client.', len(add_st))
         st += add_st
@@ -1673,7 +1673,7 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
         if not found_matching_resp:
             Logger.warning('Finally cannot remove reponse for ' + str(tr) +
                            ' - no match found')
-            # Logger.warning(e)
+            Logger.warning(e)
         else:
             # TODO: what if trace's location code is empty, and there are
             # multiple instruments at one station that both match the trace in
@@ -1687,7 +1687,7 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
                 found_matching_resp = False
                 Logger.warning('Finally cannot remove reponse for ' + str(tr) +
                                ' - no match found')
-                # Logger.warning(e)
+                Logger.warning(e)
         # IF reponse isn't found, then adjust amplitude to something
         # similar to the properly corrected traces
         if not found_matching_resp:

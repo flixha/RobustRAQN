@@ -17,7 +17,7 @@ import statistics as stats
 
 from obspy.core.event import Catalog, Event, Origin
 from obspy.core.utcdatetime import UTCDateTime
-from obspy import read_inventory, Inventory
+from obspy import read_inventory, Inventory, Stream
 from obspy.clients.filesystem.sds import Client
 
 from eqcorrscan.core.match_filter import (Tribe, Party)
@@ -48,7 +48,7 @@ EQCS_logger.setLevel(logging.ERROR)
 
 # @processify
 def pick_events_for_day(
-        date, det_folder, templatePath, ispaq, client, tribe,
+        date, det_folder, templatePath, ispaq, clients, tribe,
         short_tribe=Tribe(), only_request_detection_stations=True,
         relevantStations=[], sta_translation_file='',
         noise_balancing=False, remove_response=False, inv=Inventory(),
@@ -94,6 +94,7 @@ def pick_events_for_day(
                 str(len(dayparty)), current_day_str)
 
     # Choose only stations that are relevant for any detection on that day.
+    requiredStations = relevantStations
     if only_request_detection_stations:
         requiredStations = set([tr.stats.station for fam in dayparty
                                 for tr in fam.template.st])
@@ -130,8 +131,10 @@ def pick_events_for_day(
 
     # Read in continuous data and prepare for processing
     # day_st = client.get_waveforms_bulk(bulk)
-    day_st = get_waveforms_bulk(client, bulk, parallel=parallel,
-                                cores=cores)
+    day_st = Stream()
+    for client in clients:
+        day_st += get_waveforms_bulk(client, bulk, parallel=parallel,
+                                     cores=cores)
     Logger.info(
         'Successfully read in waveforms for bulk request of %s NSLC-'
         + 'objects for %s - %s.', len(bulk), str(starttime)[0:19],
@@ -333,7 +336,7 @@ if __name__ == "__main__":
                 file_type = 'parquet')
         pick_events_for_day(
             date=date, det_folder=det_folder, templatePath=templatePath,
-            ispaq=ispaq, client=client, relevantStations=relevantStations,
+            ispaq=ispaq, clients=[client], relevantStations=relevantStations,
             only_request_detection_stations=only_request_detection_stations,
             noise_balancing=noise_balancing, remove_response=remove_response,
             inv=inv, parallel=parallel, cores=cores,

@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 from importlib import reload
 import statistics as stats
+import difflib
 
 from obspy.core.event import Catalog, Event, Origin
 from obspy.core.utcdatetime import UTCDateTime
@@ -91,6 +92,58 @@ def pick_events_for_day(
                     + 'families on %s', str(len(dayparty)),
                     current_day_str)
         return
+
+    # Replace template in party if there's an updated template
+    if len(tribe) > 0:
+        for family in dayparty:
+            try:
+                pick_template = tribe.select(family.template.name)
+            except IndexError:
+                Logger.error(
+                    'Could not find picking-template %s for detection family',
+                    family.template.name)
+                template_names = [templ.name for templ in tribe]
+                template_name_match = difflib.get_close_matches(
+                    family.template.name, template_names)
+                if len(template_name_match) >= 1:
+                    template_name_match = template_name_match[0]
+                else:
+                    Logger.warning(
+                        'Did not find corresponding picking template for %s, '
+                        + 'using original detection template insteadfor %s')
+                    continue
+                Logger.warning(
+                    'Found template with name %s, using instead of %s',
+                    template_name_match, family.template.name)
+                pick_template = tribe.select(template_name_match)
+            detect_chans = set([(tr.stats.station, tr.stats.channel)
+                                for tr in family.template.st])
+            pick_chans = set([(tr.stats.station, tr.stats.channel)
+                              for tr in pick_template.st])
+            for detection in family:
+                new_pick_channels = list(pick_chans.difference(detect_chans))
+                detection.chans = detection.chans + new_pick_channels
+                # Find time diff between template and detection to update 
+                # detection pick times:
+                time_diffs = []
+                for det_pick in detection.event.picks:
+                    templ_picks = [
+                        pick for pick in pick_template.event.picks
+                        if pick.waveform_id.id == det_pick.waveform_id.id]
+                    if len(templ_picks) == 1:
+                        time_diffs.append(det_pick.time - templ_picks[0].time)
+                # for det_tr in family.template.st:
+                #     pick_tr = pick_template.st.select(id=det_tr.id)
+                #     if len(pick_tr) == 1:
+                #         time_diffs.append(det_tr.stats.starttime -
+                #                           pick_tr[0].stats.starttime)
+                # Use mean time diff in case any picks were corrected slightly
+                time_diff = np.mean(time_diffs)
+                detection.event = pick_template.event.copy()
+                for pick in detection.event.picks:
+                    pick.time = pick.time + time_diff
+            family.template = pick_template
+
     Logger.info('Starting to pick events with party of %s families for %s',
                 str(len(dayparty)), current_day_str)
 

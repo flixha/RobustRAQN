@@ -49,7 +49,8 @@ EQCS_logger.setLevel(logging.ERROR)
 # @processify
 def pick_events_for_day(
         date, det_folder, templatePath, ispaq, clients, tribe,
-        short_tribe=Tribe(), only_request_detection_stations=True,
+        short_tribe=Tribe(), det_tribe=Tribe(),
+        only_request_detection_stations=True,
         relevantStations=[], sta_translation_file='',
         noise_balancing=False, remove_response=False, inv=Inventory(),
         parallel=False, cores=None, check_array_misdetections=False,
@@ -235,11 +236,11 @@ def pick_events_for_day(
 
     export_catalog = postprocess_picked_events(
         picked_catalog, dayparty, tribe, original_stats_stream,
-        write_sfiles=True, sfile_path=sfile_path, operator=operator,
-        all_channels_for_stations=relevantStations, extract_len=240,
-        write_waveforms=True, archives=archives, request_fdsn=request_fdsn,
-        template_path=templatePath, min_pick_stations=8,
-        min_picks_on_detection_stations=3)
+        det_tribe=det_tribe, write_sfiles=True, sfile_path=sfile_path,
+        operator=operator, all_channels_for_stations=relevantStations,
+        extract_len=240, write_waveforms=True, archives=archives,
+        request_fdsn=request_fdsn, template_path=templatePath,
+        min_pick_stations=8, min_picks_on_detection_stations=3)
 
     return export_catalog
 

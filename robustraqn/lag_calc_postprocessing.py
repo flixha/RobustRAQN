@@ -5,6 +5,7 @@ import getpass
 from multiprocessing import Pool, cpu_count
 from multiprocessing.pool import ThreadPool
 
+
 import numpy as np
 import difflib
 import pandas as pd
@@ -22,6 +23,7 @@ from obspy import read as obspyread
 from obspy import UTCDateTime
 from obspy.io.mseed import InternalMSEEDError
 from obspy.clients.fdsn import RoutingClient
+from eqcorrscan.core.match_filter.tribe import Tribe
 from eqcorrscan.utils.correlate import pool_boy
 from eqcorrscan.core.match_filter.party import Party
 # from eqcorrscan.utils.clustering import extract_detections
@@ -38,11 +40,12 @@ Logger = logging.getLogger(__name__)
 
 def postprocess_picked_events(
         picked_catalog, party, tribe, original_stats_stream,
-        write_sfiles=False, sfile_path='Sfiles', operator='feha',
-        all_channels_for_stations=[], extract_len=300, min_pick_stations=4,
-        min_picks_on_detection_stations=6, write_waveforms=False,
-        archives=list(), request_fdsn=False, template_path=None,
-        origin_longitude=None, origin_latitude=None, origin_depth=None):
+        det_tribe=Tribe(), write_sfiles=False, sfile_path='Sfiles',
+        operator='feha', all_channels_for_stations=[], extract_len=300,
+        min_pick_stations=4, min_picks_on_detection_stations=6,
+        write_waveforms=False, archives=list(), request_fdsn=False,
+        template_path=None, origin_longitude=None, origin_latitude=None,
+        origin_depth=None):
     """
     :type picked_catalog: :class:`obspy.core.Catalog`
     :param picked_catalog: Catalog of events picked, e.g., with lag_calc.
@@ -257,7 +260,7 @@ def postprocess_picked_events(
         wavefiles = extract_stream_for_picked_events(
             export_catalog, party, template_path, archives,
             request_fdsn=request_fdsn, wav_out_dir=sfile_path,
-            extract_len=extract_len,
+            extract_len=extract_len, det_tribe=det_tribe,
             all_chans_for_stations=all_channels_for_stations)
 
     # Create Seisan-style Sfiles for the whole day
@@ -288,8 +291,9 @@ def postprocess_picked_events(
 
 
 def extract_stream_for_picked_events(
-        catalog, party, template_path, archives, request_fdsn=False,
-        wav_out_dir='.', extract_len=300, all_chans_for_stations=[]):
+        catalog, party, template_path, archives, det_tribe=Tribe(),
+        request_fdsn=False, wav_out_dir='.', extract_len=300,
+        all_chans_for_stations=[]):
     """
     Extracts a stream object with all channels from the SDS-archive.
     Allows the input of multiple archives as a list
@@ -300,8 +304,34 @@ def extract_stream_for_picked_events(
             for detection in family:
                 if detection.id == event.resource_id:
                     detection_list.append(detection)
-    templ_tuple = [(family.template, obspyread(os.path.join(
-        template_path, family.template.name + '.mseed')))]
+
+    # Find stream of detection template - can be loaded from tribe or files
+    if len(det_tribe) > 0:
+        try:
+            templ_tuple = [
+                (family.template, det_tribe.select(family.template.name).st)]
+        except (AttributeError, IndexError):
+            Logger.error('Could not find template %s for related detection',
+                         family.template.name)
+            template_names = [templ.name for templ in det_tribe]
+            template_name_match = difflib.get_close_matches(
+                family.template.name, template_names)
+            if len(template_name_match) >= 1:
+                template_name_match = template_name_match[0]
+            Logger.warning(
+                'Found template with name %s, using instead of %s',
+                template_name_match, family.template.name)
+            templ_tuple = [
+                (family.template, det_tribe.select(template_name_match).st)]
+    else:
+        try:
+            templ_tuple = [(family.template, obspyread(os.path.join(
+                template_path, family.template.name + '.mseed')))]
+        except FileNotFoundError:
+            Logger.error(
+                'Cannot access stream for detection template with name %s, ' +
+                'during picking', family.template.name)
+            return
 
     additional_stachans = list()
     for sta in all_chans_for_stations:

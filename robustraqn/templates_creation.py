@@ -106,7 +106,7 @@ def _create_template_objects(
         if remove_response:
             wavef = try_remove_responses(
                 wavef, inv, taper_fraction=0.15, pre_filt=[0.01, 0.05, 45, 50],
-                parallel=parallel, cores=cores)
+                parallel=parallel, cores=cores, **kwargs)
             for tr in wavef:
                 try:
                     tr.stats.distance = gps2dist_azimuth(
@@ -222,6 +222,28 @@ def _create_template_objects(
     # group_streams = [st_tuple[0] for st_tuple in groups[0]]
     # stack = linstack(streams=group_streams)
     # PWSstack = PWS_stack(streams=group_streams)
+
+
+def reset_preferred_magnitude(tribe, mag_preference_priority=[('ML', 'BER')]):
+    """
+    Function that resets the preferred_magnitude to link to a user-chosen
+    magnitude type and agency.
+
+    :type tribe: eqcorrscan.
+    :param tribe: tribe for which preferred magnitudes should be fixed
+    :type mag_preference_priority: list of tuples
+    :param mag_preference_priority:
+        magnitude type and agency id e.g., [('ML', 'BER')]. Any one value can
+        also be None.
+    """
+    for templ in tribe:
+        #templ.event.preferred_magnitude
+        for mag_pref in reversed(mag_preference_priority):
+            for mag in templ.event.magnitudes:
+                if ((mag_pref[0] == mag.magnitude_type or None) and
+                        (mag_pref[1] == mag.creation_info.agency_id or None)):
+                    templ.event.preferred_magnitude_id = mag.resource_id
+    return tribe
 
 
 def create_template_objects(
@@ -346,6 +368,7 @@ def create_template_objects(
             *args, **kwargs)
 
     label = ''
+
     if noise_balancing:
         label = label + 'balNoise_'
     if write_out:

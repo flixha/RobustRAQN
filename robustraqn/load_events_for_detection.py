@@ -46,7 +46,9 @@ logging.basicConfig(
 from eqcorrscan.utils.catalog_utils import filter_picks
 
 
-def read_seisan_database(database_path, cores=1):
+def read_seisan_database(database_path, cores=1, nordic_format='UKN',
+                         starttime=None, endtime=None,
+                         check_resource_ids=True):
     """
     Reads all S-files in Seisan database, which can be either a folder
     containing all Sfiles or a YYYY/MM/Sfiles-structure.
@@ -56,21 +58,48 @@ def read_seisan_database(database_path, cores=1):
     :param database_path: path to Seisan-database
     :type cores: int
     :param cores: number of cores to use for reading multiple S-files.
+    :type nordic_format: str
+    :param nordic_format:
+        'UKN', 'NEW', or 'OLD; specifies the version of the Nordic S-files.
+    :type starttime: obspy.UTCDatetime or None
+    :param starttime:
+        Sets a lower limit for files to be read in. If None, reads all files
+        older than endtime.
+    :type endtime: obspy.UTCDatetime or None
+    :param endtime:
+        Sets an upper limit for files to be read in. If None, reads all files
+        younger than starttime.
 
     :returns: Catalog of events
     :rtype: :class:`obspy.core.event.Catalog`
     """
-    sfiles = glob.glob(os.path.join(database_path, '*L.S??????'))
-    sfiles += glob.glob(os.path.join(database_path, '????', '??', '*.S??????'))
-    sfiles.sort(key=lambda x: x[-6:])
+    gsfiles = glob.glob(os.path.join(database_path, '*.S??????'))
+    gsfiles += glob.glob(os.path.join(database_path, '????', '??', '*.S??????'))
+    gsfiles.sort(key=lambda x: x[-6:])
+    sfiles = []
+    if starttime or endtime:
+        for sfile in gsfiles:
+            sfile_name = os.path.normpath(sfile).split(os.path.sep)[-1]
+            # Check if seconds are out of range for UTCDatetime / strftime
+            # functions
+            if sfile_name[8:10] == '60':
+                sfile_name = sfile_name[0:8] + '59' + sfile_name[10:]
+            sfile_time = UTCDateTime(sfile_name[13:] + sfile_name[0:10],
+                                     strict=False)
+            if ((not starttime or sfile_time >= starttime) and 
+                    (not endtime or sfile_time <= endtime)):
+                sfiles.append(sfile)
+    else:
+        sfiles = gsfiles
 
-    cats = Parallel(n_jobs=cores)(delayed(read_nordic)(sfile)
-                                  for sfile in sfiles)
+    cats = Parallel(n_jobs=cores)(delayed(read_nordic)(
+        sfile, nordic_format=nordic_format) for sfile in sfiles)
     cat = Catalog([cat[0] for cat in cats])
     for event, sfile in zip(cat, sfiles):
         extra = {'sfile_name': {'value': sfile}}
         event.extra = extra
-        attach_all_resource_ids(event)
+        if check_resource_ids:
+            attach_all_resource_ids(event)
     # attach_all_resource_ids(cat)
     # validate_catalog(cat)
         # event.comments.append(Comment(text='Sfile-name: ' + sfile))
@@ -930,6 +959,7 @@ def prepare_picks(
     origin = event.preferred_origin()
     pick_calculation = kwargs.get('pick_calculation')
     if pick_calculation is not None:
+        Logger.info('Picks will be calculated for %s', str(pick_calculation))
         event, origin = compute_picks_from_app_velocity(
             event, origin, stream=stream, *args, **kwargs)
 
@@ -1588,7 +1618,8 @@ def check_normalize_sampling_rate(
 
 
 def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
-                         parallel=False, cores=None, output='DISP'):
+                         parallel=False, cores=None, output='DISP',
+                         gain_traces=True, **kwargs):
     """
     """
     if len(st) == 0:
@@ -1599,7 +1630,8 @@ def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
     if not parallel:
         for tr in st:
             tr = _try_remove_responses(tr, inv, taper_fraction=taper_fraction,
-                                       pre_filt=pre_filt, output=output)
+                                       pre_filt=pre_filt, output=output,
+                                       gain_traces=gain_traces)
     else:
         if cores is None:
             cores = min(len(st), cpu_count())
@@ -1632,7 +1664,7 @@ def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
             streams = Parallel(n_jobs=cores)(
                 delayed(_try_remove_responses)
                 (tr, inv.select(station=tr.stats.station), taper_fraction,
-                 pre_filt, output) for tr in st)
+                 pre_filt, output, gain_traces) for tr in st)
         # st = Stream([tr for trace_st in streams for tr in trace_st])
         st = Stream([tr for tr in streams])
 
@@ -1652,7 +1684,7 @@ def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
 
 
 def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
-                          output='DISP'):
+                          output='DISP', gain_traces=True):
     """
     Internal function that tries to remove the response from a trace
     """
@@ -1719,7 +1751,8 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
         Logger.warning('Could not set all station coordinates for %s', tr.id)
     # Gain all traces to avoid a float16-zero error
     # basically converts from m to um (for displacement) - nm
-    tr.data = tr.data * 1e6
+    if gain_traces:
+        tr.data = tr.data * 1e6
     # Now convert back to 32bit-double to save memory ! (?)
     # if np.dtype(tr.data[0]) == 'float64':
     tr.data = np.float32(tr.data)

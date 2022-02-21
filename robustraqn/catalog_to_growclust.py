@@ -1,7 +1,11 @@
 
+from defusedxml import NotSupportedError
 import pandas as pd
+import csv
 
 from obspy.core import UTCDateTime
+from obspy.core.event import (
+    Origin, OriginUncertainty, CreationInfo, QuantityError, OriginQuality)
 from obspy.geodetics.base import degrees2kilometers, kilometers2degrees
 from eqcorrscan.utils.catalog_to_dd import _generate_event_id_mapper
 
@@ -12,7 +16,13 @@ logging.basicConfig(
     format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 
 
-def _growclust_event_str(event, event_id):
+GC_HEADER_LIST = [
+        'year', 'month', 'day', 'hour', 'minute', 'second', 'evid', 'latR',
+        'lonR', 'depR', 'mag', 'qID', 'cID', 'nbranch', 'qnpair', 'qndiffP',
+        'qndiffS', 'rmsP', 'rmsS', 'eh', 'ez', 'et', 'latC', 'lonC', 'depC']
+
+
+def _growclust_event_str(event, event_id, no_magnitude_value=-2.0):
     """
     Make an event.dat style string for an event.
 
@@ -29,7 +39,7 @@ def _growclust_event_str(event, event_id):
         magnitude = (event.preferred_magnitude() or event.magnitudes[0]).mag
     except (IndexError, AttributeError):
         Logger.warning("No magnitude")
-        magnitude = 0.0
+        magnitude = no_magnitude_value
     try:
         time_error = origin.quality['standard_error'] or 0.0
     except (TypeError, AttributeError):
@@ -122,14 +132,21 @@ def write_station(inventory, use_elevation=False, filename="stlist.txt"):
         f.write("\n".join(station_strings))
 
 
-def read_gc_cat_to_df(gc_cat_file):
+def read_gc_cat_to_df(gc_cat_file, gc_header_list=GC_HEADER_LIST):
     """
     Read Growclust-output catalog into a dataframe.
     """
-    gc_header_list = [
-        'year', 'month', 'day', 'hour', 'minute', 'second', 'evid', 'latR',
-        'lonR', 'depR', 'mag', 'qID', 'cID', 'nbranch', 'qnpair', 'qndiffP',
-        'qndiffS', 'rmsP', 'rmsS', 'eh', 'ez', 'et', 'latC', 'lonC', 'depC']
+    with open(gc_cat_file) as f:
+        reader = csv.reader(f, delimiter=' ', skipinitialspace=True)
+        first_row = next(reader)
+        num_cols = len(first_row)
+    if num_cols == 25:
+        pass
+    elif num_cols == 26:  # Custom Growclust outputs origin time change
+        gc_header_list.append('timeC')
+    if num_cols != len(gc_header_list):
+        raise ValueError('Number of column headers for growclust cat-file does'
+                         + ' not match number of columns in file')
 
     gc_df = pd.read_csv(gc_cat_file, delim_whitespace=True,
                         names=gc_header_list)
@@ -154,9 +171,9 @@ def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
 
     # Code to sort in the new locations from growclust into catalog
     for event in cat:
-        gc_orig = event.preferred_origin().copy()
-        lower_dtime = (gc_orig.time - max_diff_seconds)._get_datetime()
-        upper_dtime = (gc_orig.time + max_diff_seconds)._get_datetime()
+        cat_orig = event.preferred_origin().copy()
+        lower_dtime = (cat_orig.time - max_diff_seconds)._get_datetime()
+        upper_dtime = (cat_orig.time + max_diff_seconds)._get_datetime()
 
         tmp_cat_df = gc_df.loc[
             (gc_df.datetime > lower_dtime) & (gc_df.datetime < upper_dtime)]
@@ -165,16 +182,36 @@ def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
             if (tmp_cat_df.eh.iloc[0] != -1 and
                     tmp_cat_df.ez.iloc[0] != -1 and
                     tmp_cat_df.et.iloc[0] != -1):
-                gc_orig.latitude = tmp_cat_df.latR.iloc[0]
-                gc_orig.longitude = tmp_cat_df.lonR.iloc[0]
-                gc_orig.depth = tmp_cat_df.depR.iloc[0] * 1000
-                gc_orig.time = tmp_cat_df.datetime.iloc[0]
-                gc_orig.latitude_errors.uncertainty = kilometers2degrees(
-                    tmp_cat_df.eh.iloc[0])
-                gc_orig.longitude_errors.uncertainty = kilometers2degrees(
-                    tmp_cat_df.eh.iloc[0])
-                gc_orig.depth_errors.uncertainty = (tmp_cat_df.ez.iloc[0])
-                gc_orig.time_errors.uncertainty = (tmp_cat_df.et.iloc[0])
+                # gc_orig.latitude = tmp_cat_df.latR.iloc[0]
+                # gc_orig.longitude = tmp_cat_df.lonR.iloc[0]
+                # gc_orig.depth = tmp_cat_df.depR.iloc[0] * 1000
+                # gc_orig.time = tmp_cat_df.datetime.iloc[0]
+                # gc_orig.latitude_errors.uncertainty = kilometers2degrees(
+                #     tmp_cat_df.eh.iloc[0])
+                # gc_orig.longitude_errors.uncertainty = kilometers2degrees(
+                #     tmp_cat_df.eh.iloc[0])
+                # gc_orig.depth_errors.uncertainty = (tmp_cat_df.ez.iloc[0])
+                # gc_orig.time_errors.uncertainty = (tmp_cat_df.et.iloc[0])
+
+                # OriginQuality(used_station_count=)
+                # OriginUncertainty()
+                gc_orig = Origin(
+                    force_resource_id=True,
+                    latitude=tmp_cat_df.latR.iloc[0],
+                    latitude_errors=QuantityError(
+                        uncertainty=kilometers2degrees(tmp_cat_df.eh.iloc[0])),
+                    longitude=tmp_cat_df.lonR.iloc[0],
+                    longitude_errors=QuantityError(
+                        uncertainty=kilometers2degrees(tmp_cat_df.eh.iloc[0])),
+                    depth=tmp_cat_df.depR.iloc[0] * 1000,
+                    depth_errors=QuantityError(
+                        uncertainty=tmp_cat_df.ez.iloc[0]),
+                    time=tmp_cat_df.datetime.iloc[0],
+                    time_errors=QuantityError(
+                        uncertainty=tmp_cat_df.et.iloc[0]),
+                    creation_info=CreationInfo(
+                        agency_id='BER', author_id='GC'))
+                    # arrivals=cat_orig.arrivals)
                 Logger.info(
                     'Added origin solution from Growclust for event %s',
                     event.short_str())

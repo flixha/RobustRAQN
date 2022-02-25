@@ -456,10 +456,10 @@ if __name__ == "__main__":
     relevantStations = get_all_relevant_stations(
         selectedStations, sta_translation_file="station_code_translation.txt")
     
-    seisanREApath = '../SeisanEvents/'
-    seisanWAVpath = '../SeisanEvents/'
+    seisan_rea_path = '../SeisanEvents/'
+    seisan_wav_path = '../SeisanEvents/'
     
-    sfiles = glob.glob(os.path.join(seisanREApath, '*L.S??????'))
+    sfiles = glob.glob(os.path.join(seisan_rea_path, '*L.S??????'))
     sfiles.sort(key = lambda x: x[-6:])
     # sfiles = [sfiles[8]]
     # sfiles = sfiles[5:7]
@@ -522,7 +522,7 @@ if __name__ == "__main__":
         tribe = create_template_objects(
             sfiles, relevantStations, template_length=120,
             lowcut=0.2, highcut=9.9, min_snr=3, prepick=0.5, samp_rate=20,
-            min_n_traces=8, seisanWAVpath=seisanWAVpath, inv=inv,
+            min_n_traces=8, seisan_wav_path=seisan_wav_path, inv=inv,
             remove_response=True, noise_balancing=noise_balancing, 
             balance_power_coefficient=balance_power_coefficient,
             parallel=parallel, cores=cores, write_out=True,
@@ -534,7 +534,7 @@ if __name__ == "__main__":
             short_tribe = create_template_objects(
                 sfiles, relevantStations, template_length=10,
                 lowcut=0.2, highcut=9.9, min_snr=3, prepick=0.5, samp_rate=20,
-                min_n_traces=8, seisanWAVpath=seisanWAVpath, inv=inv,
+                min_n_traces=8, seisan_wav_path=seisan_wav_path, inv=inv,
                 remove_response=True, noise_balancing=noise_balancing,
                 balance_power_coefficient=balance_power_coefficient,
                 parallel=parallel, cores=cores, make_pretty_plot=False,

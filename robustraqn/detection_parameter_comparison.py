@@ -70,11 +70,11 @@ selectedStations = ['ASK','BER','BLS5','DOMB','EKO1','FOO','HOMB','HYA','KMY',
 relevantStations = get_all_relevant_stations(
     selectedStations, sta_translation_file="station_code_translation.txt")
 
-seisanREApath = '../SeisanEvents/'
-seisanWAVpath = '../SeisanEvents/'
-sfiles = glob.glob(os.path.join(seisanREApath, '*L.S??????'))
+seisan_rea_path = '../SeisanEvents/'
+seisan_wavpath = '../SeisanEvents/'
+sfiles = glob.glob(os.path.join(seisan_rea_path, '*L.S??????'))
 sfiles.sort(key = lambda x: x[-6:])
-# sfiles = sorted(glob.glob(os.path.join(seisanREApath, '30-0033-00L.S200806')))
+# sfiles = sorted(glob.glob(os.path.join(seisan_rea_path, '30-0033-00L.S200806')))
 
 self_detection_test = False
 if self_detection_test:
@@ -268,7 +268,7 @@ def main():
                     tribe = create_template_objects(
                         sfile_list, selectedStations, template_length,
                         lowcut, highcut, min_snr, prepick, samp_rate,
-                        seisanWAVpath, inv=inv, remove_response=True,
+                        seisan_wav_path, inv=inv, remove_response=True,
                         noise_balancing=noise_bal, min_n_traces=1,
                         parallel=True, cores=cores, write_out=False,
                         make_pretty_plot=False)
@@ -395,4 +395,4 @@ if __name__ == "__main__":
 # %%
 
 
-# tribe = create_template_objects(sfile_list, selectedStations, 20, 2.5, 9.9, 3, 0.5, 20.0, seisanWAVpath, inv=inv, remove_response=True, noise_balancing=True, min_n_traces=1, parallel=True, cores=10, write_out=False, make_pretty_plot=False)
+# tribe = create_template_objects(sfile_list, selectedStations, 20, 2.5, 9.9, 3, 0.5, 20.0, seisan_wav_path, inv=inv, remove_response=True, noise_balancing=True, min_n_traces=1, parallel=True, cores=10, write_out=False, make_pretty_plot=False)

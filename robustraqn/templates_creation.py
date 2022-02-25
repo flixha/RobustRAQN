@@ -56,7 +56,7 @@ def listdir_fullpath(d):
 
 def _create_template_objects(
         sfiles, selectedStations, template_length, lowcut, highcut, min_snr,
-        prepick, samp_rate, seisanWAVpath, inv=Inventory(), clients=[],
+        prepick, samp_rate, seisan_wav_path, inv=Inventory(), clients=[],
         remove_response=False, noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
         min_n_traces=8, write_out=False, make_pretty_plot=False, prefix='',
@@ -95,7 +95,7 @@ def _create_template_objects(
         #######################################################################
         # Load and quality-control stream and picks for event
         wavef = load_event_stream(
-            event, sfile, seisanWAVpath, relevantStations, clients=clients,
+            event, sfile, seisan_wav_path, relevantStations, clients=clients,
             min_samp_rate=samp_rate, pre_event_time=prepick,
             template_length=template_length)
         if wavef is None or len(wavef) == 0:
@@ -248,7 +248,7 @@ def reset_preferred_magnitude(tribe, mag_preference_priority=[('ML', 'BER')]):
 
 def create_template_objects(
         sfiles, selectedStations, template_length, lowcut, highcut, min_snr,
-        prepick, samp_rate, seisanWAVpath, clients=[], inv=Inventory(),
+        prepick, samp_rate, seisan_wav_path, clients=[], inv=Inventory(),
         remove_response=False, noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
         min_n_traces=8, write_out=False, prefix='', make_pretty_plot=False,
@@ -291,7 +291,7 @@ def create_template_objects(
         #             _create_template_objects,
         #             ([sfile], selectedStations, template_length,
         #                 lowcut, highcut, min_snr, prepick, samp_rate,
-        #                 seisanWAVpath),
+        #                 seisan_wav_path),
         #             dict(
         #                 inv=new_inv.select(
         #                     time=UTCDateTime(sfile[-6:] + sfile[-19:-9])),
@@ -317,7 +317,7 @@ def create_template_objects(
         res_out = Parallel(n_jobs=cores)(
             delayed(_create_template_objects)(
                 [sfile], selectedStations, template_length, lowcut, highcut,
-                min_snr, prepick, samp_rate, seisanWAVpath, clients=clients,
+                min_snr, prepick, samp_rate, seisan_wav_path, clients=clients,
                 inv=new_inv.select(
                     time=UTCDateTime(sfile[-6:] + sfile[-19:-14])),
                 remove_response=remove_response,
@@ -351,7 +351,7 @@ def create_template_objects(
     else:
         (tribe, wavnames) = _create_template_objects(
             sfiles, selectedStations, template_length, lowcut, highcut,
-            min_snr, prepick, samp_rate, seisanWAVpath, inv=new_inv,
+            min_snr, prepick, samp_rate, seisan_wav_path, inv=new_inv,
             clients=clients,
             remove_response=remove_response, noise_balancing=noise_balancing,
             balance_power_coefficient=balance_power_coefficient,
@@ -385,8 +385,8 @@ def create_template_objects(
 # %% ############## MAIN ###################
 
 if __name__ == "__main__":
-    seisanREApath = '../SeisanEvents/'
-    seisanWAVpath = '../SeisanEvents/'
+    seisan_rea_path = '../SeisanEvents/'
+    seisan_wav_path = '../SeisanEvents/'
     selectedStations = ['ASK','BER','BLS5','DOMB','EKO1','FOO','HOMB','HYA',
                         'KMY','MOL','ODD1','SKAR','SNART','STAV','SUE','KONO',
                         'BIGH','DRUM','EDI','EDMD','ESK','GAL1','GDLE','HPK',
@@ -415,14 +415,14 @@ if __name__ == "__main__":
     noise_balancing = False
     cores = 20
 
-    sfiles = glob.glob(os.path.join(seisanREApath, '*L.S??????'))
-    sfiles = glob.glob(os.path.join(seisanREApath, '24-1338-14L.S201909'))
-    # sfiles = glob.glob(os.path.join(seisanREApath, '04-1734-46L.S200706'))
-    # sfiles = glob.glob(os.path.join(seisanREApath, '24-0101-20L.S200707'))
-    # sfiles = glob.glob(os.path.join(seisanREApath, '20-1814-05L.S201804'))
-    # sfiles = glob.glob(os.path.join(seisanREApath, '01-0545-55L.S201009'))
-    # sfiles = glob.glob(os.path.join(seisanREApath, '30-0033-00L.S200806'))
-    sfiles = glob.glob(os.path.join(seisanREApath, '05-1741-44L.S202101'))
+    sfiles = glob.glob(os.path.join(seisan_rea_path, '*L.S??????'))
+    sfiles = glob.glob(os.path.join(seisan_rea_path, '24-1338-14L.S201909'))
+    # sfiles = glob.glob(os.path.join(seisan_rea_path, '04-1734-46L.S200706'))
+    # sfiles = glob.glob(os.path.join(seisan_rea_path, '24-0101-20L.S200707'))
+    # sfiles = glob.glob(os.path.join(seisan_rea_path, '20-1814-05L.S201804'))
+    # sfiles = glob.glob(os.path.join(seisan_rea_path, '01-0545-55L.S201009'))
+    # sfiles = glob.glob(os.path.join(seisan_rea_path, '30-0033-00L.S200806'))
+    sfiles = glob.glob(os.path.join(seisan_rea_path, '05-1741-44L.S202101'))
     sfiles.sort(key=lambda x: x[-6:])
 
     highcut = 9.9
@@ -435,7 +435,7 @@ if __name__ == "__main__":
     tribe, wavenames = create_template_objects(
         sfiles, selectedStations, template_length, lowcut, highcut,
         min_snr=4.0, prepick=0.2, samp_rate=20.0, inv=inv,
-        remove_response=True, seisanWAVpath=seisanWAVpath,
+        remove_response=True, seisan_wav_path=seisan_wav_path,
         noise_balancing=noise_balancing, min_n_traces=3,
         parallel=parallel, cores=cores, write_out=False, make_pretty_plot=True)
 

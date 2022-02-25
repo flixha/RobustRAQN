@@ -2,6 +2,8 @@ import os
 import glob
 import fnmatch
 import wcmatch
+import subprocess
+from pathlib import Path
 import pandas as pd
 # import matplotlib
 from threadpoolctl import threadpool_limits
@@ -22,6 +24,8 @@ from obspy.io.nordic.core import read_nordic
 from obspy import read as obspyread
 from obspy import UTCDateTime
 from obspy.geodetics.base import degrees2kilometers, locations2degrees
+from obspy.io.mseed import InternalMSEEDError
+from obspy.io.segy.segy import SEGYTraceReadingError
 
 from eqcorrscan.core.match_filter import Tribe
 from eqcorrscan.core.match_filter.party import Party
@@ -107,7 +111,7 @@ def read_seisan_database(database_path, cores=1, nordic_format='UKN',
     return cat
 
 
-def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
+def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
                       clients=[], min_samp_rate=np.nan, pre_event_time=30,
                       template_length=300):
     """
@@ -121,25 +125,43 @@ def load_event_stream(event, sfile, seisanWAVpath, selectedStations,
     if not wavfilenames:
         Logger.warning('Event ' + sfile + ': no waveform files found')
     st = Stream()
-    for wavefile in wavfilenames:
+    for wav_file in wavfilenames:
         # Check that there are proper mseed/SEISAN7.0 waveform files
-        if wavefile[0:3] == 'ARC' or wavefile[0:4] == 'WAVE':
+        if wav_file[0:3] == 'ARC' or wav_file[0:4] == 'WAVE':
             continue
-        fullWaveFile = os.path.join(seisanWAVpath, wavefile)
+        full_wav_file = os.path.join(seisan_wav_path, wav_file)
+        # Check if the wav-file is in the main folder or Seisan year-month
+        # subfolders
+        if not os.path.isfile(full_wav_file):
+            full_wav_file = os.path.join(full_wav_file, origin.time.year,
+                                         origin.time.month)
+            if not os.path.isfile(full_wav_file):
+                Logger.error('Could not find waveform file %s', wav_file)
+                continue
         try:
-            st += obspyread(fullWaveFile)
-        except TypeError:
-            Logger.error('Type Error: Could not read waveform file ' +
-                         fullWaveFile)
-        except FileNotFoundError:
-            Logger.error('FileNotFoundError: Could not read waveform file '
-                         + fullWaveFile)
-        except ValueError:
-            Logger.error('ValueError: Could not read waveform file' +
-                         fullWaveFile)
-        except AssertionError:
-            Logger.error('AsertionError: Could not read waveform file ' +
-                         fullWaveFile)
+            st += obspyread(full_wav_file)
+        except FileNotFoundError as e:
+            Logger.error('Waveform file %s does not exist', full_wav_file)
+            Logger.error(e)
+        except (TypeError, ValueError, AssertionError, SEGYTraceReadingError,
+                InternalMSEEDError, NotImplementedError) as e:
+            Logger.error('Could not read waveform file %s', full_wav_file)
+            Logger.error(e)
+            Path(os.path.join(os.getcwd(), 'TMP')).mkdir(
+                parents=True, exist_ok=True)
+            wav_file_name = os.path.normpath(wav_file).split(os.path.sep)[-1]
+            new_wav_file_name = os.path.join('TMP', wav_file_name + '.mseed')
+            Logger.info('Trying to use wavetool to convert %s:', wav_file)
+            subprocess.run(
+                ["wavetool " +
+                 " -wav_in_file {}".format(wav_file) +
+                 " -wav_out_file {}".format(new_wav_file_name) +
+                 " -format MSEED"], shell=True, env=os.environ.copy())
+            try:
+                st += obspyread(new_wav_file_name)
+            except FileNotFoundError:
+                Logger.error('Could not read converted file %s, skipping.',
+                             new_wav_file_name)
 
     # Request waveforms from client
     latest_pick = max([p.time for p in event.picks])

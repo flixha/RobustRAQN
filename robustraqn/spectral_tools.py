@@ -35,6 +35,9 @@ from obspy.signal.spectral_estimation import get_nlnm
 # from robustraqn.quality_metrics import ()
 import logging
 Logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s")
 
 
 def balance_noise(self, inv, balance_power_coefficient=2,
@@ -746,7 +749,7 @@ class Station(obspy.core.inventory.station.Station):
 
 
 def attach_single_noise_model(inv, pdf_dir, network="*", station="*",
-                              location="*", channel="[BHSEN]??",
+                              location="*", channel="[ESBHCDFNML]??",
                               plot_station_pdf=False):
     """
     """
@@ -794,14 +797,14 @@ def attach_noise_models(inv, pdf_dir, outfile='inv.pickle',
     seisarray_list = list()
     single_station_list = station_list.copy()
     seisarray_prefixes = [
-        'NAO*', 'NBO*', 'NB2*', 'NC2*', 'NC3*', 'NC4*', 'NC6*', 'AR[ABCD]?',
-        'SP[ABC]?', 'BEA[123456]', 'OSE*', 'EKO*', 'GRA*', '@(EKB|EKR|ESK)*',
-        'IL??', 'YKA*']
+        'IL??', 'NAO*', 'NBO*', 'NB2*', 'NC2*', 'NC3*', 'NC4*', 'NC6*', 'AR[ABCD]?',
+        'SP[ABC]?', '@(BJO1|BEA[123456])', 'OSE*', 'EKO*', 'GRA*', '@(EKB|EKR|ESK)*',
+        'YKA*']
     # alternative pattern 'E*K!(O)*' (works only  in wcmatch, not glob)
     # ''E*K[!O]*'
     for seisarray_prefix in seisarray_prefixes:
         seisarray_station_list = list()
-        for station in station_list:
+        for station in station_list.copy():
             if wcmatch.fnmatch.fnmatch(station, seisarray_prefix,
                                        flags=wcmatch.fnmatch.EXTMATCH):
                 seisarray_station_list.append(station)
@@ -830,7 +833,7 @@ def attach_noise_models(inv, pdf_dir, outfile='inv.pickle',
         try:
             inv = attach_single_noise_model(
                 inv, pdf_dir, network="*", station=station, location="*",
-                channel="[BHSEN]??", plot_station_pdf=plot_station_pdf)
+                channel="[ESBHCDFNML]??", plot_station_pdf=plot_station_pdf)
         except Exception as e:
             Logger.warning('Cannot add noise model for station %s: %s',
                            station, e)

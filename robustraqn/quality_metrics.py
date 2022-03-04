@@ -32,7 +32,7 @@ import logging
 Logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
+    format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s")
 
 
 def _get_waveforms_bulk(client, bulk):
@@ -906,7 +906,7 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
                                 Logger.error('file_type %s not supported',
                                              file_type)
                                 return ispaq
-                            ispaq = ispaq.append(in_df)
+                            ispaq = pd.concat([ispaq, in_df])
     ispaq = ispaq.drop_duplicates()
     try:
         ispaq.sort_values(by=['target', 'start'])

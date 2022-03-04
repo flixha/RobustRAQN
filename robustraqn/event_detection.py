@@ -142,7 +142,10 @@ def run_day_detection(
         multiplot=False, day_st=Stream(), check_array_misdetections=False,
         short_tribe=Tribe(), write_party=False, detection_path='Detections',
         redetection_path='ReDetections', return_stream=False,
-        dump_stream_to_disk=False, day_hash_file=None):
+        dump_stream_to_disk=False, day_hash_file=None,
+        sta_translation_file=os.path.expanduser(
+            "~/Documents2/ArrayWork/Inventory/station_code_translation.txt"),
+        **kwargs):
     """
     Function to run reading, initial processing, detection etc. on one day.
     """
@@ -214,7 +217,7 @@ def run_day_detection(
             min_sample_unique=150, max_abs_sample_mean=1e7,
             min_sample_rms=1e-6, max_sample_rms=1e8,
             max_sample_median=1e6, min_abs_sample_average=(1, 1e-9),
-            require_clock_lock=False, max_suspect_time_tag=86400)
+            require_clock_lock=False, max_suspect_time_tag=86400, **kwargs)
         if not bulk:
             Logger.warning('No waveforms requested for %s - %s',
                            str(starttime)[0:19], str(endtime)[0:19])
@@ -240,15 +243,10 @@ def run_day_detection(
         day_st = init_processing_wRotation(
             day_st, starttime=starttime, endtime=endtime,
             remove_response=remove_response, inv=inv,
-            parallel=parallel, cores=cores, min_segment_length_s=10,
-            max_sample_rate_diff=1, skip_interp_sample_rate_smaller=1e-7,
-            interpolation_method='lanczos', skip_check_sampling_rates=
-            [20, 40, 50, 66, 75, 100, 500], sta_translation_file=
-            "station_code_translation.txt", taper_fraction=0.005,
-            detrend_type='simple', downsampled_max_rate=None,
-            std_network_code="NS", std_location_code="00",
-            std_channel_prefix="BH", noise_balancing=noise_balancing,
-            balance_power_coefficient=balance_power_coefficient)
+            parallel=parallel, cores=cores,
+            sta_translation_file=sta_translation_file,
+            noise_balancing=noise_balancing,
+            balance_power_coefficient=balance_power_coefficient, **kwargs)
 
         # # Alternatively, do parallel processing across each trace, but then
         # # the NSLC-normalization with rotation has to happen independently.

@@ -34,20 +34,24 @@ from eqcorrscan.utils.correlate import pool_boy
 from eqcorrscan.utils.despike import median_filter
 from eqcorrscan.utils.mag_calc import _max_p2t
 from eqcorrscan.utils.plotting import detection_multiplot
+from eqcorrscan.utils.catalog_utils import filter_picks
 
 from obsplus.events.validate import attach_all_resource_ids
+from obsplus.stations.pd import stations_to_df
 
 # import obustraqn.spectral_tools
 from robustraqn.spectral_tools import st_balance_noise, Noise_model
-
+from robustraqn.quality_metrics import get_parallel_waveform_client
 from timeit import default_timer
 import logging
 Logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
+    format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s")
 
-from eqcorrscan.utils.catalog_utils import filter_picks
+
+MY_ENV = os.environ.copy()
+MY_ENV["SEISAN_TOP"] = '/home/felix/Software/SEISANrick'
 
 
 def read_seisan_database(database_path, cores=1, nordic_format='UKN',
@@ -113,35 +117,72 @@ def read_seisan_database(database_path, cores=1, nordic_format='UKN',
 
 def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
                       clients=[], min_samp_rate=np.nan, pre_event_time=30,
-                      template_length=300):
+                      template_length=300, search_only_month_folders=True,
+                      **kwargs):
     """
     Load the waveforms for an event file (here: Nordic file) while performing
     some checks for duplicates, incompleteness, etc.
     """
     origin = event.preferred_origin() or event.origins[0]
     # Stop event processing if there are no waveform files
-    select, wavname = read_nordic(sfile, return_wavnames=True)
+    select, wavname = read_nordic(sfile, return_wavnames=True, **kwargs)
     wavfilenames = wavname[0]
+
+    # # Read extra wavefile names from comments
+    # if search_only_month_folders:
+    #     seisan_wav_path = os.path.join(
+    #         seisan_wav_path, str(origin.time.year),
+    #         "{:02d}".format(origin.time.month))
+    # for comment in event.comments.copy():
+    #     if 'Waveform-filename:' in comment.text:
+    #         wav_file = comment.text.strip('Waveform-filename: ')
+    #         if 'ARC _' in wav_file:
+    #             continue
+    #         out_lines = subprocess.check_output(
+    #                 "find {} -iname '{}'".format(seisan_wav_path, wav_file),
+    #                 shell=True).splitlines()
+    #         if len(out_lines) == 0:
+    #             continue
+    #         if type(out_lines[0]) == bytes:
+    #             wav_file_paths = [line.decode('UTF-8') for line in out_lines]
+    #         else:
+    #             wav_file_paths = [line[2:] for line in out_lines]
+    #         if wav_file_paths:
+    #             wavfilenames.append(wav_file_paths[0])
+    #             # Should I remove the old waveform-filelinks ?
+    #             # event.comments.remove(comment)
+
     if not wavfilenames:
         Logger.warning('Event ' + sfile + ': no waveform files found')
     st = Stream()
     for wav_file in wavfilenames:
         # Check that there are proper mseed/SEISAN7.0 waveform files
-        if wav_file[0:3] == 'ARC' or wav_file[0:4] == 'WAVE':
+        if (wav_file[0:3] == 'ARC' or wav_file[0:4] == 'WAVE' or
+                wav_file[0:6] == 'ACTION' or wav_file[0:6] == 'OLDACT'):
             continue
         full_wav_file = os.path.join(seisan_wav_path, wav_file)
         # Check if the wav-file is in the main folder or Seisan year-month
         # subfolders
         if not os.path.isfile(full_wav_file):
-            full_wav_file = os.path.join(full_wav_file, origin.time.year,
-                                         origin.time.month)
+            full_wav_file = os.path.join(
+                seisan_wav_path, str(origin.time.year),
+                "{:02d}".format(origin.time.month), wav_file)
+            # Check for station's subdirectory just above WAV-path
             if not os.path.isfile(full_wav_file):
-                Logger.error('Could not find waveform file %s', wav_file)
-                continue
+                full_wav_file = os.path.join(
+                    *seisan_wav_path.split('/')[0:-1],
+                    wav_file.split('.')[-1][0:5], str(origin.time.year),
+                    "{:02d}".format(origin.time.month), wav_file)
+                if not os.path.isfile(full_wav_file):
+                    Logger.error('Could not find waveform file %s', wav_file)
+                    continue
         try:
             st += obspyread(full_wav_file)
         except FileNotFoundError as e:
             Logger.error('Waveform file %s does not exist', full_wav_file)
+            Logger.error(e)
+        except PermissionError as e:
+            Logger.error('Could not read waveform file %s', full_wav_file)
             Logger.error(e)
         except (TypeError, ValueError, AssertionError, SEGYTraceReadingError,
                 InternalMSEEDError, NotImplementedError) as e:
@@ -151,12 +192,14 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
                 parents=True, exist_ok=True)
             wav_file_name = os.path.normpath(wav_file).split(os.path.sep)[-1]
             new_wav_file_name = os.path.join('TMP', wav_file_name + '.mseed')
+            # If Obspy cannot read file, try to convert it with Seisan's
+            # wavetool:
             Logger.info('Trying to use wavetool to convert %s:', wav_file)
             subprocess.run(
-                ["wavetool " +
+                ["/home/felix/Software/SEISANrick/PRO/linux64/wavetool " +
                  " -wav_in_file {}".format(wav_file) +
                  " -wav_out_file {}".format(new_wav_file_name) +
-                 " -format MSEED"], shell=True, env=os.environ.copy())
+                 " -format MSEED"], shell=True, env=MY_ENV)
             try:
                 st += obspyread(new_wav_file_name)
             except FileNotFoundError:
@@ -170,8 +213,10 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
         origin.time + template_length * 2)
     bulk_request = [("??", s, "*", "?H?", t1, t2) for s in selectedStations]
     for client in clients:
+        client = get_parallel_waveform_client(client)
         Logger.info('Requesting waveforms from client %s', client)
-        add_st = client.get_waveforms_bulk(bulk_request)
+        add_st = client.get_waveforms_bulk_parallel(
+            bulk_request, parallel=False, cores=1)
         Logger.info('Received %s traces from the client.', len(add_st))
         st += add_st
     if len(st) == 0:
@@ -193,10 +238,11 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
             continue
         # channels with undecipherable channel names
         # potential names: MIC, SLZ, S Z, M, ALE, MSF, TC
-        if tr.stats.channel[0] not in 'HBSENM' and tr in st:
+        if tr.stats.channel[0] not in 'ESBHNMCFD' and tr in st:
             st = st.remove(tr)
             continue
-        if tr.stats.channel[-1] not in 'ZNE0123ABC' and tr in st:
+        if (len(tr.stats.channel) == 3 and
+                tr.stats.channel[-1] not in 'ZNE0123ABC' and tr in st):
             st = st.remove(tr)
             continue
         # channels from accelerometers/ gravimeters/ tiltmeter/low-gain seism.
@@ -210,6 +256,15 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
             st = st.remove(tr)
             continue
 
+    # Adjust some strange channel / location names
+    for tr in st:
+        # Adjust messed up channel/location codes from some files, e.g.:
+        # .BER.Z.HH
+        if (len(tr.stats.channel) == 2 and len(tr.stats.location) == 1 and
+                tr.stats.location[0] in 'ZNE'):
+           tr.stats.channel = tr.stats.channel + tr.stats.location
+           tr.stats.location = ''
+        
         # ADJUST unsupported, but decipherable codes
         # Adjust single-letter location codes:
         if len(tr.stats.location) == 1:
@@ -293,8 +348,8 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
     # cut around origin plus some
 
     # Don't trim the stream if that means you are padding with zeros
-    starttime = origin.time - 30
-    endtime = starttime + 360
+    starttime = t1
+    endtime = t2
     st.trim(starttime=starttime, endtime=endtime, pad=False,
             nearest_sample=True)
 
@@ -327,7 +382,7 @@ def prepare_detection_stream(
      - band code is in list of allowed characters
      - instrument code is not in list of forbidden characters (a list of
        forbidden chars is used because in Old Seisan files, this is often "0",
-       rather than indicating a real instrument)
+       rather than indicating a real instrument)    
      - component code is in list of allowed characters
      - despiking can be done when ispaq-stats indicate there are spikes
 
@@ -848,8 +903,8 @@ def compute_picks_from_app_velocity(
 
 
 def prepare_picks(
-        event, stream, normalize_NSLC=True, std_network_code='NS',
-        std_location_code='00', std_channel_prefix='BH',
+        event, stream, inv=Inventory(), normalize_NSLC=True,
+        std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         sta_translation_file="station_code_translation.txt", *args, **kwargs):
     """
     Prepare the picks for being used in EQcorrscan. The following criteria are
@@ -889,8 +944,8 @@ def prepare_picks(
     sta_fortransl_dict, sta_backtrans_dict = load_station_translation_dict(
         file=sta_translation_file)
 
-    newEvent = event.copy()
-    newEvent.picks = list()
+    new_event = event.copy()
+    new_event.picks = list()
     # Remove all picks for amplitudes etc: keep only P and S
     for j, pick in enumerate(event.picks):
         # Don't allow picks without phase_hint
@@ -972,11 +1027,11 @@ def prepare_picks(
             if pick.waveform_id.channel_code == previous_chan_id:
                 pick.waveform_id.channel_code = (
                     std_channel_prefix + pick.waveform_id.channel_code[-1])
-            newEvent.picks.append(pick)
+            new_event.picks.append(pick)
             # else:
-            #    newEvent.picks.append(pick)
-    event = newEvent
+            #    new_event.picks.append(pick)
 
+    event = new_event
     # Select a subset of picks based on user choice
     origin = event.preferred_origin()
     pick_calculation = kwargs.get('pick_calculation')
@@ -988,8 +1043,8 @@ def prepare_picks(
     # Check for duplicate picks. Remove the later one when they are
     # on the same channel
     pickIDs = list()
-    newEvent = event.copy()
-    newEvent.picks = list()
+    new_event = event.copy()
+    new_event.picks = list()
     # TODO check whether Pn / Pg are correctly handled here
     for pick in event.picks:
         # uncomment to change back to retaining Pn and Pg
@@ -1000,20 +1055,20 @@ def prepare_picks(
             # pickIDs.append((pick.waveform_id, pick.phase_hint))
             pickIDs.append((pick.waveform_id.station_code,
                             pick.phase_hint.upper()))
-            newEvent.picks.append(pick)
+            new_event.picks.append(pick)
         else:
             # check which is the earlier pick; remove the old and
             # append the new one . This also takes care of only retaining the
             # earlier pick of Pg, Pn and Sg, Sn.
-            for pick_old in newEvent.picks:
+            for pick_old in new_event.picks:
                 if (pick_old.waveform_id.station_code
                         == pick.waveform_id.station_code
                         and pick_old.phase_hint.upper()
                         == pick.phase_hint.upper()):
                     if pick.time < pick_old.time:
-                        newEvent.picks.remove(pick_old)
-                        newEvent.picks.append(pick)
-    event = newEvent
+                        new_event.picks.remove(pick_old)
+                        new_event.picks.append(pick)
+    event = new_event
     return event
 
 
@@ -1161,7 +1216,7 @@ def init_processing_wRotation(
         skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
         taper_fraction=0.005, detrend_type='simple', downsampled_max_rate=None,
         std_network_code="NS", std_location_code="00", std_channel_prefix="BH",
-        noise_balancing=False, balance_power_coefficient=2):
+        noise_balancing=False, balance_power_coefficient=2, **kwargs):
     """
     Does an initial processing of the day's stream,
     """
@@ -1225,7 +1280,7 @@ def init_processing_wRotation(
                 downsampled_max_rate=downsampled_max_rate,
                 taper_fraction=taper_fraction,
                 noise_balancing=noise_balancing,
-                balance_power_coefficient=balance_power_coefficient)
+                balance_power_coefficient=balance_power_coefficient, **kwargs)
 
     else:
         if cores is None:
@@ -1301,7 +1356,7 @@ def init_processing_wRotation(
                     downsampled_max_rate=downsampled_max_rate,
                     noise_balancing=noise_balancing,
                     balance_power_coefficient=balance_power_coefficient,
-                    parallel=False, cores=None)
+                    parallel=False, cores=None, **kwargs)
                 for nsl in unique_net_sta_loc_list)
         st = Stream([tr for trace_st in streams for tr in trace_st])
 
@@ -1810,7 +1865,7 @@ def try_find_matching_response(tr, inv):
        for an empty location code.
     2. network code is empty
     3. if not found, try again and allow any location code
-    4 if not found, check if the channel code may contain a space in
+    4 if not found, check if the channel code may contain a space or zero in
        the middle
        5 if not found, allow space in channel and empty network
        6 if not found, allow space in channel and empty location
@@ -1880,7 +1935,7 @@ def try_find_matching_response(tr, inv):
                         return True, tr, inv
     # 4 if not found, check if the channel code may contain a space in
     #   the middle
-    if tr.stats.channel[1] == ' ':
+    if tr.stats.channel[1] == ' ' or tr.stats.channel[1] == '0':
         tempInv = inv.select(network=tr.stats.network,
                              station=tr.stats.station,
                              location=tr.stats.location,
@@ -1979,7 +2034,7 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
                          std_location_code="00", std_channel_prefix="BH",
                          parallel=False, cores=None,
                          sta_translation_file="station_code_translation.txt",
-                         forbidden_chan_file=""):
+                         forbidden_chan_file="", rotate=True):
     """
     1. Correct non-FDSN-standard-complicant channel codes
     2. Rotate to proper ZNE, and hence change codes from [Z12] to [ZNE]
@@ -2003,8 +2058,9 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
         if len(tr.stats.channel) <= 2 and len(tr.stats.location) == 1:
             tr.stats.channel = tr.stats.channel + tr.stats.location
         chn = tr.stats.channel
-        if chn[1] in 'LH10V ':
-            tr.stats.channel = std_channel_prefix + chn[2]
+        if std_channel_prefix is not None:
+            if chn[1] in 'LH10V ':
+                tr.stats.channel = std_channel_prefix + chn[2]
             # tr.stats.location = '00'
     # 2. Rotate to proper ZNE and rename channels to ZNE
     # for tr in st:
@@ -2028,12 +2084,17 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
     #         if chn_inv.code[-1] == '2' and\
     #                 90 - abs(chn_inv.azimuth) <= rotation_threshold_degrees:
     #             tr.stats.channel[-1] = 'E'
-    if parallel:
-        st = parallel_rotate(st, inv, cores=cores, method="->ZNE")
-    else:
-        # st.rotate(method="->ZNE", inventory=inv)
-        # Use parallel-function to initiate error-catching rotation
-        st = parallel_rotate(st, inv, cores=1, method="->ZNE")
+    if rotate:
+        if not inv:
+            Logger.error(
+                'No inventory information available, cannot rotate channels')
+        else:    
+            if parallel:
+                st = parallel_rotate(st, inv, cores=cores, method="->ZNE")
+            else:
+                # st.rotate(method="->ZNE", inventory=inv)
+                # Use parallel-function to initiate error-catching rotation
+                st = parallel_rotate(st, inv, cores=1, method="->ZNE")
 
     # Need to merge again here, because rotate may split merged traces if there
     # are masked arrays (i.e., values filled with None). The merge here will
@@ -2045,8 +2106,10 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
     sta_fortransl_dict, sta_backtrans_dict = load_station_translation_dict(
         file=sta_translation_file)
     for tr in st:
-        tr.stats.network = std_network_code
-        tr.stats.location = std_location_code
+        if std_network_code is not None:
+            tr.stats.network = std_network_code
+        if std_location_code is not None:
+            tr.stats.location = std_location_code
         if tr.stats.station in sta_fortransl_dict:
             # Make sure not to normalize station/channel-code to a combination
             # that already exists in stream

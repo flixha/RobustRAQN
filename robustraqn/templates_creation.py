@@ -11,6 +11,7 @@ import glob
 from multiprocessing import Pool, cpu_count, get_context
 from multiprocessing.pool import ThreadPool
 from joblib import Parallel, delayed, parallel_backend
+import pandas as pd
 
 # from obspy import read_events, read_inventory
 from obspy.core.event import Catalog
@@ -21,6 +22,8 @@ from obspy.geodetics.base import gps2dist_azimuth
 # from obspy.core.event import Event
 from obspy.io.nordic.core import read_nordic
 from obspy.core.inventory.inventory import Inventory
+
+from obsplus.stations.pd import stations_to_df
 
 # reload(eqcorrscan)
 from eqcorrscan.utils import pre_processing
@@ -40,6 +43,8 @@ from robustraqn.load_events_for_detection import (
     try_remove_responses, check_template, prepare_picks)
 from robustraqn.spectral_tools import (
     st_balance_noise, Noise_model, get_updated_inventory_with_noise_models)
+from robustraqn.seimic_array_tools import (
+    extract_array_picks, add_array_station_picks)
 
 
 import logging
@@ -61,7 +66,7 @@ def _create_template_objects(
         balance_power_coefficient=2, ground_motion_input=[],
         min_n_traces=8, write_out=False, make_pretty_plot=False, prefix='',
         check_template_strict=True, allow_channel_duplication=True,
-        normalize_NSLC=True,
+        normalize_NSLC=True, add_array_picks=False, stations_df=pd.DataFrame(),
         sta_translation_file="station_code_translation.txt",
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         parallel=False, cores=1, *args, **kwargs):
@@ -141,9 +146,16 @@ def _create_template_objects(
             wavef = wavef.detrend('linear').taper(
                 0.15, type='hann', max_length=30, side='both')
 
+        # Add picks at array stations if requested
+        if add_array_picks:
+            array_picks_dict = extract_array_picks(event=event)
+            event = add_array_station_picks(
+                event=event, array_picks_dict=array_picks_dict,
+                stations_df=stations_df, **kwargs)
+
         event = prepare_picks(
             event=event, stream=wavef, normalize_NSLC=normalize_NSLC, inv=inv,
-            *args, **kwargs)
+            sta_translation_file=sta_translation_file, *args, **kwargs)
 
         wavef = pre_processing.shortproc(
             st=wavef, lowcut=lowcut, highcut=highcut, filt_order=4,
@@ -189,23 +201,24 @@ def _create_template_objects(
                      filt_order=4, process_length=86400.0, prepick=prepick)
         # highcut=8.0, samp_rate=20, filt_order=4, process_length=86400.0,
 
-        # make a nice plot
-        sfile_path, sfile_name = os.path.split(sfile)
-        if make_pretty_plot:
-            image_name = os.path.join('TemplatePlots',
-                                      prefix + '_' + templateName)
-            pretty_template_plot(
-                templateSt, background=wavef, event=event, sort_by='distance',
-                show=False, return_figure=False, size=(25, 50), save=True,
-                savefile=image_name)
-        Logger.info("Made template" + templateName)
-        Logger.info(t)
         if len(t.st) >= min_n_traces:
             if write_out:
                 t.write('Templates/' + templateName + '.mseed', format="MSEED")
             tribe += t
             # add wavefile-name to output
             wavnames.append(wavname[0])
+
+            # make a nice plot
+            sfile_path, sfile_name = os.path.split(sfile)
+            if make_pretty_plot:
+                image_name = os.path.join('TemplatePlots',
+                                        prefix + '_' + templateName)
+                pretty_template_plot(
+                    templateSt, background=wavef, event=event, sort_by='distance',
+                    show=False, return_figure=False, size=(25, 50), save=True,
+                    savefile=image_name)
+            Logger.info("Made template" + templateName)
+            Logger.info(t)
 
     # clusters = tribe.cluster(method='space_cluster', d_thresh=1.0, show=True)
     template_list = []
@@ -253,7 +266,7 @@ def create_template_objects(
         balance_power_coefficient=2, ground_motion_input=[],
         min_n_traces=8, write_out=False, prefix='', make_pretty_plot=False,
         check_template_strict=True, allow_channel_duplication=True,
-        normalize_NSLC=True,
+        normalize_NSLC=True, add_array_picks=False,
         sta_translation_file="station_code_translation.txt",
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         parallel=False, cores=1, *args, **kwargs):
@@ -264,6 +277,19 @@ def create_template_objects(
     new_inv = Inventory()
     for sta in selectedStations:
         new_inv += inv.select(station=sta)
+
+    stations_df = pd.DataFrame()
+    if add_array_picks:
+        stations_df = stations_to_df(inv)
+        # Add site names to stations_df (for info on array beams)
+        site_names = []
+        if 'site_name' not in stations_df.columns:
+            for network in inv.networks:
+                for station in network.stations:
+                    for channel in station.channels:
+                        site_names.append(station.site.name)
+        stations_df['site_name'] = site_names
+        
     if parallel and len(sfiles) > 1:
         if cores is None:
             cores = min(len(sfiles), cpu_count())
@@ -328,7 +354,8 @@ def create_template_objects(
                 make_pretty_plot=make_pretty_plot, prefix=prefix,
                 check_template_strict=check_template_strict,
                 allow_channel_duplication=allow_channel_duplication,
-                normalize_NSLC=normalize_NSLC,
+                normalize_NSLC=normalize_NSLC, add_array_picks=add_array_picks,
+                stations_df=stations_df,
                 sta_translation_file=sta_translation_file,
                 std_network_code=std_network_code,
                 std_location_code=std_location_code,
@@ -438,5 +465,3 @@ if __name__ == "__main__":
         remove_response=True, seisan_wav_path=seisan_wav_path,
         noise_balancing=noise_balancing, min_n_traces=3,
         parallel=parallel, cores=cores, write_out=False, make_pretty_plot=True)
-
-# %%

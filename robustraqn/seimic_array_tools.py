@@ -262,11 +262,6 @@ def add_array_station_picks(
        array-arrival computations
      - check which array stations do not have an associated pick and append a
        pick for these
-    
-    # from robustraqn.Seismic_array_setups.seimic_array_setups import (
-    #     get_array_stations_from_df, extract_array_picks, add_array_station_picks,
-    #     filter_array_stations_df)
-    
     """
     n_picks_before = len(event.picks)
     vel_mod = VelocityModel.read_tvel_file(vel_mod_file)

@@ -157,6 +157,9 @@ def run_day_detection(
     # client2 = Client(archive_path2)
 
     n_templates = len(tribe)
+    if n_templates == 0:
+        msg = 'Cannot detect events with an empty tribe!'
+        raise ValueError(msg)
     n_runs = math.ceil(n_templates / n_templates_per_run)
 
     starttime = UTCDateTime(pd.to_datetime(date))

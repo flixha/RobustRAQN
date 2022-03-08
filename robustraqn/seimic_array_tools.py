@@ -245,7 +245,7 @@ def add_array_station_picks(
         event, array_picks_dict, stations_df,
         seisarray_prefixes=SEISARRAY_PREFIXES,
         vel_mod_file=os.path.join(os.path.dirname(__file__), 'models',
-                                  'NNSN1D_plusAK135.tvel')):
+                                  'NNSN1D_plusAK135.tvel'), **kwargs):
     """
     Returns all picks at array stations from 
         # ARRAY stuff
@@ -340,8 +340,9 @@ def add_array_station_picks(
         #         timeshifts2 = -array_geometry[:,2] / 1000 * 1/3
         #         break
     
-        phase_hints = list(set([pick.phase_hint for pick in array_picks
-                                if pick.phase_hint[0] in 'PS']))
+        phase_hints = list(set([
+            pick.phase_hint for pick in array_picks
+            if pick.phase_hint and pick.phase_hint[0] in 'PS']))
         array_picks_dict = dict()
         array_baz_dict = dict()
         array_app_vel_dict = dict()

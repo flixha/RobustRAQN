@@ -438,9 +438,9 @@ def add_array_station_picks(
                 #             'NaN in pick time (%s) for %s (%s), shift: %s',
                 #             pick.waveform_id.get_seed_string(), pick.phase_hint,
                 #             str(pick.time), str(timeshift[0][0]))
-                pick_time_list.append([pick.time + timeshift[0][0]
+                pick_time_list.append([pick.time - timeshift[0][0]
                                        for timeshift in timeshifts])
-                pick_time_list_ns.append([(pick.time + timeshift[0][0])._ns
+                pick_time_list_ns.append([(pick.time - timeshift[0][0])._ns
                                           for timeshift in timeshifts])
             # pick-time average needs to be calculated from epoch-seconds
             pick_times_av = [
@@ -501,6 +501,9 @@ def add_array_station_picks(
                         new_pick['extra']['nordic_pick_weight'] = dict()
                         new_pick['extra']['nordic_pick_weight']['value'] = (
                             pick['extra']['nordic_pick_weight']['value'])
+                        new_pick['extra']['nordic_pick_weight'][
+                            'namespace'] = (pick['extra']['nordic_pick_weight'
+                                                          ]['namespace'])
                     event.picks.append(new_pick)
 
     # 3. add picks for array stations that did not have pick to pick-list

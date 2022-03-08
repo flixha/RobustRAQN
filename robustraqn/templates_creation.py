@@ -17,7 +17,7 @@ import pandas as pd
 from obspy.core.event import Catalog
 from obspy.core.utcdatetime import UTCDateTime
 from obspy.geodetics.base import gps2dist_azimuth
-# from obspy.core.stream import Stream
+from obspy.core.stream import Stream
 # from obspy.core.util.base import TypeError
 # from obspy.core.event import Event
 from obspy.io.nordic.core import read_nordic
@@ -57,6 +57,55 @@ logging.basicConfig(
 
 def listdir_fullpath(d):
     return [os.path.join(d, f) for f in os.listdir(d)]
+
+
+def _shorten_tribe_streams(
+        tribe, tribe_len_pct=0.2, max_tribe_len=None,
+        min_n_traces=0, write_out=False, make_pretty_plot=False,
+        prefix='short', noise_balancing=False,
+        write_individual_templates=False):
+    """
+    Create shorter templates from a tribe of longer templates
+    """
+    if len(tribe) == 0:
+        return tribe
+    if tribe_len_pct is not None:
+        new_templ_len = (tribe[0].st[0].stats.endtime -
+                         tribe[0].st[0].stats.starttime) * tribe_len_pct
+    else:
+        new_templ_len = max_tribe_len
+    short_tribe = tribe.copy()
+    for templ in short_tribe:
+        for tr in templ.st:
+            tr.trim(starttime=tr.stats.starttime,
+                    endtime=tr.stats.starttime + new_templ_len)
+        if len(templ.st) >= min_n_traces:
+            templateName = str(
+                templ.event.preferred_origin().time)[0:22] + '_' + 'templ'
+            templateName = templateName.lower().replace('-', '_')\
+                .replace(':', '_').replace('.', '_').replace('/', '')
+            # make a nice plot
+            if make_pretty_plot:
+                image_name = os.path.join('TemplatePlots',
+                                          prefix + '_' + templateName)
+                pretty_template_plot(
+                    templ.st, background=False, event=templ.event,
+                    sort_by='distance', show=False, return_figure=False,
+                    size=(25, 50), save=True, savefile=image_name)
+            Logger.info("Made template" + templateName)
+            Logger.info(templ)
+    label = ''
+    if noise_balancing:
+        label = label + 'balNoise_'
+    if write_out:
+        short_tribe.write('TemplateObjects/' + prefix + 'Templates_min'
+                    + str(min_n_traces) + 'tr_' + label + str(len(short_tribe)))
+                    #max_events_per_file=10)
+    if write_individual_templates:
+        for templ in short_tribe:
+            templ.write('Templates/' + prefix + templ.name + '.mseed',
+                        format="MSEED")
+    return short_tribe
 
 
 def _create_template_objects(

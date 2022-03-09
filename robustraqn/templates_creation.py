@@ -44,7 +44,8 @@ from robustraqn.load_events_for_detection import (
 from robustraqn.spectral_tools import (
     st_balance_noise, Noise_model, get_updated_inventory_with_noise_models)
 from robustraqn.seimic_array_tools import (
-    extract_array_picks, add_array_station_picks)
+    extract_array_picks, add_array_station_picks,
+    LARGE_APERTURE_SEISARRAY_PREFIXES)
 
 
 import logging
@@ -116,6 +117,7 @@ def _create_template_objects(
         min_n_traces=8, write_out=False, make_pretty_plot=False, prefix='',
         check_template_strict=True, allow_channel_duplication=True,
         normalize_NSLC=True, add_array_picks=False, stations_df=pd.DataFrame(),
+        add_large_aperture_array_picks=False,
         sta_translation_file="station_code_translation.txt",
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         parallel=False, cores=1, *args, **kwargs):
@@ -201,6 +203,13 @@ def _create_template_objects(
             event = add_array_station_picks(
                 event=event, array_picks_dict=array_picks_dict,
                 stations_df=stations_df, **kwargs)
+            if add_large_aperture_array_picks:
+                array_picks_dict = extract_array_picks(event=event)
+                event = add_array_station_picks(
+                    event=event, array_picks_dict=array_picks_dict,
+                    stations_df=stations_df,
+                    seisarray_prefixes=LARGE_APERTURE_SEISARRAY_PREFIXES,
+                    **kwargs)
 
         event = prepare_picks(
             event=event, stream=wavef, normalize_NSLC=normalize_NSLC, inv=inv,
@@ -338,7 +347,7 @@ def create_template_objects(
                     for channel in station.channels:
                         site_names.append(station.site.name)
         stations_df['site_name'] = site_names
-        
+
     if parallel and len(sfiles) > 1:
         if cores is None:
             cores = min(len(sfiles), cpu_count())

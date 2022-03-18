@@ -45,7 +45,7 @@ from robustraqn.spectral_tools import (
     st_balance_noise, Noise_model, get_updated_inventory_with_noise_models)
 from robustraqn.seimic_array_tools import (
     extract_array_picks, add_array_station_picks,
-    LARGE_APERTURE_SEISARRAY_PREFIXES)
+    LARGE_APERTURE_SEISARRAY_PREFIXES, get_updated_stations_df)
 
 
 import logging
@@ -339,18 +339,7 @@ def create_template_objects(
     new_inv = Inventory()
     for sta in selectedStations:
         new_inv += inv.select(station=sta)
-
-    stations_df = pd.DataFrame()
-    if add_array_picks:
-        stations_df = stations_to_df(inv)
-        # Add site names to stations_df (for info on array beams)
-        site_names = []
-        if 'site_name' not in stations_df.columns:
-            for network in inv.networks:
-                for station in network.stations:
-                    for channel in station.channels:
-                        site_names.append(station.site.name)
-        stations_df['site_name'] = site_names
+    stations_df = get_updated_stations_df(inv)
 
     if parallel and len(sfiles) > 1:
         if cores is None:

@@ -29,8 +29,10 @@ from obspy.core.event import (Catalog, Pick, Arrival, WaveformStreamID,
                               CreationInfo)
 from obspy import UTCDateTime
 from obsplus.stations.pd import stations_to_df
+from eqcorrscan.core.match_filter import Party
 
 from robustraqn.spectral_tools import get_updated_inventory_with_noise_models
+
 
 SEISARRAY_PREFIXES = [
     'NAO*', 'NBO*', '@(NB2*|NOA)', 'NC2*', 'NC3*', 'NC4*', 'NC6*',
@@ -439,126 +441,7 @@ def add_array_station_picks(
             array_stations_df, array_prefix=seisarray_prefix,
             coordsys='lonlat', return_center=True)
 
-        # # Find array reference: it is either:
-        # #   1. array beam ref that is defined inventory
-        # # #    (station.site.name contains beam)
-        # array_beam_name = [
-        #     resp.station for index, resp in array_stations_df.iterrows()
-        #     if 'BEAM' in resp.site_name.upper()]
-        # array_ref_station = None
-        # if array_beam_name:
-        #     array_ref_station = array_beam_name[0]
-        # #   2. station that is closest to the center of the array
-        # if array_ref_station is None:
-        #     distances = np.sqrt(
-        #         degrees2kilometers(locations2degrees(
-        #             stations_df.latitude, stations_df.longitude,
-        #             array_center[1][0], array_center[1][0])) ** 2 +
-        #         ((stations_df.elevation - array_center[1][2]) / 1000) ** 2)
-        #     min_distance_index = np.argmin(distances)
-        #     array_ref_station = (
-        #         array_stations_df.iloc[min_distance_index].station)
-        
-        # # Correct array geometry to make the reference station the array center
-        # # array_stations_df[array_stations_df.station==array_ref_station].iloc[0]
-        # idx = None
-        # for j, (index, resp) in enumerate(array_stations_df.iterrows()):
-        #     if resp.station == array_ref_station:
-        #         idx = j
-        # if idx is not None:
-        #     array_geometry_for_ref = array_geometry - array_geometry[idx]
-            
-            
-        # # get array timeshifts and align traces by timeshift
-        # for arrival in origin.arrivals:
-        #     pick = arrival.pick_id.get_referred_object()
-        #     if arrival.phase == 'P' and pick.waveform_id.station_code == refStation:
-        #         # Extract/Compute horizontal slowness (in quakeML is stored as s/deg)
-        #         if pick.horizontal_slowness is not None:
-        #             velocity = 1.0 / pick.horizontal_slowness
-        #             pick.horizontal_slowness = 1/8.2
-        #         elif pick.time is not None and origin.time is not None\
-        #                 and arrival.distance is not None:
-        #             dist_deg = arrival.distance
-        #             dist_km = degrees2kilometers(dist_deg)
-        #             # for the relevant pick, get station coordinates
-        #             inv2 = inv.select(station=pick.waveform_id.station_code)
-        #             sta_lat = inv2.networks[0].stations[0].channels[0].latitude
-        #             sta_lon = inv2.networks[0].stations[0].channels[0].longitude
-        #             # compute back azimuth based on origin and station coordinates
-        #             gcd, az, baz = gps2dist_azimuth(origin.latitude, origin.longitude,
-        #                                             sta_lat, sta_lon)
-        #             pick.backazimuth = baz
-        #             #pick.horizontal_slowness = (pick.time - origin.time) / dist_deg
-        #             pick.horizontal_slowness = (pick.time - origin.time) / dist_km
-        #             pick.horizontal_slowness = 1/8.2
-        #             velocity = arrival.distance / (pick.time - origin.time)
-        #         sll_x = math.cos(math.radians(baz)) * pick.horizontal_slowness
-        #         sll_y = math.sin(math.radians(baz)) * pick.horizontal_slowness
-        #         timeshifts = get_timeshift(array_geometry, sll_x, sll_y, 0, 1, 1)
-        #         ref_arrival = arrival
-        #         ref_pick = pick
-
-        #         timeshifts2 = -array_geometry[:,2] / 1000 * 1/3
-        #         break
-
         phase_hints = pha_picks_dict.keys()
-
-        # phase_hints = list(set([
-        #     pick.phase_hint for pick in array_picks
-        #     if pick.phase_hint and pick.phase_hint[0] in 'PS']))
-    
-        # array_picks_dict = dict()
-        # array_baz_dict = dict()
-        # array_app_vel_dict = dict()
-        # for phase_hint in phase_hints:
-        #     Logger.info('Working on array %s, phase %s', seisarray_prefix,
-        #                 phase_hint)
-        #     array_picks_dict[phase_hint] = [pick for pick in array_picks
-        #                                     if pick.phase_hint == phase_hint]
-        #     array_baz_dict[phase_hint] = np.mean(
-        #         [pick.backazimuth
-        #          for pick in array_picks_dict[phase_hint]
-        #          if pick.backazimuth is not None])
-        #     array_app_vel_dict[phase_hint] = np.mean(
-        #         [degrees2kilometers(1.0 / pick.horizontal_slowness)
-        #          for pick in array_picks_dict[phase_hint]
-        #          if pick.horizontal_slowness is not None])
-
-        #     # if there is no measurements for BAZ, compute it from arrivals:
-        #     calculated_bazs = []
-        #     if np.isnan(array_baz_dict[phase_hint]):
-        #         for pick in array_picks_dict[phase_hint]:
-        #             for arrival in event.preferred_origin().arrivals:
-        #                 if (arrival.pick_id == pick.resource_id and
-        #                         arrival.azimuth is not None):
-        #                     calculated_bazs.append(
-        #                         (arrival.azimuth + 180) % 360)
-        #         array_baz_dict[phase_hint] = np.mean(calculated_bazs)
-        #     # compute apparent velocity if there is not measurement for phase
-        #     calculated_app_vels = []
-        #     if np.isnan(array_app_vel_dict[phase_hint]):
-        #         for pick in array_picks_dict[phase_hint]:
-        #             for arrival in event.preferred_origin().arrivals:
-        #                 if (arrival.pick_id == pick.resource_id and
-        #                         # arrival.distance is not None and
-        #                         arrival.takeoff_angle is not None):
-        #                     # takeoff_angle is incidence angle when read from Seisan
-        #                     # TODO compute from: incidence angle and velocity model
-        #                     #      should be simple calculation with topmost
-        #                     #      velocity and AIN
-        #                     if pick.phase_hint[0] == 'P':
-        #                         vel = vel_mod.layers[0][2]
-        #                     elif  pick.phase_hint[0] == 'S':
-        #                         vel = vel_mod.layers[0][4]
-        #                     else:
-        #                         continue
-        #                     app_vel = vel / math.sin(math.radians(
-        #                         arrival.takeoff_angle))
-        #                     calculated_app_vels.append(app_vel)
-        #         array_app_vel_dict[phase_hint] = np.mean(calculated_app_vels)
-
-
         # 2.3 compute average array pick at reference site.
         #     i now have BAZ, app-vel, distance, and velocity model
         # app_vel = degrees2kilometers(1.0 / pick.horizontal_slowness)
@@ -667,6 +550,7 @@ def add_array_station_picks(
                         polarity=polarity,
                         evaluation_mode='automatic',
                         creation_info=CreationInfo(agency_id='RR'))
+                    # TODO: check that similar array-pick isn't there yet
                     # add a pick-.weight if there is one
                     if 'extra' in pick.keys():
                         new_pick['extra'] = dict()
@@ -740,6 +624,12 @@ def array_lac_calc(
         #         for station, chan in detection.chans:
                     
         for seisarray_prefix in array_st_dict.keys():
+            array_party = Party(
+                [family.copy() for family in party
+                 if len(
+                     [tr for tr in family.template.st if fnmatch.fnmatch(
+                         tr.stats.station, seisarray_prefix,
+                         flags=fnmatch.EXTMATCH)]) > 0])
             # Factor to relax cc-requirement by - noise of stacked traces
             # should in theory reduce by sqrt(n_traces)
             # TODO - remove the factor 10 below after testing!!!!!
@@ -749,7 +639,7 @@ def array_lac_calc(
                         seisarray_prefix, phase_hint, str(cc_relax_factor))
             # From (preprocessed?) stream select only traces for current array
             array_catalog = Catalog()
-            array_catalog = party.copy().lag_calc(
+            array_catalog = array_party.lag_calc(
                 array_st_dict[seisarray_prefix], shift_len=0.0,
                 pre_processed=pre_processed, min_cc=min_cc/cc_relax_factor,
                 min_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor/cc_relax_factor,
@@ -765,7 +655,13 @@ def array_lac_calc(
             for event in array_catalog:
                 # find the event that was picked from the same detection for
                 # the whole network
-                ref_station_code = SEISARRAY_REF_STATIONS[seisarray_prefix]
+                try:
+                    ref_station_code = SEISARRAY_REF_STATIONS[seisarray_prefix]
+                except KeyError:
+                    Logger.warning(
+                        'No reference station for array %s defined, cannot'
+                        ' add pick.', seisarray_prefix)
+                    continue
                 ref_equi_stacode = SEISARRAY_REF_EQUIVALENT_STATIONS[
                     ref_station_code]
                 picked_event = [ev for ev in picked_cat
@@ -808,6 +704,7 @@ def array_lac_calc(
                         #     1 / horizontal_slowness_km),
                         # backazimuth=array_baz_dict[seisarray_prefix][phase_hint],
                         # backazimuth=baz,
+                        # TODO: check that similar array-pick isn't there yet
                                             
                         picked_event.picks.append(new_pick)
                     continue  # avoid new computations
@@ -881,6 +778,22 @@ def array_lac_calc(
                     picked_event.picks.append(ref_pick)
 
     return picked_cat
+
+
+def get_updated_stations_df(inv):
+    """
+    return updated  stations-dataframe
+    """
+    stations_df = stations_to_df(inv)
+    # Add site names to stations_df (for info on array beams)
+    site_names = []
+    if 'site_name' not in stations_df.columns:
+        for network in inv.networks:
+            for station in network.stations:
+                for channel in station.channels:
+                    site_names.append(station.site.name)
+    stations_df['site_name'] = site_names
+    return stations_df
 
 
 def add_array_waveforms_to_template(template, stream,

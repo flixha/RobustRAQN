@@ -666,7 +666,7 @@ def add_array_station_picks(
                         onset=onset,
                         polarity=polarity,
                         evaluation_mode='automatic',
-                        creation_info=CreationInfo(agency='RR'))
+                        creation_info=CreationInfo(agency_id='RR'))
                     # add a pick-.weight if there is one
                     if 'extra' in pick.keys():
                         new_pick['extra'] = dict()
@@ -802,7 +802,7 @@ def array_lac_calc(
                             onset=equi_pick.onset,
                             polarity=equi_pick.polarity,
                             evaluation_mode='automatic',
-                            creation_info=CreationInfo(agency='RR'))
+                            creation_info=CreationInfo(agency_id='RR'))
                         # TODO can I add baz and app-vel here?
                         # horizontal_slowness=kilometers2degrees(
                         #     1 / horizontal_slowness_km),
@@ -985,6 +985,8 @@ if __name__ == "__main__":
                         'NC300','NC301','NC302','NC303','NC304','NC305',
                         'NC400','NC401','NC402','NC403','NC404','NC405',
                         'NC600','NC601','NC602','NC603','NC604','NC605']
+
+    # selected_stations = ['ASK', 'BLS5', 'KMY', 'ODD1','SKAR']
     seisan_wav_path = (
         '/home/felix/Documents2/BASE/Detection/Bitdalsvatnet/SeisanEvents_07')
     if make_templates:
@@ -1021,19 +1023,19 @@ if __name__ == "__main__":
     else:
         party = Party().read('tests/data/Detections/UniqueDet2021-01-05.tgz')
     # party[0].detections = [party[0][10]]
-    party[0].detections = [party[0][0]]
+    # party[0].detections = [party[0][0]]
         
 
 
 # %%
-export_catalog = pick_events_for_day(
-    tribe=pick_tribe, det_tribe=tribe, templatePath=None,
-    date=date, det_folder='tests/data/Detections', dayparty=party,
-    ispaq=ispaq, clients=[client], relevantStations=selected_stations,
-    array_lag_calc=False, inv=inv, parallel=True, cores=cores,
-    write_party=False, n_templates_per_run=1,
-    archives=['/data/seismo-wav/SLARCHIVE'], min_det_chans=5,
-    sfile_path='tests/data/Sfiles', operator='feha', stations_df=stations_df)
+    export_catalog = pick_events_for_day(
+        tribe=pick_tribe, det_tribe=tribe, templatePath=None,
+        date=date, det_folder='tests/data/Detections', dayparty=party,
+        ispaq=ispaq, clients=[client], relevantStations=selected_stations,
+        array_lag_calc=True, inv=inv, parallel=True, cores=cores,
+        write_party=False, n_templates_per_run=1, min_det_chans=5, min_cc=0.4,
+        interpolate=True, archives=['/data/seismo-wav/SLARCHIVE'], 
+        sfile_path='tests/data/Sfiles', operator='feha', stations_df=stations_df)
 
 
 # %%

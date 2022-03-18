@@ -22,6 +22,7 @@ from obspy import read_inventory, Inventory, Stream
 from obspy.clients.filesystem.sds import Client
 
 from eqcorrscan.core.match_filter import (Tribe, Party)
+from eqcorrscan.core.lag_calc import LagCalcError
 
 # import quality_metrics, spectral_tools, load_events_for_detection
 # reload(quality_metrics)
@@ -35,6 +36,7 @@ from robustraqn.spectral_tools import (
     Noise_model, get_updated_inventory_with_noise_models)
 from robustraqn.lag_calc_postprocessing import (
     check_duplicate_template_channels, postprocess_picked_events)
+from robustraqn.seimic_array_tools import array_lac_calc
 from robustraqn.processify import processify
 from robustraqn.fancy_processify import fancy_processify
 
@@ -49,43 +51,45 @@ EQCS_logger.setLevel(logging.ERROR)
 
 # @processify
 def pick_events_for_day(
-        date, det_folder, templatePath, ispaq, clients, tribe,
-        short_tribe=Tribe(), det_tribe=Tribe(),
-        only_request_detection_stations=True,
+        date, det_folder, templatePath, ispaq, clients, tribe, dayparty=None,
+        short_tribe=Tribe(), det_tribe=Tribe(), stations_df=None,
+        only_request_detection_stations=True, array_lag_calc=False,
         relevantStations=[], sta_translation_file='',
         noise_balancing=False, remove_response=False, inv=Inventory(),
         parallel=False, cores=None, check_array_misdetections=False,
         write_party=False, new_threshold=None, n_templates_per_run=1,
         archives=[], request_fdsn=False,
-        min_det_chans=1, sfile_path='Sfiles', operator='EQC'):
+        min_det_chans=1, sfile_path='Sfiles', operator='EQC', **kwargs):
     """
     Day-loop for picker
     """
 
-    # Read in party of detections and check whether to proceeed
-    dayparty = Party()
     current_day_str = date.strftime('%Y-%m-%d')
-    party_file = os.path.join(
-        det_folder, 'UniqueDet*' + current_day_str + '.tgz')
-    try:
-        dayparty = dayparty.read(party_file)
-    except Exception as e:
-        Logger.warning('Error reading parties for ' + party_file)
-        Logger.warning(e)
-        return
-    if not dayparty:
-        return
-    Logger.info('Read in party of %s families for %s from %s.',
-                str(len(dayparty)), current_day_str, party_file)
+    # Read in party of detections and check whether to proceeed
+    if dayparty is None:
+        dayparty = Party()
+        party_file = os.path.join(
+            det_folder, 'UniqueDet*' + current_day_str + '.tgz')
+        try:
+            dayparty = dayparty.read(party_file)
+        except Exception as e:
+            Logger.warning('Error reading parties for ' + party_file)
+            Logger.warning(e)
+            return
+        if not dayparty:
+            return
+        Logger.info('Read in party of %s families for %s from %s.',
+                    str(len(dayparty)), current_day_str, party_file)
 
-    # replace the old templates in the detection-families with those for
-    # picking (these contain more channels)
-    # dayparty = replace_templates_for_picking(dayparty, tribe)
+        # replace the old templates in the detection-families with those for
+        # picking (these contain more channels)
+        # dayparty = replace_templates_for_picking(dayparty, tribe)
 
     # Rethreshold if required
-    dayparty = Party(dayparty).rethreshold(
-        new_threshold=new_threshold, new_threshold_type='MAD',
-        abs_values=True)
+    if new_threshold is not None:
+        dayparty = Party(dayparty).rethreshold(
+            new_threshold=new_threshold, new_threshold_type='MAD',
+            abs_values=True)
     # If there are no detections, then continue with next day
     if not dayparty:
         Logger.info('No detections left after re-thresholding for %s '
@@ -110,7 +114,7 @@ def pick_events_for_day(
                 else:
                     Logger.warning(
                         'Did not find corresponding picking template for %s, '
-                        + 'using original detection template insteadfor %s')
+                        + 'using original detection template instead for %s')
                     continue
                 Logger.warning(
                     'Found template with name %s, using instead of %s',
@@ -126,19 +130,25 @@ def pick_events_for_day(
                 # Find time diff between template and detection to update 
                 # detection pick times:
                 time_diffs = []
+                if len(detection.event.picks) == 0:
+                    continue
                 for det_pick in detection.event.picks:
                     templ_picks = [
                         pick for pick in pick_template.event.picks
                         if pick.waveform_id.id == det_pick.waveform_id.id]
                     if len(templ_picks) == 1:
                         time_diffs.append(det_pick.time - templ_picks[0].time)
+                    elif len(templ_picks) > 1:
+                        msg = ('Lag-calc does not support two picks on the ' +
+                               'same trace, check your picking-templates!')
+                        raise LagCalcError(msg)
                 # for det_tr in family.template.st:
                 #     pick_tr = pick_template.st.select(id=det_tr.id)
                 #     if len(pick_tr) == 1:
                 #         time_diffs.append(det_tr.stats.starttime -
                 #                           pick_tr[0].stats.starttime)
                 # Use mean time diff in case any picks were corrected slightly
-                time_diff = np.mean(time_diffs)
+                time_diff = np.nanmean(time_diffs)
                 detection.event = pick_template.event.copy()
                 for pick in detection.event.picks:
                     pick.time = pick.time + time_diff
@@ -274,18 +284,24 @@ def pick_events_for_day(
     #    debug=0, starttime=starttime, ignore_length=True,
     #    seisan_chan_names=False, parallel=True, num_cores=cores)
     picked_catalog = Catalog()
-    picked_catalog = dayparty.lag_calc(
+    picked_catalog = dayparty.copy().lag_calc(
         day_st, pre_processed=False, shift_len=0.8, min_cc=0.4,
         min_cc_from_mean_cc_factor=0.6,
         horizontal_chans=['E', 'N', '1', '2'], vertical_chans=['Z'],
-        interpolate=False, plot=False, overlap='calculate',
-        parallel=parallel, cores=cores, daylong=True, ignore_bad_data=True,
-        ignore_length=True)
+        parallel=parallel, cores=cores, daylong=True, **kwargs)
     # try:
     # except LagCalcError:
     #    pass
     #    Logger.error("LagCalc Error on " + str(year) +
     #           str(month).zfill(2) + str(day).zfill(2))
+
+    if array_lag_calc:
+        picked_catalog = array_lac_calc(
+            day_st, picked_catalog, dayparty, tribe, stations_df,
+            min_cc=0.4, pre_processed=False, shift_len=0.8,
+            min_cc_from_mean_cc_factor=0.6,
+            horizontal_chans=['E', 'N', '1', '2'], vertical_chans=['Z'],
+            parallel=parallel, cores=cores, daylong=True, **kwargs)
 
     export_catalog = postprocess_picked_events(
         picked_catalog, dayparty, tribe, original_stats_stream,

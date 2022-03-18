@@ -2143,6 +2143,8 @@ def load_station_translation_dict(file="station_code_translation.txt"):
     returns a dictionary of key:alternative name, value: standard name
     """
     station_forw_translation_dict = dict()
+    if file == '' or file is None:
+        return station_forw_translation_dict, station_forw_translation_dict
     try:
         f = open(file, "r+")
     except Exception as e:

@@ -135,7 +135,7 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
     #         "{:02d}".format(origin.time.month))
     # for comment in event.comments.copy():
     #     if 'Waveform-filename:' in comment.text:
-    #         wav_file = comment.text.strip('Waveform-filename: ')
+    #         wav_file = comment.text.removesprefix('Waveform-filename: ')
     #         if 'ARC _' in wav_file:
     #             continue
     #         out_lines = subprocess.check_output(
@@ -1103,7 +1103,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
         st = Stream()
         for id in unique_seed_id_list:
             Logger.debug('Starting initial processing of %s for %s - %s.',
-                         id(), str(starttime)[0:19], str(endtime)[0:19])
+                         id, str(starttime)[0:19], str(endtime)[0:19])
             st += _init_processing_per_channel(
                 day_st.select(id=id), starttime, endtime,
                 remove_response=remove_response,

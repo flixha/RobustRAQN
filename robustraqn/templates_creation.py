@@ -81,19 +81,19 @@ def _shorten_tribe_streams(
             tr.trim(starttime=tr.stats.starttime,
                     endtime=tr.stats.starttime + new_templ_len)
         if len(templ.st) >= min_n_traces:
-            templateName = str(
+            templ_name = str(
                 templ.event.preferred_origin().time)[0:22] + '_' + 'templ'
-            templateName = templateName.lower().replace('-', '_')\
+            templ_name = templ_name.lower().replace('-', '_')\
                 .replace(':', '_').replace('.', '_').replace('/', '')
             # make a nice plot
             if make_pretty_plot:
                 image_name = os.path.join('TemplatePlots',
-                                          prefix + '_' + templateName)
+                                          prefix + '_' + templ_name)
                 pretty_template_plot(
                     templ.st, background=False, event=templ.event,
                     sort_by='distance', show=False, return_figure=False,
                     size=(25, 50), save=True, savefile=image_name)
-            Logger.info("Made template" + templateName)
+            Logger.info("Made template" + templ_name)
             Logger.info(templ)
     label = ''
     if noise_balancing:
@@ -114,7 +114,8 @@ def _create_template_objects(
         prepick, samp_rate, seisan_wav_path, inv=Inventory(), clients=[],
         remove_response=False, noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
-        min_n_traces=8, write_out=False, make_pretty_plot=False, prefix='',
+        min_n_traces=8, write_out=False, templ_path='Templates/' ,
+        make_pretty_plot=False, prefix='',
         check_template_strict=True, allow_channel_duplication=True,
         normalize_NSLC=True, add_array_picks=False, stations_df=pd.DataFrame(),
         add_large_aperture_array_picks=False,
@@ -205,6 +206,7 @@ def _create_template_objects(
                 stations_df=stations_df, **kwargs)
             if add_large_aperture_array_picks:
                 array_picks_dict = extract_array_picks(event=event)
+                Logger.info('Adding array picks for large aperture arrays')
                 event = add_array_station_picks(
                     event=event, array_picks_dict=array_picks_dict,
                     stations_df=stations_df,
@@ -236,32 +238,33 @@ def _create_template_objects(
                 allow_channel_duplication=allow_channel_duplication,
                 max_perc_zeros=5)
 
-        # templateName = str(event.origins[0].time) + '_' + 'templ'
-        templateName = str(event.preferred_origin().time)[0:22] + '_' + 'templ'
-        templateName = templateName.lower().replace('-', '_')\
+        # templ_name = str(event.origins[0].time) + '_' + 'templ'
+        templ_name = str(event.preferred_origin().time)[0:22] + '_' + 'templ'
+        templ_name = templ_name.lower().replace('-', '_')\
             .replace(':', '_').replace('.', '_').replace('/', '')
-        # templateName = templateName.lower().replace(':','_')
-        # templateName = templateName.lower().replace('.','_')
-        # template.write('TemplateObjects/' + templateName + '.mseed',
+        # templ_name = templ_name.lower().replace(':','_')
+        # templ_name = templ_name.lower().replace('.','_')
+        # template.write('TemplateObjects/' + templ_name + '.mseed',
         # format="MSEED")
-        template_names.append(templateName)
+        template_names.append(templ_name)
         # except:
         #    print("WARNING: There was an issue creating a template for " +
         # sfile)
         # t = Template().construct(
         #     method=None,picks=event.picks, st=templateSt,length=7.0,
         #     swin='all', prepick=0.2, all_horiz=True, plot=False,
-        #     delayed=True, min_snr=1.2, name=templateName, lowcut=2.5,
+        #     delayed=True, min_snr=1.2, name=templ_name, lowcut=2.5,
         #     highcut=8.0,samp_rate=20, filt_order=4,event=event,
         #     process_length=300.0)
-        t = Template(name=templateName, event=event, st=templateSt,
+        t = Template(name=templ_name, event=event, st=templateSt,
                      lowcut=lowcut, highcut=highcut, samp_rate=samp_rate,
                      filt_order=4, process_length=86400.0, prepick=prepick)
         # highcut=8.0, samp_rate=20, filt_order=4, process_length=86400.0,
 
         if len(t.st) >= min_n_traces:
             if write_out:
-                t.write('Templates/' + templateName + '.mseed', format="MSEED")
+                templ_filename = os.path.join(templ_path, templ_name + '.mseed')
+                t.write(templ_filename, format="MSEED")
             tribe += t
             # add wavefile-name to output
             wavnames.append(wavname[0])
@@ -270,12 +273,12 @@ def _create_template_objects(
             sfile_path, sfile_name = os.path.split(sfile)
             if make_pretty_plot:
                 image_name = os.path.join('TemplatePlots',
-                                        prefix + '_' + templateName)
+                                        prefix + '_' + templ_name)
                 pretty_template_plot(
                     templateSt, background=wavef, event=event, sort_by='distance',
                     show=False, return_figure=False, size=(25, 50), save=True,
                     savefile=image_name)
-            Logger.info("Made template" + templateName)
+            Logger.info("Made template" + templ_name)
             Logger.info(t)
 
     # clusters = tribe.cluster(method='space_cluster', d_thresh=1.0, show=True)
@@ -322,7 +325,8 @@ def create_template_objects(
         prepick, samp_rate, seisan_wav_path, clients=[], inv=Inventory(),
         remove_response=False, noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
-        min_n_traces=8, write_out=False, prefix='', make_pretty_plot=False,
+        min_n_traces=8, write_out=False, templ_path='Templates',
+        prefix='', make_pretty_plot=False,
         check_template_strict=True, allow_channel_duplication=True,
         normalize_NSLC=True, add_array_picks=False,
         sta_translation_file="station_code_translation.txt",
@@ -408,8 +412,8 @@ def create_template_objects(
                 noise_balancing=noise_balancing,
                 balance_power_coefficient=balance_power_coefficient,
                 ground_motion_input=ground_motion_input,
-                write_out=write_out, min_n_traces=min_n_traces,
-                make_pretty_plot=make_pretty_plot, prefix=prefix,
+                write_out=write_out, templ_path=templ_path, prefix=prefix,
+                min_n_traces=min_n_traces, make_pretty_plot=make_pretty_plot, 
                 check_template_strict=check_template_strict,
                 allow_channel_duplication=allow_channel_duplication,
                 normalize_NSLC=normalize_NSLC, add_array_picks=add_array_picks,
@@ -441,9 +445,10 @@ def create_template_objects(
             remove_response=remove_response, noise_balancing=noise_balancing,
             balance_power_coefficient=balance_power_coefficient,
             ground_motion_input=ground_motion_input,
-            min_n_traces=min_n_traces, write_out=write_out, prefix=prefix,
-            make_pretty_plot=make_pretty_plot, parallel=parallel,
-            cores=cores, check_template_strict=check_template_strict,
+            min_n_traces=min_n_traces, make_pretty_plot=make_pretty_plot,
+            write_out=write_out, templ_path=templ_path, prefix=prefix,
+            parallel=parallel, cores=cores,
+            check_template_strict=check_template_strict,
             allow_channel_duplication=allow_channel_duplication,
             normalize_NSLC=normalize_NSLC,
             sta_translation_file=sta_translation_file,
@@ -461,8 +466,8 @@ def create_template_objects(
                     + str(min_n_traces) + 'tr_' + label + str(len(tribe)))
                     #max_events_per_file=10)
         for templ in tribe:
-            templ.write('Templates/' + prefix + templ.name + '.mseed',
-                        format="MSEED")
+            templ.write(os.path.join(
+                templ_path, prefix + templ.name + '.mseed'), format="MSEED")
 
     return tribe, wavnames
 

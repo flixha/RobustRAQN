@@ -58,8 +58,9 @@ def pick_events_for_day(
         noise_balancing=False, remove_response=False, inv=Inventory(),
         parallel=False, cores=None, check_array_misdetections=False,
         write_party=False, new_threshold=None, n_templates_per_run=1,
-        archives=[], request_fdsn=False,
-        min_det_chans=1, sfile_path='Sfiles', operator='EQC', **kwargs):
+        archives=[], request_fdsn=False, min_det_chans=1, shift_len=0.8,
+        min_cc=0.4, min_cc_from_mean_cc_factor=0.6,
+        sfile_path='Sfiles', operator='EQC', **kwargs):
     """
     Day-loop for picker
     """
@@ -127,12 +128,23 @@ def pick_events_for_day(
             for detection in family:
                 new_pick_channels = list(pick_chans.difference(detect_chans))
                 detection.chans = detection.chans + new_pick_channels
+                # Check that I only compare the first pick on each channel
+                # (detection allows multiple picks per channel, picking does
+                # not yet).
+                detections_earliest_tr_picks = detection.event.picks
+                if len(family.template.st) > len(pick_template.st):
+                    detections_earliest_tr_picks = [
+                        pick for pick in detection.event.picks
+                        if pick.time == min(
+                            [p.time for p in detection.event.picks
+                             if p.waveform_id.id == pick.waveform_id.id])]
+                
                 # Find time diff between template and detection to update 
                 # detection pick times:
                 time_diffs = []
-                if len(detection.event.picks) == 0:
+                if len(detections_earliest_tr_picks) == 0:
                     continue
-                for det_pick in detection.event.picks:
+                for det_pick in detections_earliest_tr_picks:
                     templ_picks = [
                         pick for pick in pick_template.event.picks
                         if pick.waveform_id.id == det_pick.waveform_id.id]
@@ -285,8 +297,8 @@ def pick_events_for_day(
     #    seisan_chan_names=False, parallel=True, num_cores=cores)
     picked_catalog = Catalog()
     picked_catalog = dayparty.copy().lag_calc(
-        day_st, pre_processed=False, shift_len=0.8, min_cc=0.4,
-        min_cc_from_mean_cc_factor=0.6,
+        day_st, pre_processed=False, shift_len=shift_len, min_cc=min_cc,
+        min_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
         horizontal_chans=['E', 'N', '1', '2'], vertical_chans=['Z'],
         parallel=parallel, cores=cores, daylong=True, **kwargs)
     # try:

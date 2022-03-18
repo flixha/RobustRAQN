@@ -399,21 +399,43 @@ def check_duplicate_template_channels(tribe):
     """
     Logger.info('Checking templates in %s for duplicate channels', tribe)
     for template in tribe:
-        k = 0
-        channelIDs = list()
-        for trace in template.st:
-            if trace.id in channelIDs:
-                for j in range(0, k):
-                    testSameIDtrace = template.st[j]
-                    if trace.id == testSameIDtrace.id:
-                        if trace.stats.starttime >= testSameIDtrace.stats.\
+        nt = 0
+        channel_ids = list()
+        stream_copy = template.st.copy()
+        for nt, trace in enumerate(stream_copy):
+            if trace.id in channel_ids:
+                for j in range(0, nt):
+                    test_same_id_trace = stream_copy[j]
+                    if trace.id == test_same_id_trace.id:
+                        if trace.stats.starttime >= test_same_id_trace.stats.\
                                 starttime:
-                            template.st.remove(trace)
+                            if trace in template.st:
+                                template.st.remove(trace)
                         else:
-                            template.st.remove(testSameIDtrace)
+                            if test_same_id_trace in template.st:
+                                template.st.remove(test_same_id_trace)
+                        continue
             else:
-                channelIDs.append(trace.id)
-                k += 1
+                channel_ids.append(trace.id)
+
+        # Also throw away the later pick from the template's event
+        np = 0
+        pick_ids = list()
+        picks_copy = template.event.picks.copy()
+        for np, pick in enumerate(picks_copy):
+            if pick.waveform_id.id in pick_ids:
+                for j in range(0, np):
+                    test_same_id_pick = picks_copy[j]
+                    if pick.waveform_id.id == test_same_id_pick.waveform_id.id:
+                        if pick.time >= test_same_id_pick.time:
+                            if pick in template.event.picks:
+                                template.event.picks.remove(pick)
+                        else:
+                            if test_same_id_pick in template.event.picks:
+                                template.event.picks.remove(test_same_id_pick)
+                        continue
+            else:
+                pick_ids.append(pick.waveform_id.id)
 
     return tribe
 

@@ -1825,6 +1825,7 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
         tr.stats["coordinates"]["elevation"] = stachan_info.elevation
         tr.stats["coordinates"]["depth"] = stachan_info.depth
     except Exception as e:
+        Logger.warning(e)
         Logger.warning('Could not set all station coordinates for %s', tr.id)
     # Gain all traces to avoid a float16-zero error
     # basically converts from m to um (for displacement) - nm
@@ -2059,7 +2060,9 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
             tr.stats.channel = tr.stats.channel + tr.stats.location
         chn = tr.stats.channel
         if std_channel_prefix is not None:
-            if chn[1] in 'LH10V ':
+            if len(chn) < 3:
+                tr.stats.channel = std_channel_prefix + chn[-1]
+            elif chn[1] in 'LH10V ':
                 tr.stats.channel = std_channel_prefix + chn[2]
             # tr.stats.location = '00'
     # 2. Rotate to proper ZNE and rename channels to ZNE

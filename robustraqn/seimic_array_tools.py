@@ -16,7 +16,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s")
 
-from collections import Counter
+from collections import Counter, defaultdict
 
 from obspy import Stream
 from obspy.signal.util import next_pow_2, util_geo_km
@@ -38,7 +38,7 @@ SEISARRAY_PREFIXES = [
     'NAO*', 'NBO*', '@(NB2*|NOA)', 'NC2*', 'NC3*', 'NC4*', 'NC6*',
     'NR[ABCD][0-9]',
     '@(ARCES|AR[ABCDE][0-9])', '@(SPITS|SP[ABC][0-5])', '@(BEAR|BJO*|BEA[1-6])',
-    'OSE[0-9][0-9]', 'EKO[0-9]*', 'GRA[0-9][0-9]',
+    'OSE[0-9][0-9]', 'EKO[0-9]*', 'GRA[0-9][0-9]', 'SNO[0-9][0-9]',
     '@(EKA|ESK|EKB*|EKR*)', '@(ILAR|IL[0-3][0-9])', '@(YKA|YKA*[0-9])',
     '@(HN[AB][0-6]|BAS02)',
     '@(OBS[0-6]|OBS1[1-2]'  # OBS
@@ -72,6 +72,7 @@ SEISARRAY_REF_STATIONS = {
     for ref_station in REF_STATIONS for seisarray_prefix in SEISARRAY_PREFIXES
     if fnmatch.fnmatch(ref_station, seisarray_prefix, flags=fnmatch.EXTMATCH)}
 
+
 SEISARRAY_REF_EQUIVALENT_STATIONS = {
   'ARCES': 'ARA0',
   'SPITS': 'SPA0',
@@ -89,6 +90,8 @@ SEISARRAY_REF_EQUIVALENT_STATIONS = {
   'YKA': 'YKR8',
   'ILAR': 'IL01'
 }
+SEISARRAY_REF_EQUIVALENT_STATIONS = defaultdict(
+    str, SEISARRAY_REF_EQUIVALENT_STATIONS.items())
 
 # Notes:
 # May be able to treat southern part of Nordland stations as a large array (70 x 70 km)

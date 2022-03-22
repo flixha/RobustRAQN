@@ -588,16 +588,22 @@ def extract_detections(detections, templates, archive, arc_type,
                           if UTCDateTime(detection.detect_time.date) ==
                           detection_day]
         del delays
+
+        # Reuqest the whole day's stream plus 15 minutes before / after
+        starttime = UTCDateTime(d.date) - 15*60
+        endtime = starttime + 24.5 * 60 * 60
+        bulk = [('*', sta, '*', '*',
+                 )
+                for sta in all_stations]
+        day_st = get_waveforms_bulk(
+                client, bulk, parallel=parallel, cores=cores)
         for detection in day_detections:
             Logger.info(
                 'Cutting for detections at: ' +
                 detection.detect_time.strftime('%Y/%m/%d %H:%M:%S'))
             t1 = UTCDateTime(detection.detect_time) - extract_len * 1 / 3
             t2 = UTCDateTime(detection.detect_time) + extract_len * 2 / 3
-            bulk = [('*', sta, '*', '*', t1, t2) for sta in all_stations]
-            st = get_waveforms_bulk(
-                client, bulk, parallel=parallel, cores=cores)
-
+            st = day_st.copy().trim(starttime=t1, endtime=t2)
             if request_fdsn:
                 existing_stations = list(set([tr.stats.station for tr in st]))
                 other_stations = list(

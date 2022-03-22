@@ -59,7 +59,7 @@ def pick_events_for_day(
         parallel=False, cores=None, check_array_misdetections=False,
         write_party=False, new_threshold=None, n_templates_per_run=1,
         archives=[], request_fdsn=False, min_det_chans=1, shift_len=0.8,
-        min_cc=0.4, min_cc_from_mean_cc_factor=0.6,
+        min_cc=0.4, min_cc_from_mean_cc_factor=0.6, extract_len=240,
         sfile_path='Sfiles', operator='EQC', **kwargs):
     """
     Day-loop for picker
@@ -319,7 +319,7 @@ def pick_events_for_day(
         picked_catalog, dayparty, tribe, original_stats_stream,
         det_tribe=det_tribe, write_sfiles=True, sfile_path=sfile_path,
         operator=operator, all_channels_for_stations=relevantStations,
-        extract_len=240, write_waveforms=True, archives=archives,
+        extract_len=extract_len, write_waveforms=True, archives=archives,
         request_fdsn=request_fdsn, template_path=templatePath,
         min_pick_stations=8, min_picks_on_detection_stations=3)
 

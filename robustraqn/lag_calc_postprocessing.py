@@ -590,7 +590,7 @@ def extract_detections(detections, templates, archive, arc_type,
         del delays
 
         # Reuqest the whole day's stream plus 15 minutes before / after
-        starttime = UTCDateTime(d.date) - 15*60
+        starttime = UTCDateTime(detection_day.date) - 15*60
         endtime = starttime + 24.5 * 60 * 60
         bulk = [('*', sta, '*', '*',
                  )

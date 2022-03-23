@@ -36,7 +36,7 @@ from robustraqn.spectral_tools import get_updated_inventory_with_noise_models
 
 SEISARRAY_PREFIXES = [
     'NAO*', 'NBO*', '@(NB2*|NOA)', 'NC2*', 'NC3*', 'NC4*', 'NC6*',
-    'NR[ABCD][0-9]',
+    'NR[ABCD][0-9]', '@(ASK|ASK[1-5])', '@(MOR|MOR[1-8])', '@(KTK|KTK[1-6])',
     '@(ARCES|AR[ABCDE][0-9])', '@(SPITS|SP[ABC][0-5])', '@(BEAR|BJO*|BEA[1-6])',
     'OSE[0-9][0-9]', 'EKO[0-9]*', 'GRA[0-9][0-9]', 'SNO[0-9][0-9]',
     '@(EKA|ESK|EKB*|EKR*)', '@(ILAR|IL[0-3][0-9])', '@(YKA|YKA*[0-9])',
@@ -48,6 +48,7 @@ LARGE_APERTURE_SEISARRAY_PREFIXES = [
     '@(N[ABC][O2346]*|NOA|NR[ABCD][0-9]|NAO*|NBO*)',
     '@(ISF|BRBA|BRBB|BRB)',  # Svalbard west
     # Vestland
+    '@(BLS|BLS[1-5])',
     '@(KMY|KMY2|NWG22)',
     '@(ODD|ODD1|NWG21|BAS1[0-4]|BAS19|BAS2[0-3]|REIN)',
     '@(BER|ASK|RUND|HN[AB][0-6]|BAS0[3-6]|BAS0D|BAS1[5-7]|ASK[0-8]|SOTS|TB2S|OSGS|ESG|EGD|SOTS|ARNS|BT2[13]',
@@ -215,7 +216,7 @@ def extract_array_stream(st, seisarray_prefixes=SEISARRAY_PREFIXES):
 
 
 def get_geometry(stations_df, array_prefix='', coordsys='lonlat',
-                 return_center=False):
+                 return_center=False, center_coord_output='lonlat'):
     """
     Modified from obspy.signal.array_analysis.get_geometry to allow calculation
     for a stations dataframe.
@@ -250,11 +251,11 @@ def get_geometry(stations_df, array_prefix='', coordsys='lonlat',
         if coordsys == 'lonlat':
             geometry[i, 0] = resp.longitude
             geometry[i, 1] = resp.latitude
-            geometry[i, 2] = resp.elevation
+            geometry[i, 2] = resp.elevation / 1000
         elif coordsys == 'xy':
             geometry[i, 0] = resp.x
             geometry[i, 1] = resp.y
-            geometry[i, 2] = resp.elevation
+            geometry[i, 2] = resp.elevation / 1000
     Logger.debug("Array geometry coordsys = %s", coordsys)
 
     if coordsys == 'lonlat':
@@ -275,8 +276,16 @@ def get_geometry(stations_df, array_prefix='', coordsys='lonlat',
         raise ValueError("Coordsys must be one of 'lonlat', 'xy'")
 
     if return_center:
-        return np.c_[geometry.T,
-                     np.array((center_lon, center_lat, center_h))].T
+        if center_coord_output == 'lonlat':
+            center_geometry = np.array((center_lon, center_lat, center_h))
+        elif center_coord_output == 'xy':
+            center_geometry =  np.array((geometry[:, 0].mean(),
+                                         geometry[:, 1].mean(),
+                                         geometry[:, 2].mean()))
+        else:
+            raise ValueError(
+                "center_coord_output must be one of 'lonlat', 'xy'")
+        return np.c_[geometry.T, center_geometry].T
     else:
         return geometry, array_stations_df
 
@@ -401,7 +410,7 @@ def find_array_picks_baz_appvel(
 def add_array_station_picks(
         event, stations_df, array_picks_dict=None, array_baz_dict=None,
         array_app_vel_dict=None, baz=None, app_vel=None,
-        seisarray_prefixes=SEISARRAY_PREFIXES,
+        seisarray_prefixes=SEISARRAY_PREFIXES, min_array_distance_factor=10,
         vel_mod_file=os.path.join(os.path.dirname(__file__), 'models',
                                   'NNSN1D_plusAK135.tvel'), **kwargs):
     """
@@ -433,6 +442,12 @@ def add_array_station_picks(
         find_array_picks_baz_appvel(
             event, array_picks_dict=array_picks_dict,
             seisarray_prefixes=seisarray_prefixes, vel_mod=vel_mod))
+    origin = event.preferred_origin()
+    if origin is None:
+        try:
+            origin = event.origins[0]
+        except IndexError:
+            origin = None
 
     #   2.2. get array delays for relevant arrival.
     for seisarray_prefix, pha_picks_dict in array_picks_dict.items():
@@ -440,9 +455,29 @@ def add_array_station_picks(
         array_geometry, array_stations_df = get_geometry(
             stations_df, array_prefix=seisarray_prefix, coordsys='lonlat',
             return_center=False)
-        array_center = get_geometry(
+        array_geo_center = get_geometry(
             array_stations_df, array_prefix=seisarray_prefix,
-            coordsys='lonlat', return_center=True)
+            coordsys='lonlat', return_center=True, center_coord_output='xy')
+        array_center = array_geo_center[-1]
+
+        # Compute array apperture - find maximum distance between array station
+        # and array center, times two.
+        array_aperture = [
+            np.sqrt((ar_geo[0] - array_center[0]) ** 2 +
+                    (ar_geo[1] - array_center[1]) ** 2 +
+                    (ar_geo[2] - array_center[2]) ** 2)
+            for ar_geo in array_geometry]
+        array_aperture = 2 * max(array_aperture)
+        event_array_dist = degrees2kilometers(
+            locations2degrees(origin.latitude, origin.longitude,
+                              array_center[1], array_center[0]))
+        event_array_dist = np.sqrt(event_array_dist ** 2 + origin.depth ** 2)
+        # Check if array is far enough from event to assume plane wave
+        if (event_array_dist / min_array_distance_factor <= array_aperture):
+            Logger.info(
+                'Distance between event %s and array %s is too small, not com'
+                'puting array arrivals.', event.short_str(), seisarray_prefix)
+            continue
 
         phase_hints = pha_picks_dict.keys()
         # 2.3 compute average array pick at reference site.
@@ -883,6 +918,7 @@ if __name__ == "__main__":
     event2 = add_array_station_picks(
         event=event, array_picks_dict=array_picks_dict,
         stations_df=stations_df)
+        
 
     write_select(catalog=Catalog([event2]), filename='array.out', userid='RR',
                  evtype='R', wavefiles=None, high_accuracy=True,
@@ -940,7 +976,7 @@ if __name__ == "__main__":
         party = Party().read('tests/data/Detections/UniqueDet2021-01-05.tgz')
     # party[0].detections = [party[0][10]]
     # party[0].detections = [party[0][0]]
-        
+
 
 
 # %%

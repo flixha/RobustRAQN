@@ -17,6 +17,7 @@ import pandas as pd
 from obspy.core.event import Catalog
 from obspy.core.utcdatetime import UTCDateTime
 from obspy.geodetics.base import gps2dist_azimuth
+from obspy.geodetics import kilometers2degrees, degrees2kilometers
 from obspy.core.stream import Stream
 # from obspy.core.util.base import TypeError
 # from obspy.core.event import Event
@@ -109,6 +110,61 @@ def _shorten_tribe_streams(
     return short_tribe
 
 
+def check_template_event_errors_ok(
+        origin, max_horizontal_error_km=None, max_depth_error_km=None,
+        max_time_error_s=None, **kwargs):
+    """
+    function to check origin errors gracefully
+    """
+    # Do not use event as template if any errors are above threshold
+    if not origin:
+        Logger.info('Event has no origin, cannot check errors.')
+        return True
+    # # Check horizontal error
+    if max_horizontal_error_km:
+        max_hor_error = list()
+        if origin.origin_uncertainty:
+            max_hor_error.append(
+                origin.origin_uncertainty.max_horizontal_uncertainty / 1000)
+        else:
+            if (origin.longitude_errors 
+                    and origin.longitude_errors.uncertainty):
+                max_hor_error.append(degrees2kilometers(
+                    origin.longitude_errors.uncertainty))
+            if (origin.latitude_errors
+                    and origin.latitude_errors.uncertainty):
+                max_hor_error.append(degrees2kilometers(
+                    origin.latitude_errors.uncertainty))
+        if max_hor_error:
+            max_hor_error = max(max_hor_error)
+            if (max_hor_error and max_hor_error > max_horizontal_error_km):
+                Logger.info('Horizontal error of event %s too large, not using '
+                            'as template', str(origin.time)[0:19])
+                return False
+
+    # Check depth error
+    if max_depth_error_km:
+        if (origin.depth_errors and origin.depth_errors.uncertainty):
+            max_depth_error = origin.depth_errors.uncertainty / 1000
+            if max_depth_error > max_depth_error_km:
+                Logger.info(
+                    'Depth error of event %s too large, not using as template',
+                    str(origin.time)[0:19])
+                return False
+
+    # Check time error
+    if max_time_error_s:
+        if (origin.time_errors and origin.time_errors.uncertainty):
+            max_time_error = origin.time_errors.uncertainty
+            if max_time_error > max_time_error_s:
+                Logger.info(
+                    'Time error of event %s too large, not using as template',
+                    str(origin.time)[0:19])
+                return False
+
+    return True
+
+
 def _create_template_objects(
         sfiles, selectedStations, template_length, lowcut, highcut, min_snr,
         prepick, samp_rate, seisan_wav_path, inv=Inventory(), clients=[],
@@ -139,6 +195,9 @@ def _create_template_objects(
             selectedStations, sta_translation_file=sta_translation_file)
         origin = select[0].preferred_origin()
 
+        if not check_template_event_errors_ok(origin, **kwargs):
+            continue
+
         # Load picks and normalize
         tempCatalog = filter_picks(select, stations=relevantStations)
         if not tempCatalog:
@@ -158,7 +217,7 @@ def _create_template_objects(
         if wavef is None or len(wavef) == 0:
             Logger.error('Event %s for sfile %s has no waveforms available',
                          event.short_str(), sfile)
-            return None
+            continue
 
         if remove_response:
             wavef = try_remove_responses(

@@ -348,13 +348,14 @@ def extract_stream_for_picked_events(
 
     stream_list = list()
     # put enough empty stream in stream_list
-    for st in list_of_stream_lists[0]:
-        stream_list.append(Stream())
+    stream_list = [Stream() for st in list_of_stream_lists[0]]
+    # for st in list_of_stream_lists[0]:
+    #     stream_list.append(Stream())
     # Now append the streams from each archive to the corresponding stream in
     # stream-list.
     for sl in list_of_stream_lists:
-        for j, st in enumerate(sl):
-            stream_list[j] += st
+        for n_st, st in enumerate(sl):
+            stream_list[n_st] += st
 
     wavefiles = list()
     for stream in stream_list:
@@ -592,8 +593,7 @@ def extract_detections(detections, templates, archive, arc_type,
         # Reuqest the whole day's stream plus 15 minutes before / after
         starttime = UTCDateTime(detection_day.date) - 15*60
         endtime = starttime + 24.5 * 60 * 60
-        bulk = [('*', sta, '*', '*',
-                 )
+        bulk = [('*', sta, '*', '*', starttime, endtime)
                 for sta in all_stations]
         day_st = get_waveforms_bulk(
                 client, bulk, parallel=parallel, cores=cores)

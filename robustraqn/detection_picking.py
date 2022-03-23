@@ -204,6 +204,7 @@ def pick_events_for_day(
         require_clock_lock=False, max_suspect_time_tag=86400)
     if not bulk:
         Logger.warning('No waveforms requested for %s', current_day_str)
+        return
 
     # Read in continuous data and prepare for processing
     # day_st = client.get_waveforms_bulk(bulk)

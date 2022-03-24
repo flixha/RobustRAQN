@@ -38,6 +38,71 @@ import logging
 Logger = logging.getLogger(__name__)
 
 
+
+# TODO: write function to just add origins to template
+def add_origins_to_detected_events(catalog, party, tribe,
+                                   overwrite_origins=False):
+    """
+    Add preliminary origins to all detected events based on the template events
+    """
+    catalog = catalog.copy()  # keep input safe
+    for event in catalog:
+        # Select detection
+        detection = None
+        found_det_fam = False
+        for fam in party:
+            family = fam
+            for det in fam:
+                if det.id == event.resource_id:
+                    detection = det
+                    found_det_fam = True
+                    break
+            if found_det_fam:
+                break
+        # Alternative: (not working now)
+        # detection = party[event.resource_id.id[0:28]][0]
+        # SHOULD BE: ????
+        # detection = party[event.resource_id.id][0]
+        if not detection:
+            continue
+
+        # Find hypocenter of template event
+        # detection.template_name
+        try:
+            template_orig = tribe[
+                detection.template_name].event.preferred_origin()
+        except AttributeError:
+            Logger.error(
+                'Could not find template %s for related detection, did you '
+                'provide the correct tribe?', detection.template_name)
+            template_names = [templ.name for templ in tribe]
+            template_name_match = difflib.get_close_matches(
+                detection.template_name, template_names)
+            if len(template_name_match) >= 1:
+                template_name_match = template_name_match[0]
+                template_orig = tribe[
+                    template_name_match].event.preferred_origin()
+                Logger.warning(
+                    'Found template with name %s, using instead of %s',
+                    template_name_match, detection.template_name)
+            else:
+                Logger.warning('Cannot add origin for detection with template '
+                               + '%s', detection.template_name)
+                continue
+        orig = Origin()
+        orig.time = min([p.time for p in event.picks])
+        orig.longitude = origin_longitude or template_orig.longitude
+        orig.latitude = origin_latitude or template_orig.latitude
+        orig.depth = origin_depth or template_orig.depth
+        # day_st.slice(dt, dt + 5)
+        if overwrite_origins:
+            event.origins = [orig]
+        else:
+            event.origins.append(orig)
+        event.preferred_origin_id = orig.resource_id
+    return catalog
+
+
 def postprocess_picked_events(
         picked_catalog, party, tribe, original_stats_stream,
         det_tribe=Tribe(), write_sfiles=False, sfile_path='Sfiles',
@@ -194,37 +259,44 @@ def postprocess_picked_events(
         if len(event.picks) == 0:
             continue
 
-        # Find hypocenter of template
-        # detection.template_name
-        try:
-            template_orig = tribe[
-                detection.template_name].event.preferred_origin()
-        except AttributeError:
-            Logger.error(
-                'Could not find template %s for related detection, did you '
-                'provide the correct tribe?', detection.template_name)
-            template_names = [templ.name for templ in tribe]
-            template_name_match = difflib.get_close_matches(
-                detection.template_name, template_names)
-            if len(template_name_match) >= 1:
-                template_name_match = template_name_match[0]
-                template_orig = tribe[
-                    template_name_match].event.preferred_origin()
-                Logger.warning(
-                    'Found template with name %s, using instead of %s',
-                    template_name_match, detection.template_name)
-            else:
-                Logger.warning('Aborting picking for detection with template '
-                               + '%s', detection.template_name)
-                continue
-        orig = Origin()
-        orig.time = min([p.time for p in event.picks])
-        orig.longitude = origin_longitude or template_orig.longitude
-        orig.latitude = origin_latitude or template_orig.latitude
-        orig.depth = origin_depth or template_orig.depth
-        # day_st.slice(dt, dt + 5)
-        event.origins.append(orig)
-        event.preferred_origin_id = orig.resource_id
+        # Find hypocenter of template and use it as preliminary origin for the
+        # detection (happens again here so that origin is corrected according
+        # to all corrected picks)
+        event = add_origins_to_detected_events(
+            Catalog(event), dayparty, tribe, overwrite_origins=True)[0]
+        if event.preferred_origin() is None:
+            Logger.warning('Aborting picking for detection with template %s',
+                           detection.template_name)
+            continue
+        # try:
+        #     template_orig = tribe[
+        #         detection.template_name].event.preferred_origin()
+        # except AttributeError:
+        #     Logger.error(
+        #         'Could not find template %s for related detection, did you '
+        #         'provide the correct tribe?', detection.template_name)
+        #     template_names = [templ.name for templ in tribe]
+        #     template_name_match = difflib.get_close_matches(
+        #         detection.template_name, template_names)
+        #     if len(template_name_match) >= 1:
+        #         template_name_match = template_name_match[0]
+        #         template_orig = tribe[
+        #             template_name_match].event.preferred_origin()
+        #         Logger.warning(
+        #             'Found template with name %s, using instead of %s',
+        #             template_name_match, detection.template_name)
+        #     else:
+        #         Logger.warning('Aborting picking for detection with template '
+        #                        + '%s', detection.template_name)
+        #         continue
+        # orig = Origin()
+        # orig.time = min([p.time for p in event.picks])
+        # orig.longitude = origin_longitude or template_orig.longitude
+        # orig.latitude = origin_latitude or template_orig.latitude
+        # orig.depth = origin_depth or template_orig.depth
+        # # day_st.slice(dt, dt + 5)
+        # event.origins.append(orig)
+        # event.preferred_origin_id = orig.resource_id
         Logger.info(
             'PickCheck: ' + str(event.origins[0].time) + ' P_d: ' +
             str(num_pPicks_onDetSta) + ' S_d ' + str(num_sPicks_onDetSta) +

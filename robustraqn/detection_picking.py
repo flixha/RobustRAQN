@@ -35,7 +35,8 @@ from robustraqn.load_events_for_detection import (
 from robustraqn.spectral_tools import (
     Noise_model, get_updated_inventory_with_noise_models)
 from robustraqn.lag_calc_postprocessing import (
-    check_duplicate_template_channels, postprocess_picked_events)
+    check_duplicate_template_channels, postprocess_picked_events,
+    add_origins_to_detected_events)
 from robustraqn.seimic_array_tools import array_lac_calc
 from robustraqn.processify import processify
 from robustraqn.fancy_processify import fancy_processify
@@ -307,6 +308,9 @@ def pick_events_for_day(
     #    pass
     #    Logger.error("LagCalc Error on " + str(year) +
     #           str(month).zfill(2) + str(day).zfill(2))
+
+    picked_catalog = add_origins_to_detected_events(
+        picked_catalog, dayparty, tribe=tribe)
 
     if array_lag_calc:
         picked_catalog = array_lac_calc(

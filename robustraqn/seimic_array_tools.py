@@ -468,16 +468,21 @@ def add_array_station_picks(
                     (ar_geo[2] - array_center[2]) ** 2)
             for ar_geo in array_geometry]
         array_aperture = 2 * max(array_aperture)
-        event_array_dist = degrees2kilometers(
-            locations2degrees(origin.latitude, origin.longitude,
-                              array_center[1], array_center[0]))
-        event_array_dist = np.sqrt(event_array_dist ** 2 + origin.depth ** 2)
-        # Check if array is far enough from event to assume plane wave
-        if (event_array_dist / min_array_distance_factor <= array_aperture):
-            Logger.info(
-                'Distance between event %s and array %s is too small, not com'
-                'puting array arrivals.', event.short_str(), seisarray_prefix)
-            continue
+        # Can't check array-aperture vs distance if there's no origin solution.
+        if origin is not None:
+            event_array_dist = degrees2kilometers(
+                locations2degrees(origin.latitude, origin.longitude,
+                                  array_center[1], array_center[0]))
+            event_array_dist = np.sqrt(
+                event_array_dist ** 2 + origin.depth ** 2)
+            # Check if array is far enough from event to assume plane wave
+            if (event_array_dist / min_array_distance_factor
+                    <= array_aperture):
+                Logger.info(
+                    'Distance between event %s and array %s is too small, not '
+                    'computing array arrivals.', event.short_str(),
+                    seisarray_prefix)
+                continue
 
         phase_hints = pha_picks_dict.keys()
         # 2.3 compute average array pick at reference site.

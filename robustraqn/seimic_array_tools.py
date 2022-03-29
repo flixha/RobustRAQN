@@ -51,11 +51,17 @@ LARGE_APERTURE_SEISARRAY_PREFIXES = [
     '@(BLS|BLS[1-5])',
     '@(KMY|KMY2|NWG22)',
     '@(ODD|ODD1|NWG21|BAS1[0-4]|BAS19|BAS2[0-3]|REIN)',
-    '@(BER|ASK|RUND|HN[AB][0-6]|BAS0[3-6]|BAS0D|BAS1[5-7]|ASK[0-8]|SOTS|TB2S|OSGS|ESG|EGD|SOTS|ARNS|BT2[13]',
+    '@(BER|ASK|RUND|HN[AB][0-6]|BAS0[3-6]|BAS0D|BAS1[5-7]|' +
+    'ASK[0-8]|SOTS|TB2S|OSGS|ESG|EGD|SOTS|ARNS|BT2[13])',
+    '@(STAV,NWG29)',
+    # Oestlandet
+    '@(KONO|KON01|KON02|KON03)',
     # Midtnorge
     '@(AKN|JH1[02]|JH0[89])',
+    '@(MOL,NWG03,JH06)',
+    '@(FOO,NWG14)',
     '@(DOMB|JH0[34]|JH11)',
-    '@(LADE|LENS|ODLO|TBLU|TRON|NWG01|N6004|N6005|N6006|N6007|N6008)',
+    '@(LADE|LENS|ODLO|TBLU|TRON|NWG01|N6004|N6005|N6006|N6007|N6008|N6132|SA55A)',
     '@(NSS|SA35)',
     # Nordland
     '@(ROEST|N2RO|N2VA)',
@@ -407,6 +413,28 @@ def find_array_picks_baz_appvel(
     return array_picks_dict, array_baz_dict, array_app_vel_dict
 
 
+def _check_extra_info(new_pick, pick):
+    """
+    Check that all keys required for a nordic pick weight are defined
+    add a pick-.weight if there is one in the previous pick
+    """
+    try:
+        weight_val = new_pick['extra']['nordic_pick_weight']['value']
+    except KeyError:
+        weight_val = None
+    if 'extra' in pick.keys():
+        new_pick['extra'] = dict()
+        new_pick['extra']['nordic_pick_weight'] = dict()
+        new_pick['extra']['nordic_pick_weight']['value'] = (
+            pick['extra']['nordic_pick_weight']['value'])
+        if weight_val is not None:
+            if weight_val > new_pick['extra']['nordic_pick_weight']['value']:
+                new_pick['extra']['nordic_pick_weight']['value'] = weight_val
+        new_pick['extra']['nordic_pick_weight'][
+            'namespace'] = (pick['extra']['nordic_pick_weight']['namespace'])
+    return new_pick
+
+
 def add_array_station_picks(
         event, stations_df, array_picks_dict=None, array_baz_dict=None,
         array_app_vel_dict=None, baz=None, app_vel=None,
@@ -593,16 +621,9 @@ def add_array_station_picks(
                         polarity=polarity,
                         evaluation_mode='automatic',
                         creation_info=CreationInfo(agency_id='RR'))
+                    new_pick.extra = {'nordic_pick_weight': {'value': 2}}
+                    new_pick = _check_extra_info(new_pick, pick)
                     # TODO: check that similar array-pick isn't there yet
-                    # add a pick-.weight if there is one
-                    if 'extra' in pick.keys():
-                        new_pick['extra'] = dict()
-                        new_pick['extra']['nordic_pick_weight'] = dict()
-                        new_pick['extra']['nordic_pick_weight']['value'] = (
-                            pick['extra']['nordic_pick_weight']['value'])
-                        new_pick['extra']['nordic_pick_weight'][
-                            'namespace'] = (pick['extra']['nordic_pick_weight'
-                                                          ]['namespace'])
                     event.picks.append(new_pick)
 
     # 3. add picks for array stations that did not have pick to pick-list
@@ -742,6 +763,10 @@ def array_lac_calc(
                             polarity=equi_pick.polarity,
                             evaluation_mode='automatic',
                             creation_info=CreationInfo(agency_id='RR'))
+                        # Set a reduced Nordic pick weight for automatically
+                        # added pick
+                        new_pick.extra = {'nordic_pick_weight': {'value': 2}}
+                        new_pick = _check_extra_info(new_pick, equi_pick)
                         # TODO can I add baz and app-vel here?
                         # horizontal_slowness=kilometers2degrees(
                         #     1 / horizontal_slowness_km),

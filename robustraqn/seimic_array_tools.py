@@ -418,20 +418,29 @@ def _check_extra_info(new_pick, pick):
     Check that all keys required for a nordic pick weight are defined
     add a pick-.weight if there is one in the previous pick
     """
+    weight = None
     try:
         weight_val = new_pick['extra']['nordic_pick_weight']['value']
+        weight = weight_val
     except KeyError:
         weight_val = None
-    if 'extra' in pick.keys():
+    if 'extra' in pick.keys() or 'extra' in new_pick.keys():
         new_pick['extra'] = dict()
         new_pick['extra']['nordic_pick_weight'] = dict()
-        new_pick['extra']['nordic_pick_weight']['value'] = (
-            pick['extra']['nordic_pick_weight']['value'])
-        if weight_val is not None:
-            if weight_val > new_pick['extra']['nordic_pick_weight']['value']:
-                new_pick['extra']['nordic_pick_weight']['value'] = weight_val
-        new_pick['extra']['nordic_pick_weight'][
-            'namespace'] = (pick['extra']['nordic_pick_weight']['namespace'])
+        try:
+            weight_val_old = pick['extra']['nordic_pick_weight']['value']
+            weight = weight_val_old
+        except KeyError:
+            weight_val_old = None
+        if weight_val is not None and weight_val_old is not None:
+            if weight_val > weight_val_old:
+                weight = weight_val
+    # Set all info for pick weight
+    if weight is not None:
+        new_pick.extra = {
+            'nordic_pick_weight': {
+            'value': weight,
+            'namespace': 'https://seis.geus.net/software/seisan/node239.html'}}
     return new_pick
 
 

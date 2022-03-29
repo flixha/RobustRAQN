@@ -197,7 +197,7 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
             Logger.info('Trying to use wavetool to convert %s:', wav_file)
             subprocess.run(
                 ["/home/felix/Software/SEISANrick/PRO/linux64/wavetool " +
-                 " -wav_in_file {}".format(wav_file) +
+                 " -wav_in_file {}".format(full_wav_file) +
                  " -wav_out_file {}".format(new_wav_file_name) +
                  " -format MSEED"], shell=True, env=MY_ENV)
             try:

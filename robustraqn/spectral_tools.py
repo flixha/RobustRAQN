@@ -38,6 +38,7 @@ Logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s")
+from robustraqn.seimic_array_tools import SEISARRAY_PREFIXES
 
 
 def balance_noise(self, inv, balance_power_coefficient=2,
@@ -796,10 +797,7 @@ def attach_noise_models(inv, pdf_dir, outfile='inv.pickle',
     # at the array.
     seisarray_list = list()
     single_station_list = station_list.copy()
-    seisarray_prefixes = [
-        'IL??', 'NAO*', 'NBO*', 'NB2*', 'NC2*', 'NC3*', 'NC4*', 'NC6*', 'AR[ABCD]?',
-        'SP[ABC]?', '@(BJO1|BEA[123456])', 'OSE*', 'EKO*', 'GRA*', '@(EKB|EKR|ESK)*',
-        'YKA*']
+    seisarray_prefixes = SEISARRAY_PREFIXES
     # alternative pattern 'E*K!(O)*' (works only  in wcmatch, not glob)
     # ''E*K[!O]*'
     for seisarray_prefix in seisarray_prefixes:

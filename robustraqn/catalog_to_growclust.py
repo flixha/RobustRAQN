@@ -205,12 +205,11 @@ def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
                         uncertainty=kilometers2degrees(tmp_cat_df.eh.iloc[0])),
                     depth=tmp_cat_df.depR.iloc[0] * 1000,
                     depth_errors=QuantityError(
-                        uncertainty=tmp_cat_df.ez.iloc[0]),
+                        uncertainty=tmp_cat_df.ez.iloc[0] * 1000),
                     time=tmp_cat_df.datetime.iloc[0],
                     time_errors=QuantityError(
                         uncertainty=tmp_cat_df.et.iloc[0]),
-                    creation_info=CreationInfo(
-                        agency_id='BER', author_id='GC'))
+                    creation_info=CreationInfo(agency_id='BER', author='GC'))
                     # arrivals=cat_orig.arrivals)
                 Logger.info(
                     'Added origin solution from Growclust for event %s',

@@ -8,9 +8,12 @@ for local data; beware of overloading servers with requests).
     Felix Halpaap 2021
 """
 
+from audioop import add
 import os
 import glob
 from signal import signal, SIGSEGV
+import numpy as np
+import datetime
 
 from multiprocessing import Pool, cpu_count, get_context
 from multiprocessing.pool import ThreadPool
@@ -32,7 +35,8 @@ import logging
 Logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s")
+    format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t" +
+    "%(levelname)s\t%(message)s")
 
 
 def _get_waveforms_bulk(client, bulk):
@@ -279,7 +283,7 @@ def get_parallel_waveform_client(waveform_client):
 
 
 def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
-                        parallel=False, cores=1,
+                        parallel=False, cores=1, allow_dataframe_edits=True,
                         stations=['*'], location_priority=['??'],
                         band_priority=['B'], instrument_priority=['H'],
                         components=['Z', 'N', 'E', '1', '2'], **kwargs):
@@ -347,66 +351,60 @@ def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
     reqtime1 = UTCDateTime(mid_t.year, mid_t.month, mid_t.day, 0, 0, 0)
     reqtime2 = UTCDateTime(mid_t.year, mid_t.month, mid_t.day, 23, 59, 59)
 
-    # day_stats = stats.loc[stats['start'] == str(reqtime1)[0:19]]
-    # day_stats = stats.loc[stats['start'].str[0:10] == str(reqtime1)[0:10]]
-
     # Smartly set the index column of dataframes to speed up list selection:
     # Check if the index-column is called "startday", otherwise make it such.
-    if stats.index.name != 'startday':
+    if allow_dataframe_edits:
+        if stats.index.name != 'startday':
+            try:
+                stats['startday'] = stats['start'].str[0:10]
+            except KeyError:
+                Logger.error('No data quality metrics available for %s - %s.',
+                            str(starttime)[0:19], str(endtime)[0:19])
+                return None, None
+            stats = stats.set_index(['startday'])
+        if 'short_target' not in stats.columns:
+            stats['short_target'] = stats['target'].str[3:-2]
+        # Now that "startday" is set as index:
         try:
-            stats['startday'] = stats['start'].str[0:10]
+            day_stats = stats.loc[str(reqtime1)[0:10]]
         except KeyError:
-            Logger.error('No data quality metrics available for %s - %s.',
-                         str(starttime)[0:19], str(endtime)[0:19])
+            Logger.warning('No data quality metrics for %s',
+                           str(reqtime1)[0:10])
             return None, None
-        stats = stats.set_index(['startday'])
-    if 'short_target' not in stats.columns:
-        stats['short_target'] = stats['target'].str[3:-2]
-    # Now that "startday" is set as index:
-    try:
-        day_stats = stats.loc[str(reqtime1)[0:10]]
-    except KeyError:
-        Logger.warning('No data quality metrics for %s', str(reqtime1)[0:10])
-        return None, None
-    # Now set "short_target" as index-column to speed up the selection in the
-    # loop across stations below.
-    day_stats = day_stats.set_index(['short_target'])
+        # Now set "short_target" as index-column to speed up the selection in
+        # the loop across stations below.
+        day_stats = day_stats.set_index(['short_target'])
 
     bulk = list()
+    rejected_bulk = list()
     station_requested = False
     if parallel:
         if cores is None:
             cores = min(len(stations), cpu_count())
-        # with pool_boy(Pool=Pool, traces=len(stations), cores=cores) as pool:
-        #     results = [pool.apply_async(get_station_bulk_request,
-        #                                 (station, location_priority,
-        #                                  band_priority, instrument_priority,
-        #                                  components, day_stats, reqtime1,
-        #                                  starttime, endtime),
-        #                                 kwargs)
-        #                for station in stations]
-        # bulk_lists = [res.get() for res in results]
-        # pool.close()
-        # pool.join()
-        # pool.terminate()
-        bulk_lists = Parallel(n_jobs=cores)(
+        out_lists = Parallel(n_jobs=cores)(
             delayed(get_station_bulk_request)(
                 station, location_priority, band_priority, instrument_priority,
                 components, day_stats, reqtime1, starttime, endtime, **kwargs)
             for station in stations)
+        bulk_lists = [out_l[0] for out_l in out_lists]
+        rejected_bulk_lists = [out_l[1] for out_l in out_lists]
     else:
         bulk_lists = list()
+        rejected_bulk_lists = list()
         for station in stations:
-            bulk_new = get_station_bulk_request(
+            bulk_new, rejected_bulk = get_station_bulk_request(
                 station, location_priority, band_priority,
                 instrument_priority, components, day_stats, reqtime1,
                 starttime, endtime, **kwargs)
             bulk_lists.append(bulk_new)
+            rejected_bulk_lists.append(rejected_bulk)
 
     # Merge the lists containted in bulk_lists
     bulk = list(itertools.chain.from_iterable(b for b in bulk_lists))
+    rejected_bulk = list(itertools.chain.from_iterable(
+        b for b in rejected_bulk_lists))
 
-    return bulk, day_stats
+    return bulk, rejected_bulk, day_stats
 
 
 def get_station_bulk_request(station, location_priority, band_priority,
@@ -455,6 +453,7 @@ def get_station_bulk_request(station, location_priority, band_priority,
     :rtype: list of tuples
     """
     bulk = list()
+    bulk_rejected = list()
     # Now magically find the channels that best fulfill all criteria like
     # availability, num_spikes, etc. etc...
     for location in location_priority:
@@ -476,12 +475,22 @@ def get_station_bulk_request(station, location_priority, band_priority,
                     channel = band + instrument + component
                     short_scnl = station + "." + location + '.' + channel
                     # With "short_target" as index-column:
-                    try:
-                        chn_stats = day_stats.loc[short_scnl]
-                    except KeyError:
-                        continue
-                    # chn_stats = day_stats[day_stats['target'].str[3:-2]\
-                    #    == short_scnl]
+                    if day_stats.index.name == "short_target":
+                        try:
+                            chn_stats = day_stats.loc[short_scnl]
+                        except KeyError:
+                            continue
+                    elif day_stats.index.name == "startday":
+                        try:
+                            chn_stats = day_stats[
+                                day_stats['target'].str[3:-2] == short_scnl]
+                        except KeyError:
+                            continue
+                    else:
+                        msg = ('Data quality metrics dataframe is missing '
+                               + 'expected column headers short_target or ' +
+                               ' startday')
+                        raise(KeyError, msg)
 
                     try:
                         availability = chn_stats[
@@ -493,6 +502,7 @@ def get_station_bulk_request(station, location_priority, band_priority,
                         Logger.error(e, exc_info=True)
                         continue
 
+                    target_rejected = False
                     # Availability-metric has to exist
                     if len(availability) == 0:
                         add_target_request = False
@@ -500,13 +510,22 @@ def get_station_bulk_request(station, location_priority, band_priority,
                         # Now check all metrics against their thresholds:
                         add_target_request, target = check_metrics(
                             day_stats, request_time, availability, **kwargs)
+                        if not add_target_request:
+                            target_rejected = True
                     # Add specific channel-request to bulk-request
                     if add_target_request:
                         # Split "target" into net, station, loc, channel
                         nscl = target.split('.')
-                        bulk.append((nscl[0], nscl[1], nscl[2], nscl[3],
-                                     starttime, endtime))
-    return bulk
+                        bulk.append(tuple(nscl[0:4]) + (starttime, endtime))
+                        # bulk.append((nscl[0], nscl[1], nscl[2], nscl[3],
+                        #              starttime, endtime))
+                    if target_rejected:
+                        nscl = target.split('.')
+                        bulk_rejected.append(tuple(nscl[0:4]) + (
+                            starttime, endtime))
+                        # bulk_rejected.append((nscl[0], nscl[1], nscl[2],
+                        #                       nscl[3], starttime, endtime))
+    return bulk, bulk_rejected
 
 
 def check_metrics(day_stats, request_time, availability, min_availability=0.8,
@@ -874,48 +893,73 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
         raise TypeError("ispaq_suffixes should be a list")
 
     ispaq = pd.DataFrame()
-    # check if folder exists
-    for network in networks:
-        for station in stations:
-            for year in range(startyear, endyear+1):
-                for ispaq_prefix in ispaq_prefixes:
-                    for ispaq_suffix in ispaq_suffixes:
-                        filename = (ispaq_prefix + '_' + network + '.'
-                                    + station + '.x.x_'
-                                    + '????-??-??_????-??-??_'
-                                    + ispaq_suffix + '.' + file_type)
-                        files = glob.glob(os.path.join(os.path.expanduser(
-                            folder), filename))
-                        # Allow filenames to cover several years - check
-                        # those years are within requested range.
-                        relevant_files = []
-                        for file in files:
-                            file_startyear = int(file.split('.')[-2].split(
-                                '_')[1].split('-')[0])
-                            file_endyear = int(file.split('.')[-2].split(
-                                '_')[2].split('-')[0])
-                            if (file_startyear <= startyear
-                                    and file_endyear >= endyear):
-                                relevant_files.append(file)
-                        for file in relevant_files:
-                            if file_type == 'csv':
-                                in_df = pd.read_csv(file)
-                            elif file_type == 'parquet':
-                                in_df = pd.read_parquet(file)
-                            else:
-                                Logger.error('file_type %s not supported',
-                                             file_type)
-                                return ispaq
-                            ispaq = pd.concat([ispaq, in_df])
-    ispaq = ispaq.drop_duplicates()
-    try:
-        ispaq.sort_values(by=['target', 'start'])
-    except KeyError:
-        Logger.error('No data quality metrics available for years %s - %s',
-                     startyear, endyear)
-        return ispaq
+    # Alternative if there's many stations and years: read a merged csv-metrics
+    # file that contains all metrics from the databse (saves concat-time).
+    load_all_files = True
+    if (file_type == 'parquet' and
+            len(stations) * (endyear + 1 - startyear) > 1000):
+        merged_metrics_file = glob.glob(os.path.join(os.path.split(
+            os.path.expanduser(folder))[0], 'all_csv_metrics_merged.parquet'))
+        merged_file_age_days = np.nan
+        if merged_metrics_file:
+            merged_file_age_days = (
+                datetime.datetime.now() - datetime.datetime.fromtimestamp(
+                    os.stat(merged_metrics_file[0]).st_mtime)).days
+            if merged_file_age_days < 2:
+                Logger.info('Reading aggregated metrics file %s',
+                            merged_metrics_file[0])
+                ispaq = pd.read_parquet(merged_metrics_file[0])
+                load_all_files = False
+
+    if load_all_files:
+        df_list = list()
+        relevant_files = []
+        # check if folder exists
+        for network in networks:
+            for station in stations:
+                for year in range(startyear, endyear+1):
+                    for ispaq_prefix in ispaq_prefixes:
+                        for ispaq_suffix in ispaq_suffixes:
+                            filename = (ispaq_prefix + '_' + network + '.'
+                                        + station + '.x.x_'
+                                        + '????-??-??_????-??-??_'
+                                        + ispaq_suffix + '.' + file_type)
+                            files = glob.glob(os.path.join(os.path.expanduser(
+                                folder), filename))
+                            # Allow filenames to cover several years - check
+                            # those years are within requested range.
+                            for file in files:
+                                file_startyear = int(file.split('.')[-2].split(
+                                    '_')[1].split('-')[0])
+                                file_endyear = int(file.split('.')[-2].split(
+                                    '_')[2].split('-')[0])
+                                overlap = range(max(file_startyear, startyear),
+                                                min(file_endyear, endyear)+1)
+                                if overlap:
+                                    relevant_files.append(file)
+
+        for file in relevant_files:
+            Logger.debug('Reading metrics file %s', file)
+            if file_type == 'csv':
+                in_df = pd.read_csv(file)
+            elif file_type == 'parquet':
+                in_df = pd.read_parquet(file)
+            else:
+                Logger.error('file_type %s not supported', file_type)
+                return ispaq
+            df_list.append(in_df)
+        ispaq = pd.concat(df_list, axis=0)
+        ispaq = ispaq.drop_duplicates(keep='last')
+        try:
+            ispaq.sort_values(by=['target', 'start'])
+        except KeyError:
+            Logger.error('No data quality metrics available for years %s - %s',
+                        startyear, endyear)
+            return ispaq
     # Set an extra "startday"-column to use as index
-    ispaq['startday'] = ispaq['start'].str[0:10]
-    ispaq = ispaq.set_index(['startday'])
-    ispaq['short_target'] = ispaq['target'].str[3:-2]
+    if 'startday' not in ispaq.columns:
+        ispaq['startday'] = ispaq['start'].str[0:10]
+        ispaq = ispaq.set_index(['startday'])
+    if 'short_target' not in ispaq.columns:
+        ispaq['short_target'] = ispaq['target'].str[3:-2]
     return ispaq

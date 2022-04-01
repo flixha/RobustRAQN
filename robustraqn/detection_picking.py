@@ -188,7 +188,7 @@ def pick_events_for_day(
 
     # Create a smart request, i.e.: request only recordings that match
     # the quality metrics criteria and that best match the priorities.
-    bulk, day_stats = create_bulk_request(
+    bulk, bulk_rejected, day_stats = create_bulk_request(
         starttime_req, endtime_req, stats=ispaq,
         parallel=parallel, cores=cores,
         stations=requiredStations, location_priority=['10', '00', ''],

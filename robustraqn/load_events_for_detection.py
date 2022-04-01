@@ -81,6 +81,7 @@ def read_seisan_database(database_path, cores=1, nordic_format='UKN',
     :returns: Catalog of events
     :rtype: :class:`obspy.core.event.Catalog`
     """
+    database_path = os.path.expanduser(database_path)
     gsfiles = glob.glob(os.path.join(database_path, '*.S??????'))
     gsfiles += glob.glob(os.path.join(database_path, '????', '??', '*.S??????'))
     gsfiles.sort(key=lambda x: x[-6:])
@@ -104,7 +105,7 @@ def read_seisan_database(database_path, cores=1, nordic_format='UKN',
         sfile, nordic_format=nordic_format) for sfile in sfiles)
     cat = Catalog([cat[0] for cat in cats])
     for event, sfile in zip(cat, sfiles):
-        extra = {'sfile_name': {'value': sfile}}
+        extra = {'sfile_name': {'value': sfile, 'namespace': 'Seisan'}}
         event.extra = extra
         if check_resource_ids:
             attach_all_resource_ids(event)
@@ -116,8 +117,9 @@ def read_seisan_database(database_path, cores=1, nordic_format='UKN',
 
 
 def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
-                      clients=[], min_samp_rate=np.nan, pre_event_time=30,
-                      template_length=300, search_only_month_folders=True,
+                      clients=[], st=Stream(), min_samp_rate=np.nan,
+                      pre_event_time=30, template_length=300,
+                      search_only_month_folders=True, bulk_rejected=[],
                       **kwargs):
     """
     Load the waveforms for an event file (here: Nordic file) while performing
@@ -154,7 +156,6 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
 
     if not wavfilenames:
         Logger.warning('Event ' + sfile + ': no waveform files found')
-    st = Stream()
     for wav_file in wavfilenames:
         # Check that there are proper mseed/SEISAN7.0 waveform files
         if (wav_file[0:3] == 'ARC' or wav_file[0:4] == 'WAVE' or
@@ -211,7 +212,9 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
     t1 = origin.time - pre_event_time
     t2 = (latest_pick + template_length + 10) or (
         origin.time + template_length * 2)
-    bulk_request = [("??", s, "*", "?H?", t1, t2) for s in selectedStations]
+    if clients:
+        bulk_request = [("??", s, "*", "?H?", t1, t2)
+                        for s in selectedStations]
     for client in clients:
         client = get_parallel_waveform_client(client)
         Logger.info('Requesting waveforms from client %s', client)
@@ -222,6 +225,28 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
     if len(st) == 0:
         Logger.warning('Did not find any waveforms for sfile %s', sfile)
         return None
+    # If requested, make sure to remove traces that would not have passed the
+    # quality-metrics check:
+    for trace_reject in bulk_rejected:
+        tr_id = '.'.join(trace_reject[0:3])
+        st_tr = st.select(tr_id)
+        for tr in st_tr:
+            Logger.info('Removed trace %s for event %s because its metrics are'
+                        ' selected thresholds', tr.id, event.short_str())
+            st.remove(tr)
+
+    # remove_st = Stream()
+    # for tr in st:
+    #     for trace_reject in bulk_rejected:
+    #         if '.'.join(trace_reject[0:3]) == tr.id:
+    #             remove_st += tr
+    # for tr in remove_st:
+    #     Logger.info('Removed trace %s for event %s because its metrics are '
+    #                 'selected thresholds', tr.id, event.short_str())
+    #     st.remove(tr)
+
+    # Trim so that any function-supplied streams are the right length as well
+    st.trim(starttime=t1, endtime=t2, pad=False, nearest_sample=True)
 
     # REMOVE UNUSABLE CHANNELS
     st_copy = st.copy()
@@ -495,9 +520,7 @@ def prepare_detection_stream(
 
             # day_stats = stats[stats['start'].str.contains(
             #     str(reqtime1)[0:19])]
-            nslc_target = tr.stats.network + "." + tr.stats.station + "."\
-                + tr.stats.location + '.' + tr.stats.channel
-            chn_stats = ispaq[ispaq['target'].str.contains(nslc_target)]
+            chn_stats = ispaq[ispaq['target'].str.contains(tr.id)]
             # target = availability.iloc[0]['target']
             # num_spikes = ispaq[(ispaq['target']==target) &
             # (day_stats['metricName']=='num_spikes')]
@@ -1039,6 +1062,12 @@ def prepare_picks(
         Logger.info('Picks will be calculated for %s', str(pick_calculation))
         event, origin = compute_picks_from_app_velocity(
             event, origin, stream=stream, *args, **kwargs)
+
+    # Check that the caps-sensitive picks are properly named (b, n, g should be
+    # lowercase)
+    for pick in event.picks:
+        if pick.phase_hint in ['PN', 'PG', 'PB', 'SN', 'SG', 'SB']:
+            pick.phase_hint = pick.phase_hint[0] + pick.phase_hint[1].lower()
 
     # Check for duplicate picks. Remove the later one when they are
     # on the same channel
@@ -1825,8 +1854,7 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
         tr.stats["coordinates"]["elevation"] = stachan_info.elevation
         tr.stats["coordinates"]["depth"] = stachan_info.depth
     except Exception as e:
-        Logger.warning(e)
-        Logger.warning('Could not set all station coordinates for %s', tr.id)
+        Logger.warning('Could not set all station coordinates for %s.', tr.id)
     # Gain all traces to avoid a float16-zero error
     # basically converts from m to um (for displacement) - nm
     if gain_traces:

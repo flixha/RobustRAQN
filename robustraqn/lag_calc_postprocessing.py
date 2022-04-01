@@ -21,18 +21,15 @@ from obspy.core.event import (Event, Catalog, Origin, Comment, CreationInfo,
 from obspy.io.nordic.core import read_nordic, write_select, _write_nordic
 from obspy import read as obspyread
 from obspy import UTCDateTime
-from obspy.io.mseed import InternalMSEEDError
 from obspy.clients.fdsn import RoutingClient
 from eqcorrscan.core.match_filter.tribe import Tribe
-from eqcorrscan.utils.correlate import pool_boy
 from eqcorrscan.core.match_filter.party import Party
 # from eqcorrscan.utils.clustering import extract_detections
 # from eqcorrscan.utils.despike import median_filter
 # from obspy import read_nordic
 # import obspy
 
-from robustraqn.quality_metrics import (
-    create_bulk_request, get_waveforms_bulk, read_ispaq_stats)
+from robustraqn.quality_metrics import (get_waveforms_bulk, read_ispaq_stats)
 
 import logging
 Logger = logging.getLogger(__name__)

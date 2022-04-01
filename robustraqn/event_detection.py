@@ -206,7 +206,7 @@ def run_day_detection(
         #     req_parallel = parallel
         # Create a smart request, i.e.: request only recordings that match
         # the quality metrics criteria and that best match the priorities.
-        bulk, day_stats = create_bulk_request(
+        bulk, bulk_rejected, day_stats = create_bulk_request(
             starttime_req, endtime_req, stats=ispaq,
             parallel=parallel, cores=cores, io_cores=16,
             stations=selectedStations, location_priority=['00', '10', ''],

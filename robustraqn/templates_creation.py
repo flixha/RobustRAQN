@@ -44,6 +44,8 @@ from robustraqn.load_events_for_detection import (
     try_remove_responses, check_template, prepare_picks)
 from robustraqn.spectral_tools import (
     st_balance_noise, Noise_model, get_updated_inventory_with_noise_models)
+from robustraqn.quality_metrics import (
+    create_bulk_request, get_parallel_waveform_client)
 from robustraqn.seimic_array_tools import (
     extract_array_picks, add_array_station_picks,
     LARGE_APERTURE_SEISARRAY_PREFIXES, get_updated_stations_df)
@@ -174,23 +176,56 @@ def _create_template_objects(
         make_pretty_plot=False, prefix='',
         check_template_strict=True, allow_channel_duplication=True,
         normalize_NSLC=True, add_array_picks=False, stations_df=pd.DataFrame(),
-        add_large_aperture_array_picks=False,
+        add_large_aperture_array_picks=False, ispaq=None,
         sta_translation_file="station_code_translation.txt",
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         parallel=False, cores=1, *args, **kwargs):
     """
     """
+    Logger.info('Start work on %s sfiles to create templates...',
+                int(len(sfiles)))
     sfiles.sort(key=lambda x: x[-6:])
     tribe = Tribe()
     template_names = []
     catalogForTemplates = Catalog()
     catalog = Catalog()
+    bulk_rejected = []
+
+    day_st = Stream()
+    if clients and len(sfiles) > 1:
+        day_starttime = UTCDateTime(
+            sfiles[0][-6:] + os.path.split(sfiles[0])[-1][0:2])
+        starttime = day_starttime - 30 * 60
+        endtime = starttime + 24.5 * 60 * 60
+        # Check against time of the last sfile / event in batch
+        checktime = UTCDateTime(
+            sfiles[-1][-6:] + os.path.split(sfiles[-1])[-1][0:2])
+        if (checktime - day_starttime) < 60 * 60 * 24.5:
+            if ispaq is not None:
+                bulk_request, bulk_rejected, day_stats = (
+                    create_bulk_request(
+                        starttime=starttime, endtime=endtime, stats=ispaq,
+                        stations=selectedStations, **kwargs))
+            else:
+                bulk_request = [("??", s, "*", "?H?", starttime, endtime)
+                                for s in selectedStations]
+            for client in clients:
+                Logger.info('Requesting waveforms from client %s', client)
+                client = get_parallel_waveform_client(client)
+                add_st = client.get_waveforms_bulk_parallel(
+                    bulk_request, parallel=parallel, cores=cores)
+                Logger.info('Received %s traces from the client.', len(add_st))
+                day_st += add_st
+        clients = []
+        if len(day_st) == 0:
+            Logger.warning('Did not find any waveforms for date %s.',
+                            str(day_starttime))
 
     wavnames = []
     # Loop over all S-files that each contain one event
     for j, sfile in enumerate(sfiles):
         Logger.info('Working on S-file: ' + sfile)
-        select, wavname = read_nordic(sfile, return_wavnames=True)
+        select, wavname = read_nordic(sfile, return_wavnames=True, **kwargs)
         relevantStations = get_all_relevant_stations(
             selectedStations, sta_translation_file=sta_translation_file)
         origin = select[0].preferred_origin()
@@ -212,8 +247,8 @@ def _create_template_objects(
         # Load and quality-control stream and picks for event
         wavef = load_event_stream(
             event, sfile, seisan_wav_path, relevantStations, clients=clients,
-            min_samp_rate=samp_rate, pre_event_time=prepick,
-            template_length=template_length)
+            st=day_st.copy(), min_samp_rate=samp_rate, pre_event_time=prepick,
+            template_length=template_length, bulk_rejected=bulk_rejected)
         if wavef is None or len(wavef) == 0:
             Logger.error('Event %s for sfile %s has no waveforms available',
                          event.short_str(), sfile)
@@ -223,16 +258,20 @@ def _create_template_objects(
             wavef = try_remove_responses(
                 wavef, inv, taper_fraction=0.15, pre_filt=[0.01, 0.05, 45, 50],
                 parallel=parallel, cores=cores, **kwargs)
-            for tr in wavef:
-                try:
-                    tr.stats.distance = gps2dist_azimuth(
-                        origin.latitude, origin.longitude,
-                        tr.stats.coordinates.latitude,
-                        tr.stats.coordinates.longitude)[0]
-                except Exception as e:
-                    Logger.warning('Could not compute distance for event %s -'
-                                   ' trace %s', event.short_str(), tr.id)
-                    Logger.warning(e)
+            if origin.latitude is None or origin.longitude is None:
+                Logger.warning('Could not compute distances for event %s.',
+                               event.short_str())
+            else:
+                for tr in wavef:
+                    try:
+                        tr.stats.distance = gps2dist_azimuth(
+                            origin.latitude, origin.longitude,
+                            tr.stats.coordinates.latitude,
+                            tr.stats.coordinates.longitude)[0]
+                    except Exception as e:
+                        Logger.warning(
+                            'Could not compute distance for event %s -'
+                            ' trace %s', event.short_str(), tr.id)
         wavef = wavef.detrend(type='simple')
 
         # standardize all codes for network, station, location, channel
@@ -332,13 +371,15 @@ def _create_template_objects(
             sfile_path, sfile_name = os.path.split(sfile)
             if make_pretty_plot:
                 image_name = os.path.join('TemplatePlots',
-                                        prefix + '_' + templ_name)
+                                          prefix + '_' + templ_name)
                 pretty_template_plot(
                     templateSt, background=wavef, event=event, sort_by='distance',
-                    show=False, return_figure=False, size=(25, 50), save=True,
+                    show=False, return_figure=False, size=(12, 16), save=True,
                     savefile=image_name)
-            Logger.info("Made template" + templ_name)
+            Logger.info("Made template %s", templ_name)
             Logger.info(t)
+        else:
+            Logger.info("Rejected template %s", templ_name)
 
     # clusters = tribe.cluster(method='space_cluster', d_thresh=1.0, show=True)
     template_list = []
@@ -387,7 +428,7 @@ def create_template_objects(
         min_n_traces=8, write_out=False, templ_path='Templates',
         prefix='', make_pretty_plot=False,
         check_template_strict=True, allow_channel_duplication=True,
-        normalize_NSLC=True, add_array_picks=False,
+        normalize_NSLC=True, add_array_picks=False, ispaq=None,
         sta_translation_file="station_code_translation.txt",
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         parallel=False, cores=1, *args, **kwargs):
@@ -403,7 +444,6 @@ def create_template_objects(
     if parallel and len(sfiles) > 1:
         if cores is None:
             cores = min(len(sfiles), cpu_count())
-
         # Check if I can allow multithreading in each of the parallelized
         # subprocesses:
         thread_parallel = False
@@ -415,10 +455,6 @@ def create_template_objects(
         # Is this I/O or CPU limited task?
         # Test on bigger problem (350 templates):
         # Threadpool: 10 minutes vs Pool: 7 minutes
-        # TODO: the problem is deep-copying of the inventory to the threads/
-        # processes. inv can be empty Inv, or chosen more carefully for the
-        # problem to speed this up.
-        # e.g. with : channel='?H?', latitude=59, longitude=2, maxradius=7
 
         # with pool_boy(Pool=get_context("spawn").Pool, traces=len(sfiles),
         #               n_cores=cores) as pool:
@@ -450,12 +486,52 @@ def create_template_objects(
         # # try:
         # res_out = [res.get() for res in results]
 
+        # Run in batches to save time on reading from archive only once per day
+        day_stats_list = []
+        unique_date_list = []
+        if len(sfiles) > cores and clients:
+            unique_dates = sorted(
+                set([sfile[-6:] + os.path.split(sfile)[-1][0:2]
+                     for sfile in sfiles]))
+            sfile_batches = []
+            if ispaq is not None:
+                if ispaq.index.name != 'startday':
+                    ispaq['startday'] = ispaq['start'].str[0:10]
+                    ispaq = ispaq.set_index(['startday'])
+                if 'short_target' not in ispaq.columns:
+                    ispaq['short_target'] = ispaq['target'].str[3:-2]
+                ispaq_groups = ispaq.groupby('startday')
+            for unique_date in unique_dates:
+                sfile_batch = []
+                for sfile in sfiles:
+                    check_date = sfile[-6:] + os.path.split(sfile)[-1][0:2]
+                    if (check_date == unique_date):
+                        sfile_batch.append(sfile)
+                unique_date_utc = str(UTCDateTime(unique_date))[0:10]
+                unique_date_list.append(unique_date_utc)
+                if sfile_batch:
+                    sfile_batches.append(sfile_batch)
+                # Split ispaq-stats into batches if they exist
+                if ispaq is not None:
+                    # Now that "startday" is set as index, split into batches:
+                    try:
+                        day_stats_list.append(ispaq_groups.get_group(
+                            unique_date_utc))
+                    except KeyError:
+                        Logger.warning(
+                            'No data quality metrics for %s', unique_date_utc)
+                        day_stats_list.append(None)
+        # Just create extra references to same ispaq-stats dataframe (should
+        # not consume extra memory with references only).
+        if not day_stats_list:
+            for sfile_batch in sfile_batches:
+                day_stats_list.append(ispaq)
+
         res_out = Parallel(n_jobs=cores)(
             delayed(_create_template_objects)(
-                [sfile], selectedStations, template_length, lowcut, highcut,
+                sfile_batch, selectedStations, template_length, lowcut, highcut,
                 min_snr, prepick, samp_rate, seisan_wav_path, clients=clients,
-                inv=new_inv.select(
-                    time=UTCDateTime(sfile[-6:] + sfile[-19:-14])),
+                inv=new_inv.select(time=UTCDateTime(unique_date_list[nbatch])),
                 remove_response=remove_response,
                 noise_balancing=noise_balancing,
                 balance_power_coefficient=balance_power_coefficient,
@@ -465,26 +541,19 @@ def create_template_objects(
                 check_template_strict=check_template_strict,
                 allow_channel_duplication=allow_channel_duplication,
                 normalize_NSLC=normalize_NSLC, add_array_picks=add_array_picks,
-                stations_df=stations_df,
+                stations_df=stations_df, ispaq=day_stats_list[nbatch],
                 sta_translation_file=sta_translation_file,
                 std_network_code=std_network_code,
                 std_location_code=std_location_code,
                 std_channel_prefix=std_channel_prefix,
                 parallel=thread_parallel, cores=n_threads,
                 *args, **kwargs)
-            for sfile in sfiles)
+            for nbatch, sfile_batch in enumerate(sfile_batches))
 
         tribes = [r[0] for r in res_out if r is not None and len(r[0]) > 0]
         wavnames = [r[1][0] for r in res_out
                     if r is not None and len(r[0]) > 0]
         tribe = Tribe(templates=[tri[0] for tri in tribes if len(tri) > 0])
-        # except IndexError:
-        #    tribe = Tribe()
-        #    wavnames = ()
-
-        # pool.close()
-        # pool.join()
-        # pool.terminate()
     else:
         (tribe, wavnames) = _create_template_objects(
             sfiles, selectedStations, template_length, lowcut, highcut,
@@ -498,7 +567,8 @@ def create_template_objects(
             parallel=parallel, cores=cores,
             check_template_strict=check_template_strict,
             allow_channel_duplication=allow_channel_duplication,
-            normalize_NSLC=normalize_NSLC,
+            add_array_picks=add_array_picks, stations_df=stations_df,
+            ispaq=ispaq, normalize_NSLC=normalize_NSLC,
             sta_translation_file=sta_translation_file,
             std_network_code=std_network_code,
             std_location_code=std_location_code,
@@ -506,7 +576,6 @@ def create_template_objects(
             *args, **kwargs)
 
     label = ''
-
     if noise_balancing:
         label = label + 'balNoise_'
     if write_out:

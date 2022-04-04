@@ -96,7 +96,7 @@ def _shorten_tribe_streams(
                     templ.st, background=False, event=templ.event,
                     sort_by='distance', show=False, return_figure=False,
                     size=(25, 50), save=True, savefile=image_name)
-            Logger.info("Made template" + templ_name)
+            Logger.info("Made template %s", templ_name)
             Logger.info(templ)
     label = ''
     if noise_balancing:
@@ -120,7 +120,8 @@ def check_template_event_errors_ok(
     """
     # Do not use event as template if any errors are above threshold
     if not origin:
-        Logger.info('Event has no origin, cannot check errors.')
+        Logger.info(
+            'Rejected template, event has no origin, cannot check errors.')
         return True
     # # Check horizontal error
     if max_horizontal_error_km:
@@ -140,8 +141,9 @@ def check_template_event_errors_ok(
         if max_hor_error:
             max_hor_error = max(max_hor_error)
             if (max_hor_error and max_hor_error > max_horizontal_error_km):
-                Logger.info('Horizontal error of event %s too large, not using '
-                            'as template', str(origin.time)[0:19])
+                Logger.info(
+                    'Rejected template: horizontal error of event %s too large'
+                    ' (%s).', str(origin.time)[0:19], str(max_hor_error))
                 return False
 
     # Check depth error
@@ -150,8 +152,8 @@ def check_template_event_errors_ok(
             max_depth_error = origin.depth_errors.uncertainty / 1000
             if max_depth_error > max_depth_error_km:
                 Logger.info(
-                    'Depth error of event %s too large, not using as template',
-                    str(origin.time)[0:19])
+                    'Rejected template: depth error of event %s too large (%s)'
+                    '.', str(origin.time)[0:19], str(max_depth_error))
                 return False
 
     # Check time error
@@ -160,8 +162,8 @@ def check_template_event_errors_ok(
             max_time_error = origin.time_errors.uncertainty
             if max_time_error > max_time_error_s:
                 Logger.info(
-                    'Time error of event %s too large, not using as template',
-                    str(origin.time)[0:19])
+                    'Rejected template: time error of event %s too large (%s)'
+                    '.', str(origin.time)[0:19], str(max_time_error))
                 return False
 
     return True
@@ -195,9 +197,11 @@ def _create_template_objects(
     if clients and len(sfiles) > 1:
         day_starttime = UTCDateTime(
             sfiles[0][-6:] + os.path.split(sfiles[0])[-1][0:2])
+        # Request the whole day plus/minus a bit more
         starttime = day_starttime - 30 * 60
         endtime = starttime + 24.5 * 60 * 60
-        # Check against time of the last sfile / event in batch
+        # Check against time of the last sfile / event in batch - it should be
+        # fully covered in the 25-hour stream
         checktime = UTCDateTime(
             sfiles[-1][-6:] + os.path.split(sfiles[-1])[-1][0:2])
         if (checktime - day_starttime) < 60 * 60 * 24.5:
@@ -228,6 +232,8 @@ def _create_template_objects(
         select, wavname = read_nordic(sfile, return_wavnames=True, **kwargs)
         relevantStations = get_all_relevant_stations(
             selectedStations, sta_translation_file=sta_translation_file)
+        # TODO: maybe I should select the "best" origin somewhere (e.g.,
+        # smallest errors, largest number of stations etc)
         origin = select[0].preferred_origin()
 
         if not check_template_event_errors_ok(origin, **kwargs):
@@ -236,9 +242,13 @@ def _create_template_objects(
         # Load picks and normalize
         tempCatalog = filter_picks(select, stations=relevantStations)
         if not tempCatalog:
+            Logger.info('Rejected template: no event for %s after filtering',
+                        sfile)
             continue
         event = tempCatalog[0]
         if not event.picks:
+            Logger.info('Rejected template: event %s has no picks after '
+                        'filtering', event.short_str())
             continue
         tempCatalog = Catalog()
         tempCatalog += event
@@ -250,8 +260,8 @@ def _create_template_objects(
             st=day_st.copy(), min_samp_rate=samp_rate, pre_event_time=prepick,
             template_length=template_length, bulk_rejected=bulk_rejected)
         if wavef is None or len(wavef) == 0:
-            Logger.error('Event %s for sfile %s has no waveforms available',
-                         event.short_str(), sfile)
+            Logger.error('Rejected template: event %s for sfile %s has no '
+                         'waveforms available', event.short_str(), sfile)
             continue
 
         if remove_response:
@@ -329,6 +339,8 @@ def _create_template_objects(
             min_snr=min_snr)
         # quality-control template
         if len(templateSt) == 0:
+            Logger.error('Rejected template: event %s has no waveforms after '
+                         'quality control', event.short_str())
             continue
         if check_template_strict:
             templateSt = check_template(
@@ -379,7 +391,8 @@ def _create_template_objects(
             Logger.info("Made template %s", templ_name)
             Logger.info(t)
         else:
-            Logger.info("Rejected template %s", templ_name)
+            Logger.info("Rejected template %s (too few traces: %s < %s)",
+                        templ_name, str(len(t.st)), str(min_n_traces))
 
     # clusters = tribe.cluster(method='space_cluster', d_thresh=1.0, show=True)
     template_list = []

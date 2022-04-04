@@ -24,8 +24,11 @@ from obspy.io.nordic.core import read_nordic
 from obspy import read as obspyread
 from obspy import UTCDateTime
 from obspy.geodetics.base import degrees2kilometers, locations2degrees
-from obspy.io.mseed import InternalMSEEDError
+from obspy.io.mseed import InternalMSEEDError, InternalMSEEDWarning
 from obspy.io.segy.segy import SEGYTraceReadingError
+
+import warnings
+warnings.filterwarnings("ignore", category=InternalMSEEDWarning)
 
 from eqcorrscan.core.match_filter import Tribe
 from eqcorrscan.core.match_filter.party import Party
@@ -132,12 +135,11 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
 
     # # Read extra wavefile names from comments
     # if search_only_month_folders:
-    #     seisan_wav_path = os.path.join(
-    #         seisan_wav_path, str(origin.time.year),
-    #         "{:02d}".format(origin.time.month))
+    #     seisan_wav_path = os.path.join(seisan_wav_path, str(origin.time.year),
+    #                                    "{:02d}".format(origin.time.month))
     # for comment in event.comments.copy():
     #     if 'Waveform-filename:' in comment.text:
-    #         wav_file = comment.text.removesprefix('Waveform-filename: ')
+    #         wav_file = comment.text.removeprefix('Waveform-filename: ')
     #         if 'ARC _' in wav_file:
     #             continue
     #         out_lines = subprocess.check_output(
@@ -154,8 +156,14 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
     #             # Should I remove the old waveform-filelinks ?
     #             # event.comments.remove(comment)
 
+    for comment in event.comments.copy():
+        if 'Waveform-filename:' in comment.text:
+            wav_file = comment.text.removeprefix('Waveform-filename: ')
+            if wav_file not in wavfilenames:
+                wavfilenames.append(wav_file)
+
     if not wavfilenames:
-        Logger.warning('Event ' + sfile + ': no waveform files found')
+        Logger.warning('Event %s: no waveform file links in sfile', sfile)
     for wav_file in wavfilenames:
         # Check that there are proper mseed/SEISAN7.0 waveform files
         if (wav_file[0:3] == 'ARC' or wav_file[0:4] == 'WAVE' or
@@ -206,6 +214,8 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
             except FileNotFoundError:
                 Logger.error('Could not read converted file %s, skipping.',
                              new_wav_file_name)
+    Logger.info('Event %s: read %s traces from event-based waveform files',
+                event.short_str(), str(len(st)))
 
     # Request waveforms from client
     latest_pick = max([p.time for p in event.picks])
@@ -228,7 +238,7 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
     # If requested, make sure to remove traces that would not have passed the
     # quality-metrics check:
     for trace_reject in bulk_rejected:
-        tr_id = '.'.join(trace_reject[0:3])
+        tr_id = '.'.join(trace_reject[0:4])
         st_tr = st.select(tr_id)
         for tr in st_tr:
             Logger.info('Removed trace %s for event %s because its metrics are'
@@ -1809,8 +1819,8 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
         found_matching_resp, tr, sel_inv = try_find_matching_response(
             tr, inv.copy())
         if not found_matching_resp:
-            Logger.warning('Finally cannot remove reponse for ' + str(tr) +
-                           ' - no match found')
+            Logger.warning('Finally cannot remove reponse for %s - no match '
+                           'found', str(tr))
             Logger.warning(e)
         else:
             # TODO: what if trace's location code is empty, and there are
@@ -1823,8 +1833,8 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
                                    taper_fraction=taper_fraction)
             except Exception as e:
                 found_matching_resp = False
-                Logger.warning('Finally cannot remove reponse for ' + str(tr) +
-                               ' - no match found')
+                Logger.warning('Finally cannot remove reponse for %s - no '
+                               'match found', str(tr))
                 Logger.warning(e)
         # IF reponse isn't found, then adjust amplitude to something
         # similar to the properly corrected traces
@@ -2235,8 +2245,8 @@ def check_template(st, template_length, remove_nan_strict=True,
                 testSameIDtrace = st[j]
                 if tr.id == testSameIDtrace.id:
                     # remove if the duplicate traces have the same start-time
-                    if tr.stats.starttime == testSameIDtrace.stats.starttime\
-                            and tr in st:
+                    if (tr.stats.starttime == testSameIDtrace.stats.starttime
+                            and tr in st):
                         st.remove(tr)
                         continue
                     # if channel-duplication is forbidden, then throw away the
@@ -2253,24 +2263,20 @@ def check_template(st, template_length, remove_nan_strict=True,
         # Check that the trace is long enough
         if tr.stats.npts < template_length*tr.stats.sampling_rate and tr in st:
             st.remove(tr)
-            Logger.info('Trace ' + tr.stats.network + '.' + tr.stats.station
-                        + '.' + tr.stats.location + '.' + tr.stats.channel
-                        + ' is too short, removing from template.')
+            Logger.info('Trace %s is too short (%s), removing from template.',
+                        tr.id, str(tr.stats.npts * tr.stats.sampling_rate))
         # Check that the trace has no NaNs
         if remove_nan_strict and any(np.isnan(tr.data)) and tr in st:
             st.remove(tr)
-            Logger.info('Trace ' + tr.stats.network + tr.stats.station +
-                        tr.stats.location + tr.stats.channel
-                        + ' contains NaNs, removing from template.')
+            Logger.info('Trace %s contains NaNs, removing from template.',
+                        tr.id)
         # Check that not more than 5 % of the trace is zero:
         n_nonzero = np.count_nonzero(tr.copy().detrend().data)
         # if sum(tr.copy().detrend().data==0) > tr.data.size*max_perc_zeros\
         if (n_nonzero < tr.data.size * (1-max_perc_zeros) and tr in st):
             st.remove(tr)
-            Logger.info('Trace ' + tr.stats.network + tr.stats.station +
-                        tr.stats.location + tr.stats.channel
-                        + ' contains more than ' + str(max_perc_zeros*100)
-                        + ' %% zeros, removing from template.')
+            Logger.info('Trace %s contains more than %s %% zeros, removing '
+                        'from template.', tr.id, str(max_perc_zeros*100))
         # Correct messed-up location/channel in case of LRW, MOL
         # if len(tr.stats.channel)<=2 and len(tr.stats.location)==1:
         #    tr.stats.channel = tr.stats.channel + tr.stats.location

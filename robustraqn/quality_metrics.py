@@ -496,10 +496,10 @@ def get_station_bulk_request(station, location_priority, band_priority,
                         availability = chn_stats[
                             chn_stats['metricName'] == "percent_availability"]
                     except Exception as e:
-                        Logger.error('Error for %s.%s.%s%s%s on %s', station,
-                                     location, band, instrument, component,
+                        Logger.error('Cannot find availability for %s.%s.%s%s%s on %s',
+                                     station, location, band, instrument, component,
                                      request_time)
-                        Logger.error(e, exc_info=True)
+                        # Logger.error(e, exc_info=True)
                         continue
 
                     target_rejected = False

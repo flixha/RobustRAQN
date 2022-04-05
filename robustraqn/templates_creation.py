@@ -142,8 +142,9 @@ def check_template_event_errors_ok(
             max_hor_error = max(max_hor_error)
             if (max_hor_error and max_hor_error > max_horizontal_error_km):
                 Logger.info(
-                    'Rejected template: horizontal error of event %s too large'
-                    ' (%s).', str(origin.time)[0:19], str(max_hor_error))
+                    'Rejected template: horizontal error of event %s (sfile '
+                    '%s) too large (%s).', str(origin.time)[0:19],
+                    str(max_hor_error), sfile)
                 return False
 
     # Check depth error
@@ -152,8 +153,9 @@ def check_template_event_errors_ok(
             max_depth_error = origin.depth_errors.uncertainty / 1000
             if max_depth_error > max_depth_error_km:
                 Logger.info(
-                    'Rejected template: depth error of event %s too large (%s)'
-                    '.', str(origin.time)[0:19], str(max_depth_error))
+                    'Rejected template: depth error of event %s (sfile %s) too'
+                    ' large (%s).', str(origin.time)[0:19], sfile,
+                    str(max_depth_error))
                 return False
 
     # Check time error
@@ -162,8 +164,9 @@ def check_template_event_errors_ok(
             max_time_error = origin.time_errors.uncertainty
             if max_time_error > max_time_error_s:
                 Logger.info(
-                    'Rejected template: time error of event %s too large (%s)'
-                    '.', str(origin.time)[0:19], str(max_time_error))
+                    'Rejected template: time error of event %s (sfile %s) too'
+                    ' large (%s).', str(origin.time)[0:19], sfile,
+                    str(max_time_error))
                 return False
 
     return True
@@ -239,19 +242,32 @@ def _create_template_objects(
         if not check_template_event_errors_ok(origin, **kwargs):
             continue
 
+        # Add picks at array stations if requested
+        if add_array_picks:
+            array_picks_dict = extract_array_picks(event=event)
+            event = add_array_station_picks(
+                event=select[0], array_picks_dict=array_picks_dict,
+                stations_df=stations_df, **kwargs)
+            if add_large_aperture_array_picks:
+                array_picks_dict = extract_array_picks(event=event)
+                Logger.info('Adding array picks for large aperture arrays')
+                event = add_array_station_picks(
+                    event=event, array_picks_dict=array_picks_dict,
+                    stations_df=stations_df,
+                    seisarray_prefixes=LARGE_APERTURE_SEISARRAY_PREFIXES,
+                    **kwargs)
+
         # Load picks and normalize
-        tempCatalog = filter_picks(select, stations=relevantStations)
-        if not tempCatalog:
+        tmp_catalog = filter_picks(Catalog(event), stations=relevantStations)
+        if not tmp_catalog:
             Logger.info('Rejected template: no event for %s after filtering',
                         sfile)
             continue
-        event = tempCatalog[0]
+        event = tmp_catalog[0]
         if not event.picks:
             Logger.info('Rejected template: event %s has no picks after '
                         'filtering', event.short_str())
             continue
-        tempCatalog = Catalog()
-        tempCatalog += event
         catalog += event
         #######################################################################
         # Load and quality-control stream and picks for event
@@ -306,21 +322,6 @@ def _create_template_objects(
             wavef = wavef.detrend('linear').taper(
                 0.15, type='hann', max_length=30, side='both')
 
-        # Add picks at array stations if requested
-        if add_array_picks:
-            array_picks_dict = extract_array_picks(event=event)
-            event = add_array_station_picks(
-                event=event, array_picks_dict=array_picks_dict,
-                stations_df=stations_df, **kwargs)
-            if add_large_aperture_array_picks:
-                array_picks_dict = extract_array_picks(event=event)
-                Logger.info('Adding array picks for large aperture arrays')
-                event = add_array_station_picks(
-                    event=event, array_picks_dict=array_picks_dict,
-                    stations_df=stations_df,
-                    seisarray_prefixes=LARGE_APERTURE_SEISARRAY_PREFIXES,
-                    **kwargs)
-
         event = prepare_picks(
             event=event, stream=wavef, normalize_NSLC=normalize_NSLC, inv=inv,
             sta_translation_file=sta_translation_file, *args, **kwargs)
@@ -339,8 +340,9 @@ def _create_template_objects(
             min_snr=min_snr)
         # quality-control template
         if len(templateSt) == 0:
-            Logger.error('Rejected template: event %s has no waveforms after '
-                         'quality control', event.short_str())
+            Logger.info('Rejected template: event %s (sfile %s): no traces '
+                         'with matching picks that fulfill quality criteria.',
+                         event.short_str(), sfile)
             continue
         if check_template_strict:
             templateSt = check_template(
@@ -385,14 +387,15 @@ def _create_template_objects(
                 image_name = os.path.join('TemplatePlots',
                                           prefix + '_' + templ_name)
                 pretty_template_plot(
-                    templateSt, background=wavef, event=event, sort_by='distance',
-                    show=False, return_figure=False, size=(12, 16), save=True,
-                    savefile=image_name)
-            Logger.info("Made template %s", templ_name)
+                    templateSt, background=wavef, event=event,
+                    sort_by='distance', show=False, return_figure=False,
+                    size=(12, 16), save=True, savefile=image_name)
+            Logger.info("Made template %s for sfile %s", templ_name, sfile)
             Logger.info(t)
         else:
-            Logger.info("Rejected template %s (too few traces: %s < %s)",
-                        templ_name, str(len(t.st)), str(min_n_traces))
+            Logger.info("Rejected template %s (sfile %s): too few traces: %s <"
+                        " %s", templ_name, str(len(t.st)), sfile,
+                        str(min_n_traces))
 
     # clusters = tribe.cluster(method='space_cluster', d_thresh=1.0, show=True)
     template_list = []

@@ -283,7 +283,7 @@ def get_parallel_waveform_client(waveform_client):
 
 
 def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
-                        parallel=False, cores=1, allow_dataframe_edits=True,
+                        parallel=False, cores=1,
                         stations=['*'], location_priority=['??'],
                         band_priority=['B'], instrument_priority=['H'],
                         components=['Z', 'N', 'E', '1', '2'], **kwargs):
@@ -350,33 +350,42 @@ def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
     # on 00:00:00 and ends on 23:59:59).
     reqtime1 = UTCDateTime(mid_t.year, mid_t.month, mid_t.day, 0, 0, 0)
     reqtime2 = UTCDateTime(mid_t.year, mid_t.month, mid_t.day, 23, 59, 59)
+    bulk = list()
+    rejected_bulk = list()
+
+    # If there's no stats at all, then make a bulk-request for everything:
+    if stats is None or stats.empty:
+        bulk = [('*', sta, loc, band + inst + comp, reqtime1, reqtime2)
+                for sta in stations
+                for loc in location_priority
+                for band in band_priority
+                for inst in instrument_priority
+                for comp in components]
+        return bulk, rejected_bulk, stats
 
     # Smartly set the index column of dataframes to speed up list selection:
     # Check if the index-column is called "startday", otherwise make it such.
-    if allow_dataframe_edits:
-        if stats.index.name != 'startday':
-            try:
-                stats['startday'] = stats['start'].str[0:10]
-            except KeyError:
-                Logger.error('No data quality metrics available for %s - %s.',
-                            str(starttime)[0:19], str(endtime)[0:19])
-                return None, None
-            stats = stats.set_index(['startday'])
-        if 'short_target' not in stats.columns:
-            stats['short_target'] = stats['target'].str[3:-2]
-        # Now that "startday" is set as index:
+    if stats.index.name != 'startday':
         try:
-            day_stats = stats.loc[str(reqtime1)[0:10]]
+            stats['startday'] = stats['start'].str[0:10]
         except KeyError:
-            Logger.warning('No data quality metrics for %s',
-                           str(reqtime1)[0:10])
+            Logger.error('No data quality metrics available for %s - %s.',
+                        str(starttime)[0:19], str(endtime)[0:19])
             return None, None
-        # Now set "short_target" as index-column to speed up the selection in
-        # the loop across stations below.
-        day_stats = day_stats.set_index(['short_target'])
+        stats = stats.set_index(['startday'])
+    if 'short_target' not in stats.columns:
+        stats['short_target'] = stats['target'].str[3:-2]
+    # Now that "startday" is set as index:
+    try:
+        day_stats = stats.loc[str(reqtime1)[0:10]]
+    except KeyError:
+        Logger.warning('No data quality metrics for %s',
+                        str(reqtime1)[0:10])
+        return None, None
+    # Now set "short_target" as index-column to speed up the selection in
+    # the loop across stations below.
+    day_stats = day_stats.set_index(['short_target'])
 
-    bulk = list()
-    rejected_bulk = list()
     station_requested = False
     if parallel:
         if cores is None:
@@ -496,9 +505,10 @@ def get_station_bulk_request(station, location_priority, band_priority,
                         availability = chn_stats[
                             chn_stats['metricName'] == "percent_availability"]
                     except Exception as e:
-                        Logger.error('Cannot find availability for %s.%s.%s%s%s on %s',
-                                     station, location, band, instrument, component,
-                                     request_time)
+                        Logger.error(
+                            'Cannot find availability for %s.%s.%s%s%s on %s',
+                            station, location, band, instrument, component,
+                            request_time)
                         # Logger.error(e, exc_info=True)
                         continue
 

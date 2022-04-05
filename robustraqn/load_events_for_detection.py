@@ -123,7 +123,7 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
                       clients=[], st=Stream(), min_samp_rate=np.nan,
                       pre_event_time=30, template_length=300,
                       search_only_month_folders=True, bulk_rejected=[],
-                      **kwargs):
+                      wav_suffixes=['', '.gz'], **kwargs):
     """
     Load the waveforms for an event file (here: Nordic file) while performing
     some checks for duplicates, incompleteness, etc.
@@ -169,22 +169,39 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
         if (wav_file[0:3] == 'ARC' or wav_file[0:4] == 'WAVE' or
                 wav_file[0:6] == 'ACTION' or wav_file[0:6] == 'OLDACT'):
             continue
-        full_wav_file = os.path.join(seisan_wav_path, wav_file)
+
         # Check if the wav-file is in the main folder or Seisan year-month
         # subfolders
-        if not os.path.isfile(full_wav_file):
+        wav_file_found = False
+        for wav_suffix in wav_suffixes:
             full_wav_file = os.path.join(
-                seisan_wav_path, str(origin.time.year),
-                "{:02d}".format(origin.time.month), wav_file)
-            # Check for station's subdirectory just above WAV-path
+                seisan_wav_path, wav_file + wav_suffix)
             if not os.path.isfile(full_wav_file):
                 full_wav_file = os.path.join(
-                    *seisan_wav_path.split('/')[0:-1],
-                    wav_file.split('.')[-1][0:5], str(origin.time.year),
-                    "{:02d}".format(origin.time.month), wav_file)
+                    seisan_wav_path, str(origin.time.year),
+                    "{:02d}".format(origin.time.month), wav_file + wav_suffix)
+                # Check for station's subdirectory just above WAV-path
                 if not os.path.isfile(full_wav_file):
-                    Logger.error('Could not find waveform file %s', wav_file)
-                    continue
+                    full_wav_file = os.path.join(
+                        *seisan_wav_path.split('/')[0:-1],
+                        wav_file.split('.')[-1][0:5], str(origin.time.year),
+                        "{:02d}".format(origin.time.month),
+                        wav_file + wav_suffix)
+                    if not os.path.isfile(full_wav_file):
+                        Logger.error('Could not find waveform file %s',
+                                    wav_file + wav_suffix)
+                        continue
+                    else:
+                        wav_file_found = True
+                else:
+                    wav_file_found = True
+            else:
+                wav_file_found = True
+        if not wav_file_found:
+            Logger.error('Could not find waveform file %s',
+                         wav_file + wav_suffix)
+            continue
+
         try:
             st += obspyread(full_wav_file)
         except FileNotFoundError as e:

@@ -32,6 +32,9 @@ from obsplus.stations.pd import stations_to_df
 from eqcorrscan.core.match_filter import Party
 
 
+# List of extended glob-expressions that match all stations within a seismic
+# array. E.g., NC3* will match all stations starting with "NC3" into one
+# seismic array.
 SEISARRAY_PREFIXES = [
     'NAO*', 'NBO*', '@(NB2*|NOA)', 'NC2*', 'NC3*', 'NC4*', 'NC6*',
     'NR[ABCD][0-9]', '@(ASK|ASK[1-5])', '@(MOR|MOR[1-8])', '@(KTK|KTK[1-6])',
@@ -68,7 +71,8 @@ LARGE_APERTURE_SEISARRAY_PREFIXES = [
     '@(FAUS|N2TV|NBB08|N2ST)',                 # North 2 of Nordland
     '@(VBYGD|STEI|N2LO|N2DI|N2HS|N2IH)']       # Northern part of Nordland
 
-
+# List of beam reference points ("stations") for seismic arrays where the array
+# beam reference point has a name that is not the same as any of the stations.
 REF_STATIONS = ['ARCES', 'SPITS', 'NC2', 'NAO', 'NBO', 'NB2', 'NOA', 'NC2',
                 'NC3', 'NC4', 'NC6', 'NRA0', 'BEAR', 'YKA', 'ILAR', 'EKA']
 
@@ -77,7 +81,8 @@ SEISARRAY_REF_STATIONS = {
     for ref_station in REF_STATIONS for seisarray_prefix in SEISARRAY_PREFIXES
     if fnmatch.fnmatch(ref_station, seisarray_prefix, flags=fnmatch.EXTMATCH)}
 
-
+# List of array beam points that have the same location as an actual seismic
+# station that is part of the seismic array.
 SEISARRAY_REF_EQUIVALENT_STATIONS = {
   'ARCES': 'ARA0',
   'SPITS': 'SPA0',
@@ -134,6 +139,18 @@ def get_array_stations_from_df(stations_df=pd.DataFrame(),
     """
     Returns a dict containing the array prefixes and all stations that belong
     to the corresponding array prefix.
+    
+    :type stations_df: pandas.DataFrame
+    :param stations_df: obsplus-stations dataframe with station information.
+    :type seisarray_prefixes: list
+    :param seisarray_prefixes:
+        List of extended-glob patterns that match all station codes within
+        seismic arrays.
+        
+    :returns: dictionary of keys:
+        Seismic-array prefixes and values: pandas.dataframe of all stations
+        that belong to the seismic array.
+    :rtype: dict
     """
     seisarray_dict = dict()
     single_station_list = stations_df.copy()
@@ -158,6 +175,16 @@ def filter_array_stations_df(stations_df=pd.DataFrame(), seisarray_prefix=''):
     """
     Extract the stations_df for the stations of an array, described by a Unix-
     style pattern in seisarray_prefix.
+
+    :type stations_df: pandas.DataFrame
+    :param stations_df: obsplus-stations dataframe with station information.
+    :type seisarray_prefixes: list
+    :param seisarray_prefixes:
+        List of extended-glob patterns that match all station codes within
+        seismic arrays.
+        
+    :returns: pandas.dataframe of all stations that belong to the seismic array
+    :rtype: pandas.Dataframe    
     """
     array_stations_df = pd.DataFrame(
         [resp for index, resp in stations_df.iterrows()
@@ -172,6 +199,19 @@ def extract_array_picks(event, seisarray_prefixes=SEISARRAY_PREFIXES):
     """
     Return dict of dicts with array-prefix (keys) and relevant phase_hints
     (values / keys) and the relevant picks (values).
+    
+    :type event: class:`obspy.core.event.Event`
+    :param event:
+        event for which array-picks are to be extracted into a dictionary.
+    :type seisarray_prefixes: list
+    :param seisarray_prefixes:
+        List of extended-glob patterns that match all station codes within
+        seismic arrays.
+        
+    :returns:
+        dictionary of seismic-array prefixes and all picks belonging to
+        stations of the array
+    :rtype: dict
     """
     array_picks_dict = dict()
     # array_picks_dict = defaultdict(dict)
@@ -201,7 +241,21 @@ def extract_array_picks(event, seisarray_prefixes=SEISARRAY_PREFIXES):
 
 def extract_array_stream(st, seisarray_prefixes=SEISARRAY_PREFIXES):
     """
-    Return dict with array-prefix (keys) and relevant streams (values) .
+    Return dict with array-prefix (keys) and relevant streams (values).
+
+    :type st: class:`obspy.core.stream.Stream`
+    :param st:
+        stream for which array-traces are to be extracted into a dictionary.
+    :type seisarray_prefixes: list
+    :param seisarray_prefixes:
+        List of extended-glob patterns that match all station codes within
+        seismic arrays.
+        
+    :returns:
+        dictionary of seismic-array prefixes and a
+        class:`obspy.core.stream.Stream` containing all traces recorded at the
+        stations of the array
+    :rtype: dict
     """
     array_streams_dict = dict()
     # array_picks_dict = defaultdict(dict)
@@ -228,19 +282,28 @@ def get_geometry(stations_df, array_prefix='', coordsys='lonlat',
     
     Method to calculate the array geometry and the center coordinates in km
 
-    :param stream: Stream object, the trace.stats dict like class must
-        contain an :class:`~obspy.core.util.attribdict.AttribDict` with
+    :type stations_df: pandas.DataFrame
+    :param stations_df:
+        obsplus-stations dataframe with station information. Can contain either
         'latitude', 'longitude' (in degrees) and 'elevation' (in km), or 'x',
-        'y', 'elevation' (in km) items/attributes. See param ``coordsys``
-    :param coordsys: valid values: 'lonlat' and 'xy', choose which stream
-        attributes to use for coordinates
+        'y', 'elevation' (in km) columns. See param ``coordsys``
+    :type coordsys: str
+    :param coordsys: valid values: 'lonlat' and 'xy', choose which dataframe
+        columns to use for coordinates
+    :type return_center: bool
     :param return_center: Returns the center coordinates as extra tuple
-    :return: Returns the geometry of the stations as 2d :class:`numpy.ndarray`
-            The first dimension are the station indexes with the same order
-            as the traces in the stream object. The second index are the
-            values of [lat, lon, elev] in km
-            last index contains center [lat, lon, elev] in degrees and km if
-            return_center is true
+    :type center_coord_output: str
+    :param center_coord_output:
+        valid values: 'lonlat' and 'xy', choose which coordinate system
+        returned center coordinates should be in
+
+    :returns:
+        Returns the geometry of the stations as 2d :class:`numpy.ndarray`. The
+        first dimension are the station indexes with the same order as the
+        stations in the dataframe object. The second index are the values of
+        [lat, lon, elev] in km, last index contains center coordinates
+        ([lat, lon, elev] or [x, y, z], see ``center_coord_output``)
+    :rtype: :class:`numpy.ndarray`
     """
     array_stations_df = filter_array_stations_df(
         stations_df=stations_df, seisarray_prefix=array_prefix)
@@ -310,9 +373,50 @@ def find_array_picks_baz_appvel(
     - all picks of same phase-hint at each array
     - backazimuth of the phase at each array (may be averaged)
     - apparent velocity of the phase at each array (may be averaged)
-    
-    phase_hints: can be None (check all phases automatically) or list of phases
-                for which to find/compute baz and app-vel
+
+    :type event: class:`obspy.core.event.Event`
+    :param event:
+        event for which array-picks are to be extracted into a dictionary.
+    :type phase_hints: list or None
+    :param phase_hints:
+        list of phase-hints for which array picks should be extraced. ´´None´´
+        means that the function returns information for all phase-hints for
+        which picks exist at each array.
+    :type seisarray_prefixes: list
+    :param seisarray_prefixes:
+        List of extended-glob patterns that match all station codes within
+        seismic arrays.
+    :type array_picks_dict: dict
+    :param array_picks_dict:
+        dictionary of seismic-array prefixes and a
+        class:`obspy.core.stream.Stream` containing all traces recorded at the
+        stations of the array (output from
+        robustraqn.seismic_array_tools.extract_array_picks).
+    :type array_baz_dict: dict or None
+    :param array_baz_dict:
+        2-level dictionary of seismic-array-prefixes (keys), phase_hints (keys)
+        and backazimuths of the phase at the array (values). Leave as ´´None´´
+        to let function find available information in the event.
+    :type array_app_vel_dict: dict or None
+    :param array_app_vel_dict:
+        2-level dictionary of seismic-array-prefixes (keys), phase_hints (keys)
+        and apparent velocities (in km/s) of the phase at the array (values).
+        Leave as ´´None´´ to let function find available information in the
+        event.
+    :type vel_mod: class:`obspy.taup.velocity_model.VelocityModel`
+    :param vel_mod:
+        Velocity model that is to be used for computing time delays between
+        stations of an array considering back-azimuth and apparent velocity.
+    :type vel_mod_file: str
+    :param vel_mod_file:
+        Path to a *.tvel-file containing a velocity model conforming to
+        class:`obspy.taup.velocity_model.VelocityModel`
+        
+    :returns:
+        Tuple of three dictionaries of seismic-array prefixes and phase-hints
+        as keys (2 levels), and the picks, backazimuth value, and apparent
+        velocity value for each phase at each array (as dict-values).
+    :rtype: tuple of (dict, dict, dict)
     """
     if vel_mod is None:
         vel_mod = VelocityModel.read_tvel_file(vel_mod_file)
@@ -413,8 +517,24 @@ def find_array_picks_baz_appvel(
 
 def _check_extra_info(new_pick, pick):
     """
-    Check that all keys required for a nordic pick weight are defined.
-    Adds a pick-weight if there is one in the previous pick
+    Check that all attribute-keys required for a newly created pick are
+    properly assigned for handling Nordic pick weight. If any attributes are
+    missing, the pick may not conform to the xml-scheme for Quakeml and there
+    will be an error on writing a quakeml-file. The function defines a Nordic
+    pick-weight for a the new pick if there is one in the "old"" pick that it
+    is compared to.
+
+    :type new_pick: class:`obspy.core.event.Pick`
+    :param new_pick:
+        pick which shall be updated with pick-weight info from pick.
+    :type pick: class:`obspy.core.event.Pick`
+    :param pick:
+        pick which shall be used to update pick-weight info in new_pick.
+
+    :returns:
+        pick with updated Nordic weight and namespace in
+        pick.extra.nordic_pick_weight.
+    :rtype: class:`obspy.core.event.Pick`
     """
     weight = None
     try:
@@ -466,6 +586,64 @@ def add_array_station_picks(
        array-arrival computations
      - check which array stations do not have an associated pick and append a
        pick for these
+
+    :type event: class:`obspy.core.event.Event`
+    :param event:
+        event for which array-picks are to be extracted into a dictionary.
+    :type stations_df: pandas.DataFrame
+    :param stations_df: obsplus-stations dataframe with station information.
+    :type array_picks_dict: dict
+    :param array_picks_dict:
+        dictionary of seismic-array prefixes and a
+        class:`obspy.core.stream.Stream` containing all traces recorded at the
+        stations of the array (output from
+        robustraqn.seismic_array_tools.extract_array_picks).
+    :type array_baz_dict: dict or None
+    :param array_baz_dict:
+        2-level dictionary of seismic-array-prefixes (keys), phase_hints (keys)
+        and backazimuths of the phase at the array (values). Leave as ´´None´´
+        to let function find available information in the event.
+    :type array_app_vel_dict: dict or None
+    :param array_app_vel_dict:
+        2-level dictionary of seismic-array-prefixes (keys), phase_hints (keys)
+        and apparent velocities (in km/s) of the phase at the array (values).
+        Leave as ´´None´´ to let function find available information in the
+        event.
+    :type baz: float or None
+    :param baz:
+        backazimuth value that should be used for all computations. Leave as
+        ´´None´´ so as not to overwrite array/phase-specific values.
+    :type app_vel: float or None
+    :param app_vel:
+        apparent-velocity value (km/s) that should be used for all
+        computations. Leave as ´´None´´ so as not to overwrite array/phase-
+        specific values.
+    :type seisarray_prefixes: list
+    :param seisarray_prefixes:
+        List of extended-glob patterns that match all station codes within
+        seismic arrays.
+    :type min_array_distance_factor: int or float
+    :param min_array_distance_factor:
+        Factor that defines the minimum distance between seismic event and
+        seismic array that needs to fulfilled so that a seismic array is
+        treated as an array rather than single stations (e.g., compute arrival
+        times at individual stations based on assumed plane wave). The function
+        checks that the event-array distance is larger than the factor times
+        the array's aperture.
+    :type vel_mod: class:`obspy.taup.velocity_model.VelocityModel`
+    :param vel_mod:
+        Velocity model that is to be used for computing time delays between
+        stations of an array considering back-azimuth and apparent velocity.
+    :type vel_mod_file: str
+    :param vel_mod_file:
+        Path to a *.tvel-file containing a velocity model conforming to
+        class:`obspy.taup.velocity_model.VelocityModel`
+        
+    :returns:
+        Tuple of three dictionaries of seismic-array prefixes and phase-hints
+        as keys (2 levels), and the picks, backazimuth value, and apparent
+        velocity value for each phase at each array (as dict-values).
+    :rtype: tuple of (dict, dict, dict)
     """
     n_picks_before = len(event.picks)
     vel_mod = VelocityModel.read_tvel_file(vel_mod_file)
@@ -663,9 +841,11 @@ def array_lac_calc(
         parallel=False, cores=None, daylong=True, ignore_bad_data=True,
         ignore_length=True, **kwargs):
     """
-    Obtain a cross-correlation pick for the whole array.
+    Obtain a cross-correlation pick for seismic arrays. This function should be
+    invoked after `EQcorrscan.core.lag_calc` has computed picks for individual
+    traces.
 
-    Here is how to do it:
+    Here is what this function does
     1. for every array:
         - select all waveforms for the array
         - for every phase:
@@ -674,6 +854,83 @@ def array_lac_calc(
             - min_cc should be selected based on the number of array stations
               and other contributing factors.
         - add one single pick for the array's reference station for each phase
+
+    :type st: obspy.core.stream.Stream
+    :param st: All the data needed to cut from - can be a gappy Stream.
+    :type picked_cat: class:`obspy.core.event.catalog`
+    :type picked_cat:
+        catalog containing events for which picks have been obtained on
+        individual channels with lag_calc.
+    :type party: `EQcorrscan.core.match_filter.tribe`
+    :param party:
+        Party of families of detections for the events in `picked_cat`.
+    :type tribe: `EQcorrscan.core.match_filter.tribe`
+    :param tribe: tribe of templates used for detection of events.
+    :type stations_df: pandas.DataFrame
+    :param stations_df: obsplus-stations dataframe with station information.
+    :type seisarray_prefixes: list
+    :param seisarray_prefixes:
+        List of extended-glob patterns that match all station codes within
+        seismic arrays.
+    :type pre_processed: bool
+    :param pre_processed:
+        Whether the stream has been pre-processed or not to match the
+        templates. See note below.
+    :type shift_len: float
+    :param shift_len:
+        Shift length allowed for the pick in seconds, will be plus/minus
+        this amount - default=0.8
+    :type min_cc: float
+    :param min_cc:
+        Minimum cross-correlation value to be considered a pick,
+        default=0.4.
+    :type min_cc_from_mean_cc_factor: float
+    :param min_cc_from_mean_cc_factor:
+        If set to a value other than None, then the minimum cross-
+        correlation value for a trace is set individually for each
+        detection based on:
+        min(detect_val / n_chans * min_cc_from_mean_cc_factor, min_cc).
+        default is 0.6.
+    :type horizontal_chans: list
+    :param horizontal_chans:
+        List of channel endings for horizontal-channels, on which S-picks
+        will be made.
+    :type vertical_chans: list
+    :param vertical_chans:
+        List of channel endings for vertical-channels, on which P-picks
+        will be made.
+    :type cores: int
+    :param cores:
+        Number of cores to use in parallel processing, defaults to one.
+    :type interpolate: bool
+    :param interpolate:
+        Interpolate the correlation function to achieve sub-sample
+        precision.
+    :type plot: bool
+    :param plot:
+        To generate a plot for every detection or not, defaults to False
+    :type parallel: bool
+    :param parallel: Turn parallel processing on or off.
+    :type process_cores: int
+    :param process_cores:
+        Number of processes to use for pre-processing (if different to
+        `cores`).
+    :type ignore_length: bool
+    :param ignore_length:
+        If using daylong=True, then dayproc will try check that the data
+        are there for at least 80% of the day, if you don't want this check
+        (which will raise an error if too much data are missing) then set
+        ignore_length=True.  This is not recommended!
+    :type ignore_bad_data: bool
+    :param ignore_bad_data:
+        If False (default), errors will be raised if data are excessively
+        gappy or are mostly zeros. If True then no error will be raised,
+        but an empty trace will be returned (and not used in detection).
+        
+    :returns:
+        catalog containing events where lag-calc based cross-correlation picks
+        have been added for phases arriving at seismic arrays.
+    :rtype picked_cat: class:`obspy.core.event.catalog`
     """
     tribe_array_picks_dict = dict()
     for family in party:
@@ -689,15 +946,13 @@ def array_lac_calc(
         st, seisarray_prefixes=seisarray_prefixes)
 
     # tribe = Tribe([family.template for family in party])
-
     for phase_hint in phase_hints:
         # TODO do I better need to check what's in the party vs stream?
         # Need to select only the traces for relevant picks
         # array_party = Party()
         # for family in party:
         #     for detection in family:
-        #         for station, chan in detection.chans:
-                    
+        #         for station, chan in detection.chans:                
         for seisarray_prefix in array_st_dict.keys():
             array_party = Party(
                 [family.copy() for family in party
@@ -709,7 +964,7 @@ def array_lac_calc(
             # should in theory reduce by sqrt(n_traces)
             # TODO - remove the factor 10 below after testing!!!!!
             cc_relax_factor = np.sqrt(len(array_st_dict[seisarray_prefix]))
-            Logger.info('Preparing traces for array %s, for picking phase %s' +
+            Logger.info('Preparing traces for array %s, for picking phase %s'
                         ' with lag-calc. CC relax factor is %s',
                         seisarray_prefix, phase_hint, str(cc_relax_factor))
             # From (preprocessed?) stream select only traces for current array
@@ -717,7 +972,8 @@ def array_lac_calc(
             array_catalog = array_party.lag_calc(
                 array_st_dict[seisarray_prefix], shift_len=0.0,
                 pre_processed=pre_processed, min_cc=min_cc/cc_relax_factor,
-                min_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor/cc_relax_factor,
+                min_cc_from_mean_cc_factor=(
+                    min_cc_from_mean_cc_factor/cc_relax_factor),
                 horizontal_chans=horizontal_chans,
                 vertical_chans=vertical_chans, interpolate=interpolate,
                 plot=plot, overlap=overlap, parallel=parallel, cores=cores,
@@ -781,7 +1037,8 @@ def array_lac_calc(
                         # TODO can I add baz and app-vel here?
                         # horizontal_slowness=kilometers2degrees(
                         #     1 / horizontal_slowness_km),
-                        # backazimuth=array_baz_dict[seisarray_prefix][phase_hint],
+                        # backazimuth=array_baz_dict[seisarray_prefix][
+                        #   phase_hint],
                         # backazimuth=baz,
                         # TODO: check that similar array-pick isn't there yet
                                             
@@ -808,7 +1065,7 @@ def array_lac_calc(
                 if len(template_event) == 1:
                     template_event = template_event[0].copy()
                 else:
-                    Logger.error('Could not find template %s that was used ' +
+                    Logger.error('Could not find template %s that was used '
                                  'for detection, not calculating lags',
                                  detection_template_name)
                     continue
@@ -861,7 +1118,14 @@ def array_lac_calc(
 
 def get_updated_stations_df(inv):
     """
-    return updated  stations-dataframe
+    Updated stations-dataframe with a column that contains the site-names for
+    each station.
+
+    :type stations_df: pandas.DataFrame
+    :param stations_df: obsplus-stations dataframe with station information.
+
+    :returns: obsplus-stations dataframe with station information.
+    :rtype: pandas.DataFrame
     """
     stations_df = stations_to_df(inv)
     # Add site names to stations_df (for info on array beams)
@@ -875,34 +1139,35 @@ def get_updated_stations_df(inv):
     return stations_df
 
 
-def add_array_waveforms_to_template(template, stream,
-                                    seisarray_prefixes=SEISARRAY_PREFIXES):
-    """
-    function that
-    - considers whether there are waveforms + picks in template that are
-      recorded at an array
-    - checks whether there are other waveforms for the same array in the stream
-      (which are not yet part of template)
-    - calls function to compute pick; adds waveform template for all array
-      stations
-    """
-    return template
+# def add_array_beam_waveforms_to_template(
+#         template, stream, seisarray_prefixes=SEISARRAY_PREFIXES):
+#     """
+#     TODO
+#     function that
+#     - considers whether there are waveforms + picks in template that are
+#       recorded at an array
+#     - checks whether there are other waveforms for the same array in the stream
+#       (which are not yet part of template)
+#     - calls function to compute pick; adds waveform template for all array
+#       stations
+#     """
+#     return template
 
 
-def stack_template_waveforms(template, seisarray_prefixes=SEISARRAY_PREFIXES):
-    """
-    function that
-    - considers all waveforms recorded at one array
-    - checks SNR; if SNR very high then no stacking required; if SNR low then
-      stack
-    - stacks waveforms recorded at the array
-    - performs quality check on how well the stack correlates with the single
-      trace
-    - replaces each template seismogram at the array stations with the stacked
-      seismogram
-    """
-    return template
-
+# def stack_template_waveforms(template, seisarray_prefixes=SEISARRAY_PREFIXES):
+#     """
+#     TODO
+#     function that
+#     - considers all waveforms recorded at one array
+#     - checks SNR; if SNR very high then no stacking required; if SNR low then
+#       stack
+#     - stacks waveforms recorded at the array
+#     - performs quality check on how well the stack correlates with the single
+#       trace
+#     - replaces each template seismogram at the array stations with the stacked
+#       seismogram
+#     """
+#     return template
 
 
 # %% TEST

@@ -57,6 +57,13 @@ MY_ENV = os.environ.copy()
 MY_ENV["SEISAN_TOP"] = '/home/felix/Software/SEISANrick'
 
 
+def _read_nordic(sfile, **kwargs):
+    """
+    """
+    Logger.info('Reading sfile %s', sfile)
+    select = read_nordic(sfile, **kwargs)
+
+
 def read_seisan_database(database_path, cores=1, nordic_format='UKN',
                          starttime=None, endtime=None,
                          check_resource_ids=True):
@@ -104,9 +111,9 @@ def read_seisan_database(database_path, cores=1, nordic_format='UKN',
     else:
         sfiles = gsfiles
 
-    cats = Parallel(n_jobs=cores)(delayed(read_nordic)(
+    cats = Parallel(n_jobs=cores)(delayed(_read_nordic)(
         sfile, nordic_format=nordic_format) for sfile in sfiles)
-    cat = Catalog([cat[0] for cat in cats])
+    cat = Catalog([cat[0] for cat in cats if cat])
     for event, sfile in zip(cat, sfiles):
         extra = {'sfile_name': {'value': sfile, 'namespace': 'Seisan'}}
         event.extra = extra
@@ -181,39 +188,46 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
                     seisan_wav_path, str(origin.time.year),
                     "{:02d}".format(origin.time.month), wav_file + wav_suffix)
                 # Check for station's subdirectory just above WAV-path
+                # check e.g. file 2005-07-09-1833-27S.BER___003 in folder
+                # BER__/2005/07
                 if not os.path.isfile(full_wav_file):
-                    full_wav_file = os.path.join(
-                        *seisan_wav_path.split('/')[0:-1],
-                        wav_file.split('.')[-1][0:5], str(origin.time.year),
-                        "{:02d}".format(origin.time.month),
-                        wav_file + wav_suffix)
+                    if len(wav_file.split('.')) > 1:
+                        full_wav_file = os.path.join(
+                            os.path.dirname(seisan_wav_path),
+                            wav_file.split('.')[1][0:5], str(origin.time.year),
+                            "{:02d}".format(origin.time.month),
+                            wav_file + wav_suffix)
                     if not os.path.isfile(full_wav_file):
-                        Logger.error('Could not find waveform file %s',
-                                    wav_file + wav_suffix)
-                        continue
+                        Logger.warning('Could not find waveform file %s',
+                                       wav_file + wav_suffix)
+                        break
                     else:
                         wav_file_found = True
+                        break
                 else:
                     wav_file_found = True
+                    break
             else:
                 wav_file_found = True
+                break
         if not wav_file_found:
-            Logger.error('Could not find waveform file %s',
-                         wav_file + wav_suffix)
+            Logger.warning('Could not find waveform file %s', wav_file)
             continue
+        else:
+            Logger.info('Found wav-file %s', full_wav_file)
 
         try:
             st += obspyread(full_wav_file)
         except FileNotFoundError as e:
-            Logger.error('Waveform file %s does not exist', full_wav_file)
-            Logger.error(e)
+            Logger.warning('Waveform file %s does not exist', full_wav_file)
+            Logger.warning(e)
         except PermissionError as e:
-            Logger.error('Could not read waveform file %s', full_wav_file)
-            Logger.error(e)
+            Logger.warning('Could not read waveform file %s', full_wav_file)
+            Logger.warning(e)
         except (TypeError, ValueError, AssertionError, SEGYTraceReadingError,
                 InternalMSEEDError, NotImplementedError) as e:
-            Logger.error('Could not read waveform file %s', full_wav_file)
-            Logger.error(e)
+            Logger.warning('Could not read waveform file %s', full_wav_file)
+            Logger.warning(e)
             Path(os.path.join(os.getcwd(), 'TMP')).mkdir(
                 parents=True, exist_ok=True)
             wav_file_name = os.path.normpath(wav_file).split(os.path.sep)[-1]
@@ -231,8 +245,8 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
             except FileNotFoundError:
                 Logger.error('Could not read converted file %s, skipping.',
                              new_wav_file_name)
-    Logger.info('Event %s: read %s traces from event-based waveform files',
-                event.short_str(), str(len(st)))
+    Logger.info('Event %s (sfile %s): read %s traces from event-based waveform'
+                ' files', event.short_str(), sfile, str(len(st)))
 
     # Request waveforms from client
     latest_pick = max([p.time for p in event.picks])
@@ -258,8 +272,9 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
         tr_id = '.'.join(trace_reject[0:4])
         st_tr = st.select(tr_id)
         for tr in st_tr:
-            Logger.info('Removed trace %s for event %s because its metrics are'
-                        ' selected thresholds', tr.id, event.short_str())
+            Logger.info(
+                'Removed trace %s for event %s because its metrics are not '
+                'within selected quality thresholds', tr.id, event.short_str())
             st.remove(tr)
 
     # remove_st = Stream()
@@ -272,6 +287,7 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
     #                 'selected thresholds', tr.id, event.short_str())
     #     st.remove(tr)
 
+    n_tr_before = len(st)
     # Trim so that any function-supplied streams are the right length as well
     st.trim(starttime=t1, endtime=t2, pad=False, nearest_sample=True)
 
@@ -290,7 +306,7 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
             continue
         # channels with undecipherable channel names
         # potential names: MIC, SLZ, S Z, M, ALE, MSF, TC
-        if tr.stats.channel[0] not in 'ESBHNMCFD' and tr in st:
+        if tr.stats.channel[0] not in 'ESBHNMCFDX' and tr in st:
             st = st.remove(tr)
             continue
         if (len(tr.stats.channel) == 3 and
@@ -413,6 +429,11 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
         if (n_nonzero > tr.data.size * 0.95 and not any(np.isnan(tr.data))):
             nonZeroWave.append(tr)
     st = nonZeroWave
+    n_tr_after = len(st)
+    Logger.info('Event %s (sfile %s): %s out of %s traces remaining after '
+                'initial selection.', event.short_str(), sfile,
+                str(n_tr_after), str(n_tr_before))
+
     return st
 
 
@@ -874,7 +895,7 @@ def compute_picks_from_app_velocity(
         add_pick = False
         if pick_calculation == 'only_direct':
             if dist_km is not None and dist_km >= crossover_distance_km:
-                if pick.phase_hint in ['Pg', 'Sg']:
+                if pick.phase_hint in ['Pg', 'Sg', 'Pb', 'Sb']:
                     add_pick = True
                 elif pick.phase_hint in ['P', 'Pn']:
                     pick.time = origin.time + dist_km / app_vel_Pg
@@ -888,7 +909,7 @@ def compute_picks_from_app_velocity(
                 add_pick = True
         elif pick_calculation == 'only_refracted':
             if dist_km is not None and dist_km >= crossover_distance_km:
-                if pick.phase_hint in ['Pg', 'Sg']:
+                if pick.phase_hint in ['Pg', 'Sg', 'Pb', 'Sb']:
                     add_pick = True
                 elif pick.phase_hint in ['P', 'Pg']:
                     pick.time = origin.time + dist_km / app_vel_Pn
@@ -950,6 +971,15 @@ def compute_picks_from_app_velocity(
     event.picks = new_picks
     origin.arrivals = new_arrivals
     return event, origin
+
+
+def fix_phasehint_capitalization(event):
+    # Check that the caps-sensitive picks are properly named (b, n, g should be
+    # lowercase)
+    for pick in event.picks:
+        if pick.phase_hint in ['PN', 'PG', 'PB', 'SN', 'SG', 'SB']:
+            pick.phase_hint = pick.phase_hint[0] + pick.phase_hint[1].lower()
+    return event
 
 
 def prepare_picks(
@@ -1090,11 +1120,7 @@ def prepare_picks(
         event, origin = compute_picks_from_app_velocity(
             event, origin, stream=stream, *args, **kwargs)
 
-    # Check that the caps-sensitive picks are properly named (b, n, g should be
-    # lowercase)
-    for pick in event.picks:
-        if pick.phase_hint in ['PN', 'PG', 'PB', 'SN', 'SG', 'SB']:
-            pick.phase_hint = pick.phase_hint[0] + pick.phase_hint[1].lower()
+    event = fix_phasehint_capitalization(event)
 
     # Check for duplicate picks. Remove the later one when they are
     # on the same channel
@@ -1573,8 +1599,8 @@ def _init_processing_per_channel_wRotation(
                 Logger.error(e)
                 Logger.error(
                     'Numpy Mask error - this is a problematic exception '
-                    + 'because it does not appear to be reproducible. I shall '
-                    + 'hence try to process this trace again.')
+                    'because it does not appear to be reproducible. I shall '
+                    'hence try to process this trace again.')
 
     # Downsample if necessary
     if downsampled_max_rate is not None:
@@ -2206,8 +2232,8 @@ def load_station_translation_dict(file="station_code_translation.txt"):
     try:
         f = open(file, "r+")
     except Exception as e:
-        Logger.error('Cannot load station translation file %s', file)
-        Logger.error(e)
+        Logger.warning('Cannot load station translation file %s', file)
+        Logger.warning(e)
         return station_forw_translation_dict, station_forw_translation_dict
 
     for line in f.readlines()[1:]:
@@ -2229,8 +2255,8 @@ def load_forbidden_chan_file(file="forbidden_chans.txt"):
     try:
         f = open(file, "r+")
     except Exception as e:
-        Logger.error('Cannot load forbidden channel file %s', file)
-        Logger.error(e)
+        Logger.warning('Cannot load forbidden channel file %s', file)
+        Logger.warning(e)
         return forbidden_chans
     for line in f.readlines():
         forbidden_chans.append(line.strip())
@@ -2280,8 +2306,9 @@ def check_template(st, template_length, remove_nan_strict=True,
         # Check that the trace is long enough
         if tr.stats.npts < template_length*tr.stats.sampling_rate and tr in st:
             st.remove(tr)
-            Logger.info('Trace %s is too short (%s), removing from template.',
-                        tr.id, str(tr.stats.npts * tr.stats.sampling_rate))
+            Logger.info(
+                'Trace %s is too short (%s s), removing from template.',
+                tr.id, str(tr.stats.npts / tr.stats.sampling_rate))
         # Check that the trace has no NaNs
         if remove_nan_strict and any(np.isnan(tr.data)) and tr in st:
             st.remove(tr)
@@ -2368,8 +2395,8 @@ def multiplot_detection(party, tribe, st, out_folder='DetectionPlots'):
                     stream=dst, template=family.template.st, times=times,
                     save=True, savefile=filename, size=(20, 30), show=False)
             except Exception as e:
-                Logger.error('Could not create multi-plot for detection %s',
-                             detection)
+                Logger.error(
+                    'Could not create multi-plot for detection %s', detection)
                 Logger.error(e)
 
 

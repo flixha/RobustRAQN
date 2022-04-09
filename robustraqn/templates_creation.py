@@ -513,6 +513,8 @@ def create_template_objects(
             unique_dates = sorted(
                 set([sfile[-6:] + os.path.split(sfile)[-1][0:2]
                      for sfile in sfiles]))
+            Logger.info('Preparing %s event batches for template-creation.',
+                        int(len(unique_dates)))
             for unique_date in unique_dates:
                 sfile_batch = []
                 for sfile in sfiles:

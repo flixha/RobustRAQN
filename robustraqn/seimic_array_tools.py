@@ -41,7 +41,7 @@ SEISARRAY_PREFIXES = [
     '@(ARCES|AR[ABCDE][0-9])', '@(SPITS|SP[ABC][0-5])', '@(BEAR|BJO*|BEA[1-6])',
     'OSE[0-9][0-9]', 'EKO[0-9]*', 'GRA[0-9][0-9]', 'SNO[0-9][0-9]',
     '@(EKA|ESK|EKB*|EKR*)', '@(ILAR|IL[0-3][0-9])', '@(YKA|YKA*[0-9])',
-    '@(HN[AB][0-6]|BAS02)',
+    '@(HNAR|HN[AB][0-6]|BAS02)',
     '@(OBS[0-6]|OBS1[1-2]'  # OBS
 ]
 
@@ -98,7 +98,8 @@ SEISARRAY_REF_EQUIVALENT_STATIONS = {
   'NRA0': 'NC602',
   'BEAR': 'BEA4',
   'YKA': 'YKR8',
-  'ILAR': 'IL01'
+  'ILAR': 'IL01',
+  'HNAR': 'HNA0'
 }
 SEISARRAY_REF_EQUIVALENT_STATIONS = defaultdict(
     str, SEISARRAY_REF_EQUIVALENT_STATIONS.items())
@@ -640,10 +641,10 @@ def add_array_station_picks(
         class:`obspy.taup.velocity_model.VelocityModel`
         
     :returns:
-        Tuple of three dictionaries of seismic-array prefixes and phase-hints
-        as keys (2 levels), and the picks, backazimuth value, and apparent
-        velocity value for each phase at each array (as dict-values).
-    :rtype: tuple of (dict, dict, dict)
+        Event with picks added for all individual stations at seismic arrays
+        for which picks could be computed from array arrivals.
+
+    :rtype: class:`obspy.core.event.Event`
     """
     n_picks_before = len(event.picks)
     vel_mod = VelocityModel.read_tvel_file(vel_mod_file)
@@ -742,6 +743,9 @@ def add_array_station_picks(
                     array_geometry_for_pick_sta = (
                         array_geometry - array_geometry[idx])
                 else:
+                    Logger.error(
+                        'Missing information for array station %s, cannot com'
+                        'pute array arrivals.', pick.waveform_id.station_code)
                     continue
                 timeshifts = get_timeshift(array_geometry_for_pick_sta,
                                            sll_x, sll_y, 0, 1, 1)
@@ -755,14 +759,17 @@ def add_array_station_picks(
                                        for timeshift in timeshifts])
                 pick_time_list_ns.append([(pick.time - timeshift[0][0])._ns
                                           for timeshift in timeshifts])
+            # In case list is empty in case of missing station locations:
+            if not pick_time_list_ns:
+                continue
             # pick-time average needs to be calculated from epoch-seconds
-            pick_times_av = [
-                UTCDateTime(time_av)
-                for time_av in (np.mean(pick_time_list_ns, axis=0) / 1e9)]
+            pick_time_averages = np.mean(pick_time_list_ns, axis=0) / 1e9
+            pick_times_av_utc = [UTCDateTime(time_av)
+                             for time_av in (pick_time_averages)]
             # 3. add picks for array stations that did not have pick to pick-list
-            # Only add pick for array station if there is no equivalent pick
+            # Only add pick for array station if the>re is no equivalent pick
             # for that station yet (check phase_hint and station.code)
-            for row_n, pick_time in enumerate(pick_times_av):
+            for row_n, pick_time in enumerate(pick_times_av_utc):
                 pick_tuples = [(pick.phase_hint, pick.waveform_id.station_code)
                                for pick in event.picks]
                 # Get the most common value for onset and polarity for picks of

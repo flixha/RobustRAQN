@@ -41,7 +41,8 @@ from eqcorrscan.utils.correlate import pool_boy
 # reload(load_events_for_detection)
 from robustraqn.load_events_for_detection import (
     normalize_NSLC_codes, get_all_relevant_stations, load_event_stream,
-    try_remove_responses, check_template, prepare_picks)
+    try_remove_responses, check_template, prepare_picks,
+    fix_phasehint_capitalization)
 from robustraqn.spectral_tools import (
     st_balance_noise, Noise_model, get_updated_inventory_with_noise_models)
 from robustraqn.quality_metrics import (
@@ -114,7 +115,7 @@ def _shorten_tribe_streams(
 
 def check_template_event_errors_ok(
         origin, max_horizontal_error_km=None, max_depth_error_km=None,
-        max_time_error_s=None, **kwargs):
+        max_time_error_s=None, file='', **kwargs):
     """
     function to check origin errors gracefully
     """
@@ -142,9 +143,9 @@ def check_template_event_errors_ok(
             max_hor_error = max(max_hor_error)
             if (max_hor_error and max_hor_error > max_horizontal_error_km):
                 Logger.info(
-                    'Rejected template: horizontal error of event %s (sfile '
-                    '%s) too large (%s).', str(origin.time)[0:19],
-                    str(max_hor_error), sfile)
+                    'Rejected template: event %s (file %s): horizontal error '
+                    'too large (%s).', str(origin.time)[0:19], file,
+                    str(max_hor_error))
                 return False
 
     # Check depth error
@@ -153,8 +154,8 @@ def check_template_event_errors_ok(
             max_depth_error = origin.depth_errors.uncertainty / 1000
             if max_depth_error > max_depth_error_km:
                 Logger.info(
-                    'Rejected template: depth error of event %s (sfile %s) too'
-                    ' large (%s).', str(origin.time)[0:19], sfile,
+                    'Rejected template: event %s (file %s): depth error too '
+                    'large (%s).', str(origin.time)[0:19], file,
                     str(max_depth_error))
                 return False
 
@@ -164,8 +165,8 @@ def check_template_event_errors_ok(
             max_time_error = origin.time_errors.uncertainty
             if max_time_error > max_time_error_s:
                 Logger.info(
-                    'Rejected template: time error of event %s (sfile %s) too'
-                    ' large (%s).', str(origin.time)[0:19], sfile,
+                    'Rejected template: event %s (file %s): time error too '
+                    'large (%s).', str(origin.time)[0:19], file,
                     str(max_time_error))
                 return False
 
@@ -235,18 +236,20 @@ def _create_template_objects(
         select, wavname = read_nordic(sfile, return_wavnames=True, **kwargs)
         relevantStations = get_all_relevant_stations(
             selectedStations, sta_translation_file=sta_translation_file)
+        event = select[0]
         # TODO: maybe I should select the "best" origin somewhere (e.g.,
         # smallest errors, largest number of stations etc)
-        origin = select[0].preferred_origin()
+        origin = event.preferred_origin()
 
-        if not check_template_event_errors_ok(origin, **kwargs):
+        if not check_template_event_errors_ok(origin, file=sfile, **kwargs):
             continue
 
         # Add picks at array stations if requested
         if add_array_picks:
+            event = fix_phasehint_capitalization(event)
             array_picks_dict = extract_array_picks(event=event)
             event = add_array_station_picks(
-                event=select[0], array_picks_dict=array_picks_dict,
+                event=event, array_picks_dict=array_picks_dict,
                 stations_df=stations_df, **kwargs)
             if add_large_aperture_array_picks:
                 array_picks_dict = extract_array_picks(event=event)
@@ -258,7 +261,7 @@ def _create_template_objects(
                     **kwargs)
 
         # Load picks and normalize
-        tmp_catalog = filter_picks(Catalog(event), stations=relevantStations)
+        tmp_catalog = filter_picks(Catalog([event]), stations=relevantStations)
         if not tmp_catalog:
             Logger.info('Rejected template: no event for %s after filtering',
                         sfile)
@@ -276,8 +279,8 @@ def _create_template_objects(
             st=day_st.copy(), min_samp_rate=samp_rate, pre_event_time=prepick,
             template_length=template_length, bulk_rejected=bulk_rejected)
         if wavef is None or len(wavef) == 0:
-            Logger.error('Rejected template: event %s for sfile %s has no '
-                         'waveforms available', event.short_str(), sfile)
+            Logger.info('Rejected template: event %s for sfile %s has no '
+                        'waveforms available', event.short_str(), sfile)
             continue
 
         if remove_response:
@@ -394,7 +397,7 @@ def _create_template_objects(
             Logger.info(t)
         else:
             Logger.info("Rejected template %s (sfile %s): too few traces: %s <"
-                        " %s", templ_name, str(len(t.st)), sfile,
+                        " %s", templ_name, sfile, str(len(t.st)),
                         str(min_n_traces))
 
     # clusters = tribe.cluster(method='space_cluster', d_thresh=1.0, show=True)
@@ -505,18 +508,11 @@ def create_template_objects(
         # Run in batches to save time on reading from archive only once per day
         day_stats_list = []
         unique_date_list = []
+        sfile_batches = []
         if len(sfiles) > cores and clients:
             unique_dates = sorted(
                 set([sfile[-6:] + os.path.split(sfile)[-1][0:2]
                      for sfile in sfiles]))
-            sfile_batches = []
-            if ispaq is not None:
-                if ispaq.index.name != 'startday':
-                    ispaq['startday'] = ispaq['start'].str[0:10]
-                    ispaq = ispaq.set_index(['startday'])
-                if 'short_target' not in ispaq.columns:
-                    ispaq['short_target'] = ispaq['target'].str[3:-2]
-                ispaq_groups = ispaq.groupby('startday')
             for unique_date in unique_dates:
                 sfile_batch = []
                 for sfile in sfiles:
@@ -527,16 +523,30 @@ def create_template_objects(
                 unique_date_list.append(unique_date_utc)
                 if sfile_batch:
                     sfile_batches.append(sfile_batch)
-                # Split ispaq-stats into batches if they exist
-                if ispaq is not None:
-                    # Now that "startday" is set as index, split into batches:
-                    try:
-                        day_stats_list.append(ispaq_groups.get_group(
-                            unique_date_utc))
-                    except KeyError:
-                        Logger.warning(
-                            'No data quality metrics for %s', unique_date_utc)
-                        day_stats_list.append(None)
+        else:
+            sfile_batches = [[sfile] for sfile in sfiles]
+            unique_date_list = [
+                str(UTCDateTime(sfile[-6:] + os.path.split(sfile)[-1][0:2]))
+                for sfile in sfiles]
+
+        # Split ispaq-stats into batches if they exist
+        if ispaq is not None:
+            if ispaq.index.name != 'startday':
+                ispaq['startday'] = ispaq['start'].str[0:10]
+                ispaq = ispaq.set_index(['startday'])
+            if 'short_target' not in ispaq.columns:
+                ispaq['short_target'] = ispaq['target'].str[3:-2]
+            ispaq_groups = ispaq.groupby('startday')
+            # Create batch list of ispaq-stats
+            for unique_date_utc in unique_date_list:
+                # Now that "startday" is set as index, split into batches:
+                try:
+                    day_stats_list.append(ispaq_groups.get_group(
+                        unique_date_utc))
+                except KeyError:
+                    Logger.warning(
+                        'No data quality metrics for %s', unique_date_utc)
+                    day_stats_list.append(None)
         # Just create extra references to same ispaq-stats dataframe (should
         # not consume extra memory with references only).
         if not day_stats_list:

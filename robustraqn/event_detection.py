@@ -133,7 +133,7 @@ def get_multi_obj_hash(hash_object_list):
 
 # @processify
 def run_day_detection(
-        client, tribe, date, ispaq, selectedStations,
+        clients, tribe, date, ispaq, selectedStations,
         parallel=False, cores=1, io_cores=1,
         remove_response=False, inv=Inventory(), noise_balancing=False,
         balance_power_coefficient=2, n_templates_per_run=20, xcorr_func='fftw',
@@ -230,8 +230,10 @@ def run_day_detection(
                 return [Party(), Stream()]
 
         # Read in continuous data and prepare for processing
-        day_st = get_waveforms_bulk(client, bulk, parallel=parallel,
-                                    cores=io_cores)
+        day_st = Stream()
+        for client in clients:
+            day_st += get_waveforms_bulk(client, bulk, parallel=parallel,
+                                         cores=io_cores)
 
         Logger.info('Successfully read in %s traces for bulk request of %s'
                     + ' NSLC-objects for %s - %s.', len(day_st), len(bulk),

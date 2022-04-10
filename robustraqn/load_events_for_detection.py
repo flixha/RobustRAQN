@@ -441,8 +441,8 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
 def prepare_detection_stream(
         st, tribe, parallel=False, cores=None, ispaq=pd.DataFrame(),
         try_despike=False, downsampled_max_rate=None,
-        accepted_band_codes='HBSENM', forbidden_instrument_codes='NGAL',
-        accepted_component_codes='ZNE0123ABC'):
+        accepted_band_codes='HBSENMCFDX', forbidden_instrument_codes='NGAL',
+        accepted_component_codes='ZNE0123ABCDH'):
     """
     Prepare the streams for being used in EQcorrscan. The following criteria
     are being considered:
@@ -1530,7 +1530,7 @@ def _init_processing_per_channel_wRotation(
         std_network_code="NS", std_location_code="00", std_channel_prefix="BH",
         detrend_type='simple', taper_fraction=0.005, downsampled_max_rate=25,
         noise_balancing=False, balance_power_coefficient=2, parallel=False,
-        cores=1):
+        cores=1, **kwargs):
     """
     Inner loop over which the initial processing can be parallelized
     """
@@ -1619,7 +1619,8 @@ def _init_processing_per_channel_wRotation(
 def check_normalize_sampling_rate(
         st, inv, min_segment_length_s=10, max_sample_rate_diff=1,
         skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
-        skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos'):
+        skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
+        **kwargs):
     """
     Function to check the sampling rates of traces against the response-
         provided sampling rate and the against all other segments from the same
@@ -1839,7 +1840,7 @@ def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
 
 
 def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
-                          output='DISP', gain_traces=True):
+                          output='DISP', gain_traces=True, **kwargs):
     """
     Internal function that tries to remove the response from a trace
     """
@@ -1929,7 +1930,7 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
     return tr
 
 
-def try_find_matching_response(tr, inv):
+def try_find_matching_response(tr, inv, **kwargs):
     """
     If code doesn't find the response, then assume that the trace's
     metadata lack network or location code. Look for reponse in inv-
@@ -2078,7 +2079,7 @@ def try_find_matching_response(tr, inv):
     return found, tr, Inventory()
 
 
-def response_stats_match(tr, channel):
+def response_stats_match(tr, channel, **kwargs):
     """
     check whether some criteria of the inventory-response and the trace match
     tr: obspy.trace
@@ -2094,7 +2095,7 @@ def response_stats_match(tr, channel):
         return False
 
 
-def return_matching_response(tr, inv, network, station, channel):
+def return_matching_response(tr, inv, network, station, channel, **kwargs):
     """
     """
     inv = inv.select(
@@ -2112,7 +2113,7 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
                          std_location_code="00", std_channel_prefix="BH",
                          parallel=False, cores=None,
                          sta_translation_file="station_code_translation.txt",
-                         forbidden_chan_file="", rotate=True):
+                         forbidden_chan_file="", rotate=True, **kwargs):
     """
     1. Correct non-FDSN-standard-complicant channel codes
     2. Rotate to proper ZNE, and hence change codes from [Z12] to [ZNE]
@@ -2202,7 +2203,8 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
 
 
 def get_all_relevant_stations(
-        selectedStations, sta_translation_file="station_code_translation.txt"):
+        selectedStations, sta_translation_file="station_code_translation.txt",
+        **kwargs):
     """
     return list of relevant stations
     """
@@ -2217,7 +2219,8 @@ def get_all_relevant_stations(
     return relevantStations
 
 
-def load_station_translation_dict(file="station_code_translation.txt"):
+def load_station_translation_dict(file="station_code_translation.txt",
+                                  **kwargs):
     """
     reads a list of stations with their alternative names from a file
     returns a dictionary of key:alternative name, value: standard name
@@ -2241,7 +2244,7 @@ def load_station_translation_dict(file="station_code_translation.txt"):
     return station_forw_translation_dict, station_backw_translation_dict
 
 
-def load_forbidden_chan_file(file="forbidden_chans.txt"):
+def load_forbidden_chan_file(file="forbidden_chans.txt", **kwargs):
     """
     reads a list of channels that are to be removed from all EQcorrscan-data,
     e.g., because of some critical naming conflict (e.g. station NRS as part of
@@ -2261,7 +2264,7 @@ def load_forbidden_chan_file(file="forbidden_chans.txt"):
 
 
 def check_template(st, template_length, remove_nan_strict=True,
-                   max_perc_zeros=5, allow_channel_duplication=True):
+                   max_perc_zeros=5, allow_channel_duplication=True, **kwargs):
     """
     """
     # Now check the templates

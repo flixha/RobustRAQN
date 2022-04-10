@@ -208,19 +208,8 @@ def run_day_detection(
         # the quality metrics criteria and that best match the priorities.
         bulk, bulk_rejected, day_stats = create_bulk_request(
             starttime_req, endtime_req, stats=ispaq,
-            parallel=parallel, cores=cores, io_cores=16,
-            stations=selectedStations, location_priority=['00', '10', ''],
-            band_priority=['B', 'H', 'S', 'E', 'N'], instrument_priority=['H'],
-            components=['Z', 'N', 'E', '1', '2'],
-            min_availability=0.8, max_cross_talk=1,
-            max_spikes=1000, max_glitches=1000, max_num_gaps=500,
-            max_num_overlaps=1000, max_max_overlap=86400,
-            max_dead_channel_lin=3, require_alive_channel_gsn=True,
-            max_pct_below_nlnm=50, max_pct_above_nhnm=50,
-            min_sample_unique=150, max_abs_sample_mean=1e7,
-            min_sample_rms=1e-6, max_sample_rms=1e8,
-            max_sample_median=1e6, min_abs_sample_average=(1, 1e-9),
-            require_clock_lock=False, max_suspect_time_tag=86400, **kwargs)
+            parallel=parallel, cores=cores,
+            stations=selectedStations, **kwargs)
         if not bulk:
             Logger.warning('No waveforms requested for %s - %s',
                            str(starttime)[0:19], str(endtime)[0:19])

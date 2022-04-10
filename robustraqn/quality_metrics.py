@@ -285,7 +285,8 @@ def get_parallel_waveform_client(waveform_client):
 def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
                         parallel=False, cores=1,
                         stations=['*'], location_priority=['??'],
-                        band_priority=['B'], instrument_priority=['H'],
+                        band_priority=['B', 'H', 'S', 'E', 'N'],
+                        instrument_priority=['H'],
                         components=['Z', 'N', 'E', '1', '2'], **kwargs):
     """
     stats = read_ispaq_stats(folder, starttime,endtime, networks=['??'],
@@ -541,13 +542,13 @@ def get_station_bulk_request(station, location_priority, band_priority,
 def check_metrics(day_stats, request_time, availability, min_availability=0.8,
                   max_spikes=1000, max_glitches=1000, max_num_gaps=500,
                   max_num_overlaps=1000, max_max_overlap=86400,
-                  min_sample_unique=100, max_abs_sample_mean=1e7,
+                  min_sample_unique=150, max_abs_sample_mean=1e7,
                   min_sample_rms=2, max_sample_rms=1e8,
-                  max_sample_median=1e6, min_abs_sample_average=(0, 0),
-                  require_clock_lock=True, max_suspect_time_tag=86400,
+                  max_sample_median=1e6, min_abs_sample_average=(1, 1e-9),
+                  require_clock_lock=False, max_suspect_time_tag=86400,
                   max_dead_channel_lin=3, require_alive_channel_gsn=False,
-                  max_pct_below_nlnm=20, max_pct_above_nhnm=20,
-                  max_cross_talk=0.99, **kwargs):
+                  max_pct_below_nlnm=50, max_pct_above_nhnm=50,
+                  max_cross_talk=0.999, **kwargs):
     """
     Function to check all data quality metrics for one specific day against the
     set thresholds, and return True or False depending on whether the data ful-

@@ -197,11 +197,7 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
                             wav_file.split('.')[1][0:5], str(origin.time.year),
                             "{:02d}".format(origin.time.month),
                             wav_file + wav_suffix)
-                    if not os.path.isfile(full_wav_file):
-                        Logger.warning('Could not find waveform file %s',
-                                       wav_file + wav_suffix)
-                        break
-                    else:
+                    if os.path.isfile(full_wav_file):
                         wav_file_found = True
                         break
                 else:

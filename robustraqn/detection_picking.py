@@ -75,7 +75,7 @@ def pick_events_for_day(
         try:
             dayparty = dayparty.read(party_file)
         except Exception as e:
-            Logger.warning('Error reading parties for ' + party_file)
+            Logger.warning('Could not read in any parties for ' + party_file)
             Logger.warning(e)
             return
         if not dayparty:
@@ -191,18 +191,7 @@ def pick_events_for_day(
     bulk, bulk_rejected, day_stats = create_bulk_request(
         starttime_req, endtime_req, stats=ispaq,
         parallel=parallel, cores=cores,
-        stations=requiredStations, location_priority=['10', '00', ''],
-        band_priority=['B', 'H', 'S', 'E', 'N'], instrument_priority=['H'],
-        components=['Z', 'N', 'E', '1', '2'],
-        min_availability=0.8, max_cross_talk=1,
-        max_spikes=1000, max_glitches=1000, max_num_gaps=500,
-        max_num_overlaps=1000, max_max_overlap=86400,
-        max_dead_channel_lin=3, require_alive_channel_gsn=True,
-        max_pct_below_nlnm=50, max_pct_above_nhnm=50,
-        min_sample_unique=150, max_abs_sample_mean=1e7,
-        min_sample_rms=1e-6, max_sample_rms=1e8,
-        max_sample_median=1e6, min_abs_sample_average=(1, 1e-9),
-        require_clock_lock=False, max_suspect_time_tag=86400)
+        stations=requiredStations, **kwargs)
     if not bulk:
         Logger.warning('No waveforms requested for %s', current_day_str)
         return
@@ -226,12 +215,7 @@ def pick_events_for_day(
     day_st = init_processing(
         day_st, starttime=starttime, endtime=endtime,
         remove_response=remove_response, inv=inv, parallel=parallel,
-        cores=cores, min_segment_length_s=10,
-        max_sample_rate_diff=1, skip_interp_sample_rate_smaller=1e-7,
-        interpolation_method='lanczos',
-        skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
-        taper_fraction=0.005, downsampled_max_rate=None,
-        noise_balancing=noise_balancing, balance_power_coefficient=2)
+        cores=cores, **kwargs)
     original_stats_stream = day_st.copy()
 
     # WHY NEEDED HERE????

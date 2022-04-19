@@ -37,8 +37,9 @@ Logger = logging.getLogger(__name__)
 
 
 # TODO: write function to just add origins to template
-def add_origins_to_detected_events(catalog, party, tribe,
-                                   overwrite_origins=False):
+def add_origins_to_detected_events(
+        catalog, party, tribe, overwrite_origins=False,
+        origin_latitude=None, origin_longitude=None, origin_depth=None):
     """
     Add preliminary origins to all detected events based on the template events
     """
@@ -87,7 +88,11 @@ def add_origins_to_detected_events(catalog, party, tribe,
                                + '%s', detection.template_name)
                 continue
         orig = Origin()
-        orig.time = min([p.time for p in event.picks])
+        if event.picks:
+            approx_time = min([p.time for p in event.picks])
+        else:
+            approx_time = detection.detect_time
+        orig.time = approx_time
         orig.longitude = origin_longitude or template_orig.longitude
         orig.latitude = origin_latitude or template_orig.latitude
         orig.depth = origin_depth or template_orig.depth
@@ -260,7 +265,7 @@ def postprocess_picked_events(
         # detection (happens again here so that origin is corrected according
         # to all corrected picks)
         event = add_origins_to_detected_events(
-            Catalog(event), dayparty, tribe, overwrite_origins=True)[0]
+            Catalog([event]), party, tribe, overwrite_origins=True)[0]
         if event.preferred_origin() is None:
             Logger.warning('Aborting picking for detection with template %s',
                            detection.template_name)

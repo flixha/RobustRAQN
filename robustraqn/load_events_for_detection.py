@@ -1158,7 +1158,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
                     interpolation_method='lanczos', taper_fraction=0.005,
                     detrend_type='simple', downsampled_max_rate=None,
                     noise_balancing=False, balance_power_coefficient=2,
-                    parallel=False, cores=None):
+                    parallel=False, cores=None, **kwargs):
     """
     Does an initial processing of the day's stream,
     """
@@ -1451,7 +1451,7 @@ def _init_processing_per_channel(
         skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
         detrend_type='simple', taper_fraction=0.005, pre_filt=None,
         downsampled_max_rate=None, noise_balancing=False,
-        balance_power_coefficient=2):
+        balance_power_coefficient=2, **kwargs):
     """
     Inner loop over which the initial processing can be parallelized
     """

@@ -28,7 +28,8 @@ from eqcorrscan.core.lag_calc import LagCalcError
 # reload(quality_metrics)
 # reload(load_events_for_detection)
 from robustraqn.quality_metrics import (
-    create_bulk_request, get_waveforms_bulk, read_ispaq_stats)
+    create_bulk_request, get_waveforms_bulk, read_ispaq_stats,
+    get_parallel_waveform_client)
 from robustraqn.load_events_for_detection import (
     prepare_detection_stream, init_processing, init_processing_wRotation,
     get_all_relevant_stations, normalize_NSLC_codes, reevaluate_detections)
@@ -57,7 +58,8 @@ def pick_events_for_day(
         only_request_detection_stations=True, array_lag_calc=False,
         relevantStations=[], sta_translation_file='',
         noise_balancing=False, remove_response=False, inv=Inventory(),
-        parallel=False, cores=None, check_array_misdetections=False,
+        parallel=False, cores=None, io_cores=1,
+        check_array_misdetections=False,
         write_party=False, new_threshold=None, n_templates_per_run=1,
         archives=[], request_fdsn=False, min_det_chans=1, shift_len=0.8,
         min_cc=0.4, min_cc_from_mean_cc_factor=0.6, extract_len=240,
@@ -139,7 +141,10 @@ def pick_events_for_day(
                         if pick.time == min(
                             [p.time for p in detection.event.picks
                              if p.waveform_id.id == pick.waveform_id.id])]
-                
+
+                # When the users uses adjusted templates for picking compared
+                # to detection(e.g., added stations etc.), then the exact pick
+                # times may need to be adjusted:
                 # Find time diff between template and detection to update 
                 # detection pick times:
                 time_diffs = []
@@ -188,23 +193,24 @@ def pick_events_for_day(
 
     # Create a smart request, i.e.: request only recordings that match
     # the quality metrics criteria and that best match the priorities.
-    bulk, bulk_rejected, day_stats = create_bulk_request(
+    bulk_request, bulk_rejected, day_stats = create_bulk_request(
         starttime_req, endtime_req, stats=ispaq,
         parallel=parallel, cores=cores,
         stations=requiredStations, **kwargs)
-    if not bulk:
+    if not bulk_request:
         Logger.warning('No waveforms requested for %s', current_day_str)
         return
 
     # Read in continuous data and prepare for processing
-    # day_st = client.get_waveforms_bulk(bulk)
     day_st = Stream()
     for client in clients:
-        day_st += get_waveforms_bulk(client, bulk, parallel=parallel,
-                                     cores=cores)
+        Logger.info('Requesting waveforms from client %s', client)
+        client = get_parallel_waveform_client(client)
+        day_st += client.get_waveforms_bulk_parallel(
+            bulk_request, parallel=parallel, cores=io_cores)
     Logger.info(
         'Successfully read in waveforms for bulk request of %s NSLC-'
-        + 'objects for %s - %s.', len(bulk), str(starttime)[0:19],
+        + 'objects for %s - %s.', len(bulk_request), str(starttime)[0:19],
         str(endtime)[0:19])
     day_st = prepare_detection_stream(
         day_st, tribe, parallel=parallel, cores=cores,

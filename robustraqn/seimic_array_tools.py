@@ -69,12 +69,23 @@ LARGE_APERTURE_SEISARRAY_PREFIXES = [
     '@(VAGH|KONS|STOK|LEIR|RAUS|MOR8|FLOS|STOK1|STOK2|NBB13|NBB14|NBB15)',
     '@(GILDE|NBB05|NBB30|MELSS|NBB17|N1304)',  # South 2 of NOrdland
     '@(FAUS|N2TV|NBB08|N2ST)',                 # North 2 of Nordland
-    '@(VBYGD|STEI|N2LO|N2DI|N2HS|N2IH)']       # Northern part of Nordland
+    '@(VBYGD|STEI|N2LO|N2DI|N2HS|N2IH)',       # Northern part of Nordland
+    '@(KTK|HEF)',
+    '@(VADS|SA05|SA05A|SA03)',
+    '@(HAMF|SA04|SA07)',
+    '@(TRO|JETT)',
+    '@(KEV|SA10|ARCES|AR[ABCDE][0-9])']             # ARCES / Kevo
 
 # List of beam reference points ("stations") for seismic arrays where the array
 # beam reference point has a name that is not the same as any of the stations.
 REF_STATIONS = ['ARCES', 'SPITS', 'NC2', 'NAO', 'NBO', 'NB2', 'NOA', 'NC2',
-                'NC3', 'NC4', 'NC6', 'NRA0', 'BEAR', 'YKA', 'ILAR', 'EKA']
+                'NC3', 'NC4', 'NC6', 'NRA0', 'BEAR', 'YKA', 'ILAR', 'EKA',
+                'HNAR',
+                'OBS01', 'ASK', 'KTK1', 'MOR8', 'BLS5',
+                'OSE05', 'EKO1', 'GRA01', 'SNO01', 'EKO15', 'SNO05',
+                'BRBB', 'KMY', 'ODD1', 'STAV', 'KONO', 'AKN', 'MOL', 'FOO',
+                'DOMB', 'LADE', 'NSS', 'ROEST', 'KONS', 'GILDE', 'FAUS',
+                'KTK', 'VADS', 'HAMF', 'TRO', 'KEV']
 
 SEISARRAY_REF_STATIONS = {
     seisarray_prefix: ref_station
@@ -983,8 +994,9 @@ def array_lac_calc(
                     min_cc_from_mean_cc_factor/cc_relax_factor),
                 horizontal_chans=horizontal_chans,
                 vertical_chans=vertical_chans, interpolate=interpolate,
-                plot=plot, overlap=overlap, parallel=parallel, cores=cores,
-                daylong=daylong, ignore_bad_data=ignore_bad_data,
+                plot=plot, overlap=overlap, daylong=daylong,
+                parallel=parallel, cores=cores, process_cores=1,
+                ignore_bad_data=ignore_bad_data,
                 ignore_length=ignore_length, **kwargs)
             
             Logger.info('Got new array picks for %s events.',

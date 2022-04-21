@@ -62,6 +62,7 @@ def _read_nordic(sfile, **kwargs):
     """
     Logger.info('Reading sfile %s', sfile)
     select = read_nordic(sfile, **kwargs)
+    return select
 
 
 def read_seisan_database(database_path, cores=1, nordic_format='UKN',
@@ -1337,8 +1338,9 @@ def init_processing_wRotation(
     if not parallel:
         st = Stream()
         for nsl in unique_net_sta_loc_list:
-            Logger.info('Starting initial processing of %s for %s - %s.',
-                        str(nsl), str(starttime)[0:19], str(endtime)[0:19])
+            Logger.info(
+                'Starting initial processing of %s for %s - %s.',
+                '.'.join(nsl), str(starttime)[0:19], str(endtime)[0:19])
             st += _init_processing_per_channel_wRotation(
                 day_st.select(network=nsl[0], station=nsl[1], location=nsl[2]),
                 starttime, endtime, remove_response=remove_response,

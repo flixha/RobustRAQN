@@ -11,6 +11,7 @@ for local data; beware of overloading servers with requests).
 from audioop import add
 import os
 import glob
+import re
 from signal import signal, SIGSEGV
 import numpy as np
 import datetime
@@ -281,6 +282,42 @@ def get_parallel_waveform_client(waveform_client):
 
 #     return waveform_client
 
+def check_request_for_wildcards(stats, pattern_list, pattern_position):
+    """
+    Checks and translates wildcard patterns in station/location/channel-names
+    to regexes that work with pandas
+    """
+    if pattern_position[0] not in [0, 1, 2]:
+        raise(IndexError, 'first pattern_position can only be 0, 1, or 2')
+    if len(pattern_position) > 1:
+        if pattern_position[1] not in [0, 1, 2]:
+            raise(IndexError, 'second pattern_position can only be 0, 1, or 2')
+    # Check for wildcards in station names
+    full_pattern_list = list()
+    for pattern in pattern_list:
+        if ('?' or '*') in pattern:
+            # If there are wildcards like ? or * in pattern, replace with regex
+            pattern = pattern.replace(
+                '.', '\.').replace('*', '.*').replace('?', '.')
+            # Split short_target and match only by one multi-index column:
+            # pattern_position describes which part of the SLC-target should be
+            # matched: 0: station, 1: location, 2: channel
+            sub_targets = stats.index.str.split(
+                '.', expand=True).get_level_values(pattern_position[0])
+            # pattern_position can be [2, 0] to match only the bandcode of SCL
+            if len(pattern_position) == 2:
+                sub_targets = stats.index.str[pattern_position[1]]
+            matching_patterns = sub_targets[
+                sub_targets.str.contains(pattern, flags=re.I)]
+            # targets = stats[stats.index.str.startswith(station + '\.')]
+            # pattern_position describes which part of the SLC-target should be
+            # matched: 0: station, 1: location, 2: channel
+            matching_patterns = list(set(matching_patterns))
+            full_pattern_list += matching_patterns
+    if full_pattern_list:
+        pattern_list = list(set(full_pattern_list))
+    return pattern_list
+
 
 def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
                         parallel=False, cores=1,
@@ -386,6 +423,9 @@ def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
     # Now set "short_target" as index-column to speed up the selection in
     # the loop across stations below.
     day_stats = day_stats.set_index(['short_target'])
+    # Check for wildcards in station names
+    stations = check_request_for_wildcards(
+        day_stats, stations, pattern_position=[0])
 
     station_requested = False
     if parallel:
@@ -394,7 +434,9 @@ def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
         out_lists = Parallel(n_jobs=cores)(
             delayed(get_station_bulk_request)(
                 station, location_priority, band_priority, instrument_priority,
-                components, day_stats, reqtime1, starttime, endtime, **kwargs)
+                components,  # send only stats relevant to station to worker
+                day_stats[day_stats.index.str.startswith(station + '.')],
+                reqtime1, starttime, endtime, **kwargs)
             for station in stations)
         bulk_lists = [out_l[0] for out_l in out_lists]
         rejected_bulk_lists = [out_l[1] for out_l in out_lists]
@@ -431,8 +473,8 @@ def get_station_bulk_request(station, location_priority, band_priority,
     :param parallel: Indicate whether to create the request in parallel.
     :type cores: int
     :param cores: Number of parallel processes to use.
-    :type stations: list
-    :param stations: List of stations for which data shall be requested
+    :type station: str
+    :param station: Station for which data shall be requested
     :type location_priority: list
     :param location_priority:
         List of prioritized location codes for which data shall be requested.
@@ -462,6 +504,18 @@ def get_station_bulk_request(station, location_priority, band_priority,
 
     :rtype: list of tuples
     """
+    # Check for wildcards in location names
+    location_priority = check_request_for_wildcards(
+        day_stats, location_priority, pattern_position=[1])
+    # Check for wildcards in band codes
+    band_priority = check_request_for_wildcards(
+        day_stats, band_priority, pattern_position=[2, 0])
+    # Check for wildcards in band codes
+    instrument_priority = check_request_for_wildcards(
+        day_stats, instrument_priority, pattern_position=[2, 1])
+    # Check for wildcards in component code
+    components = check_request_for_wildcards(
+        day_stats, components, pattern_position=[2, 2])
     bulk = list()
     bulk_rejected = list()
     # Now magically find the channels that best fulfill all criteria like
@@ -498,8 +552,8 @@ def get_station_bulk_request(station, location_priority, band_priority,
                             continue
                     else:
                         msg = ('Data quality metrics dataframe is missing '
-                               + 'expected column headers short_target or ' +
-                               ' startday')
+                            + 'expected column headers short_target or ' +
+                            ' startday')
                         raise(KeyError, msg)
 
                     try:

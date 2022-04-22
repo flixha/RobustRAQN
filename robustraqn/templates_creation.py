@@ -51,7 +51,6 @@ from robustraqn.seimic_array_tools import (
     extract_array_picks, add_array_station_picks,
     LARGE_APERTURE_SEISARRAY_PREFIXES, get_updated_stations_df)
 
-
 import logging
 Logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -174,7 +173,7 @@ def check_template_event_errors_ok(
 
 
 def _create_template_objects(
-        sfiles, selectedStations, template_length, lowcut, highcut, min_snr,
+        sfiles, selected_stations, template_length, lowcut, highcut, min_snr,
         prepick, samp_rate, seisan_wav_path, inv=Inventory(), clients=[],
         remove_response=False, noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
@@ -185,6 +184,8 @@ def _create_template_objects(
         add_large_aperture_array_picks=False, ispaq=None,
         sta_translation_file="station_code_translation.txt",
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
+        vertical_chans=['Z', 'H'],
+        horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
         parallel=False, cores=1, *args, **kwargs):
     """
     """
@@ -213,10 +214,10 @@ def _create_template_objects(
                 bulk_request, bulk_rejected, day_stats = (
                     create_bulk_request(
                         starttime=starttime, endtime=endtime, stats=ispaq,
-                        stations=selectedStations, **kwargs))
+                        stations=selected_stations, **kwargs))
             else:
                 bulk_request = [("??", s, "*", "?H?", starttime, endtime)
-                                for s in selectedStations]
+                                for s in selected_stations]
             for client in clients:
                 Logger.info('Requesting waveforms from client %s', client)
                 client = get_parallel_waveform_client(client)
@@ -234,8 +235,8 @@ def _create_template_objects(
     for j, sfile in enumerate(sfiles):
         Logger.info('Working on S-file: ' + sfile)
         select, wavname = read_nordic(sfile, return_wavnames=True, **kwargs)
-        relevantStations = get_all_relevant_stations(
-            selectedStations, sta_translation_file=sta_translation_file)
+        relevant_stations = get_all_relevant_stations(
+            selected_stations, sta_translation_file=sta_translation_file)
         event = select[0]
         # TODO: maybe I should select the "best" origin somewhere (e.g.,
         # smallest errors, largest number of stations etc)
@@ -261,7 +262,7 @@ def _create_template_objects(
                     **kwargs)
 
         # Load picks and normalize
-        tmp_catalog = filter_picks(Catalog([event]), stations=relevantStations)
+        tmp_catalog = filter_picks(Catalog([event]), stations=relevant_stations)
         if not tmp_catalog:
             Logger.info('Rejected template: no event for %s after filtering',
                         sfile)
@@ -275,7 +276,7 @@ def _create_template_objects(
         #######################################################################
         # Load and quality-control stream and picks for event
         wavef = load_event_stream(
-            event, sfile, seisan_wav_path, relevantStations, clients=clients,
+            event, sfile, seisan_wav_path, relevant_stations, clients=clients,
             st=day_st.copy(), min_samp_rate=samp_rate, pre_event_time=prepick,
             template_length=template_length, bulk_rejected=bulk_rejected)
         if wavef is None or len(wavef) == 0:
@@ -325,9 +326,13 @@ def _create_template_objects(
             wavef = wavef.detrend('linear').taper(
                 0.15, type='hann', max_length=30, side='both')
 
+        # TODO: copy picks for horizontal channels to the other horizontal
+        #       channel so that picks can once again be lag-calc-picked on both
+        #       horizontals.
         event = prepare_picks(
             event=event, stream=wavef, normalize_NSLC=normalize_NSLC, inv=inv,
-            sta_translation_file=sta_translation_file, *args, **kwargs)
+            sta_translation_file=sta_translation_file,
+            vertical_chans=vertical_chans, horizontal_chans=horizontal_chans)
 
         wavef = pre_processing.shortproc(
             st=wavef, lowcut=lowcut, highcut=highcut, filt_order=4,
@@ -339,8 +344,9 @@ def _create_template_objects(
         ### TODO : this is where a lot of calculated picks are thrown out
         templateSt = template_gen._template_gen(
             picks=event.picks, st=wavef, length=template_length, swin='all',
-            prepick=prepick, all_horiz=True, plot=False, delayed=True,
-            min_snr=min_snr)
+            prepick=prepick, all_vert=True, all_horiz=True, plot=False,
+            delayed=True, min_snr=min_snr, horizontal_chans=horizontal_chans,
+            vertical_chans=vertical_chans)
         # quality-control template
         if len(templateSt) == 0:
             Logger.info('Rejected template: event %s (sfile %s): no traces '
@@ -440,7 +446,7 @@ def reset_preferred_magnitude(tribe, mag_preference_priority=[('ML', 'BER')]):
 
 
 def create_template_objects(
-        sfiles, selectedStations, template_length, lowcut, highcut, min_snr,
+        sfiles, selected_stations, template_length, lowcut, highcut, min_snr,
         prepick, samp_rate, seisan_wav_path, clients=[], inv=Inventory(),
         remove_response=False, noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
@@ -450,13 +456,15 @@ def create_template_objects(
         normalize_NSLC=True, add_array_picks=False, ispaq=None,
         sta_translation_file="station_code_translation.txt",
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
+        vertical_chans=['Z', 'H'],
+        horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
         parallel=False, cores=1, *args, **kwargs):
     """
       Wrapper for create-template-function
     """
     # Get only relevant inventory information to make Pool-startup quicker
     new_inv = Inventory()
-    for sta in selectedStations:
+    for sta in selected_stations:
         new_inv += inv.select(station=sta)
     stations_df = get_updated_stations_df(inv)
 
@@ -480,7 +488,7 @@ def create_template_objects(
         #     results = (
         #         [pool.apply_async(
         #             _create_template_objects,
-        #             ([sfile], selectedStations, template_length,
+        #             ([sfile], selected_stations, template_length,
         #                 lowcut, highcut, min_snr, prepick, samp_rate,
         #                 seisan_wav_path),
         #             dict(
@@ -513,8 +521,6 @@ def create_template_objects(
             unique_dates = sorted(
                 set([sfile[-6:] + os.path.split(sfile)[-1][0:2]
                      for sfile in sfiles]))
-            Logger.info('Preparing %s event batches for template-creation.',
-                        int(len(unique_dates)))
             for unique_date in unique_dates:
                 sfile_batch = []
                 for sfile in sfiles:
@@ -557,7 +563,7 @@ def create_template_objects(
 
         res_out = Parallel(n_jobs=cores)(
             delayed(_create_template_objects)(
-                sfile_batch, selectedStations, template_length, lowcut, highcut,
+                sfile_batch, selected_stations, template_length, lowcut, highcut,
                 min_snr, prepick, samp_rate, seisan_wav_path, clients=clients,
                 inv=new_inv.select(time=UTCDateTime(unique_date_list[nbatch])),
                 remove_response=remove_response,
@@ -574,6 +580,8 @@ def create_template_objects(
                 std_network_code=std_network_code,
                 std_location_code=std_location_code,
                 std_channel_prefix=std_channel_prefix,
+                vertical_chans=vertical_chans,
+                horizontal_chans=horizontal_chans,
                 parallel=thread_parallel, cores=n_threads,
                 *args, **kwargs)
             for nbatch, sfile_batch in enumerate(sfile_batches))
@@ -584,7 +592,7 @@ def create_template_objects(
         tribe = Tribe(templates=[tri[0] for tri in tribes if len(tri) > 0])
     else:
         (tribe, wavnames) = _create_template_objects(
-            sfiles, selectedStations, template_length, lowcut, highcut,
+            sfiles, selected_stations, template_length, lowcut, highcut,
             min_snr, prepick, samp_rate, seisan_wav_path, inv=new_inv,
             clients=clients,
             remove_response=remove_response, noise_balancing=noise_balancing,
@@ -601,6 +609,7 @@ def create_template_objects(
             std_network_code=std_network_code,
             std_location_code=std_location_code,
             std_channel_prefix=std_channel_prefix,
+            vertical_chans=vertical_chans, horizontal_chans=horizontal_chans,
             *args, **kwargs)
 
     label = ''
@@ -622,7 +631,7 @@ def create_template_objects(
 if __name__ == "__main__":
     seisan_rea_path = '../SeisanEvents/'
     seisan_wav_path = '../SeisanEvents/'
-    selectedStations = ['ASK','BER','BLS5','DOMB','EKO1','FOO','HOMB','HYA',
+    selected_stations = ['ASK','BER','BLS5','DOMB','EKO1','FOO','HOMB','HYA',
                         'KMY','MOL','ODD1','SKAR','SNART','STAV','SUE','KONO',
                         'BIGH','DRUM','EDI','EDMD','ESK','GAL1','GDLE','HPK',
                         'INVG','KESW','KPL','LMK','LRW','PGB1','MUD',
@@ -636,12 +645,12 @@ if __name__ == "__main__":
                         'NC300','NC301','NC302','NC303','NC304','NC305',
                         'NC400','NC401','NC402','NC403','NC404','NC405',
                         'NC600','NC601','NC602','NC603','NC604','NC605'] 
-    # selectedStations = ['NAO01', 'NAO03', 'NB200']
-    # selectedStations = ['ASK', 'BER', 'NC602']
+    # selected_stations = ['NAO01', 'NAO03', 'NB200']
+    # selected_stations = ['ASK', 'BER', 'NC602']
     # 'SOFL','OSL',
-    invFile = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.xml'
+    inv_file = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.xml'
     inv = get_updated_inventory_with_noise_models(
-        os.path.expanduser(invFile),
+        os.path.expanduser(inv_file),
         pdf_dir='~/repos/ispaq/WrapperScripts/PDFs/', check_existing=True,
         outfile=os.path.expanduser('~/Documents2/ArrayWork/Inventory/inv.pickle'))
 
@@ -666,9 +675,9 @@ if __name__ == "__main__":
     else:
         lowcut = 2.5
 
-    # create_template_objects(sfiles, selectedStations, inv,
+    # create_template_objects(sfiles, selected_stations, inv,
     tribe, wavenames = create_template_objects(
-        sfiles, selectedStations, template_length, lowcut, highcut,
+        sfiles, selected_stations, template_length, lowcut, highcut,
         min_snr=4.0, prepick=0.2, samp_rate=20.0, inv=inv,
         remove_response=True, seisan_wav_path=seisan_wav_path,
         noise_balancing=noise_balancing, min_n_traces=3,

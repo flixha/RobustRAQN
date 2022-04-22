@@ -182,8 +182,8 @@ def postprocess_picked_events(
         num_pPicks_onDetSta = 0
         num_sPicks_onDetSta = 0
         pick_stations = []
-        sPick_Stations = []
-        pick_and_detect_Stations = []
+        s_pick_stations = []
+        pick_and_detect_stations = []
 
         # Select detection
         detection = None
@@ -230,15 +230,15 @@ def postprocess_picked_events(
                 num_pPicks += 1
             elif pick.phase_hint[0] == 'S':
                 sPick_Station = pick.waveform_id.station_code
-                if sPick_Station not in sPick_Stations:
+                if sPick_Station not in s_pick_stations:
                     num_sPicks += 1
-                    sPick_Stations.append(sPick_Station)
+                    s_pick_stations.append(sPick_Station)
             # Count the number of picks on stations used
             # during match-filter detection
 
             if (pick_station, pick_chan) in detection.chans:
-                if pick_station not in pick_and_detect_Stations:
-                    pick_and_detect_Stations.append(pick_station)
+                if pick_station not in pick_and_detect_stations:
+                    pick_and_detect_stations.append(pick_station)
                 if pick.phase_hint[0] == 'P':
                     num_pPicks_onDetSta += 1
                 elif pick.phase_hint[0] == 'S':

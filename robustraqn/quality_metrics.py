@@ -287,6 +287,8 @@ def check_request_for_wildcards(stats, pattern_list, pattern_position):
     Checks and translates wildcard patterns in station/location/channel-names
     to regexes that work with pandas
     """
+    if stats.empty:
+        return []
     if pattern_position[0] not in [0, 1, 2]:
         raise(IndexError, 'first pattern_position can only be 0, 1, or 2')
     if len(pattern_position) > 1:

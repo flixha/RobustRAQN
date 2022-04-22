@@ -280,7 +280,9 @@ def extract_array_stream(st, seisarray_prefixes=SEISARRAY_PREFIXES):
                                flags=fnmatch.EXTMATCH):
                 array_st += tr
         # seisarray_list.append((seisarray_prefix, seisarray_station_list))
-        if len(array_st) > 0:
+        # if there's only data for one station it doesn't need array handling
+        array_stas = set([tr.stats.station for tr in array_st])
+        if len(array_st) > 1 and len(array_stas) > 1:
             array_streams_dict[seisarray_prefix] = array_st
     return array_streams_dict
 
@@ -821,7 +823,7 @@ def add_array_station_picks(
                         time=pick_time, phase_hint=phase_hint,
                         waveform_id=new_waveform_id,
                         horizontal_slowness=kilometers2degrees(
-                            1 / horizontal_slowness_km),
+                            horizontal_slowness_km),
                         # backazimuth=array_baz_dict[seisarray_prefix][phase_hint],
                         backazimuth=baz,
                         onset=onset,
@@ -847,6 +849,21 @@ def add_array_station_picks(
         str(n_picks_after - n_picks_before), n_picks_before, n_picks_after)
 
     return event
+
+
+def _find_associated_detection_id(party, event_index):
+    """
+    For the n-th event in a catalog received from lag-calc, find the associated
+    detection for the event and return the detection id.
+    """
+    nd = 0
+    for family in party:
+        for detection in family:
+            if nd == event_index:
+                detection_id = detection.id
+                return detection_id
+            nd += 1
+    return ''
 
 
 def array_lac_calc(
@@ -998,11 +1015,12 @@ def array_lac_calc(
                 parallel=parallel, cores=cores, process_cores=1,
                 ignore_bad_data=ignore_bad_data,
                 ignore_length=ignore_length, **kwargs)
+            # TODO: need to check whether pick is within shift_len
             
             Logger.info('Got new array picks for %s events.',
                         str(len(array_catalog)))
             # sort picks into previously lag-calc-picked catalog
-            for event in array_catalog:
+            for i_event, event in enumerate(array_catalog):
                 # find the event that was picked from the same detection for
                 # the whole network
                 try:
@@ -1024,17 +1042,21 @@ def array_lac_calc(
                     pick for pick in picked_event.picks
                     if (pick.waveform_id.station_code == ref_equi_stacode and
                         pick.phase_hint == phase_hint)]
+                detection_id = _find_associated_detection_id(
+                        party=array_party, event_index=i_event)
                 # if there's already a pick for the array's reference beam
                 # station, then I don't need to compute it and can save time.
                 if len(existing_ref_picks) > 0:
-                    Logger.info('There is already a pick for array beam %s, '
-                                'phase %s, not adding any more picks.',
-                                seisarray_prefix, phase_hint)
+                    Logger.info(
+                        'There is already a pick for array beam %s, phase %s, '
+                        'detection %s, not adding any more picks.',
+                        seisarray_prefix, phase_hint, detection_id)
                     continue
                 if len(existing_ref_equivalent_picks) > 0:
                     Logger.info(
-                        'Adding array pick for array %s beam for phase %s.',
-                        seisarray_prefix, phase_hint)
+                        'Adding array pick for array %s beam for phase %s, '
+                        'detection %s.', seisarray_prefix, phase_hint,
+                        detection_id)
                     for equi_pick in existing_ref_equivalent_picks:
                         new_waveform_id = WaveformStreamID(
                             network_code=equi_pick.waveform_id.network_code,
@@ -1293,7 +1315,7 @@ if __name__ == "__main__":
     if make_detections:
         [party, day_st] = run_day_detection(
             client=client, tribe=tribe, date=date, ispaq=ispaq, 
-            selectedStations=selected_stations, inv=inv, xcorr_func='fftw',
+            selected_stations=selected_stations, inv=inv, xcorr_func='fftw',
             concurrency='concurrent',  parallel=parallel, cores=cores,
             n_templates_per_run=1, threshold=10, trig_int=20, multiplot=False,
             write_party=True, detection_path='tests/data/Detections',
@@ -1307,9 +1329,9 @@ if __name__ == "__main__":
 
 # %%
     export_catalog = pick_events_for_day(
-        tribe=pick_tribe, det_tribe=tribe, templatePath=None,
+        tribe=pick_tribe, det_tribe=tribe, template_path=None,
         date=date, det_folder='tests/data/Detections', dayparty=party,
-        ispaq=ispaq, clients=[client], relevantStations=selected_stations,
+        ispaq=ispaq, clients=[client], relevant_stations=selected_stations,
         array_lag_calc=True, inv=inv, parallel=True, cores=cores,
         write_party=False, n_templates_per_run=1, min_det_chans=5, min_cc=0.4,
         interpolate=True, archives=['/data/seismo-wav/SLARCHIVE'], 

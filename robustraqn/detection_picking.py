@@ -23,6 +23,7 @@ from obspy.clients.filesystem.sds import Client
 
 from eqcorrscan.core.match_filter import (Tribe, Party)
 from eqcorrscan.core.lag_calc import LagCalcError
+from eqcorrscan.utils.pre_processing import dayproc
 
 # import quality_metrics, spectral_tools, load_events_for_detection
 # reload(quality_metrics)
@@ -53,16 +54,19 @@ EQCS_logger.setLevel(logging.ERROR)
 
 # @processify
 def pick_events_for_day(
-        date, det_folder, templatePath, ispaq, clients, tribe, dayparty=None,
+        date, det_folder, template_path, ispaq, clients, tribe, dayparty=None,
         short_tribe=Tribe(), det_tribe=Tribe(), stations_df=None,
         only_request_detection_stations=True, array_lag_calc=False,
-        relevantStations=[], sta_translation_file='',
+        relevant_stations=[], sta_translation_file='',
         noise_balancing=False, remove_response=False, inv=Inventory(),
         parallel=False, cores=None, io_cores=1,
-        check_array_misdetections=False,
-        write_party=False, new_threshold=None, n_templates_per_run=1,
+        check_array_misdetections=False, trig_int=12,
+        time_difference_threshold=8, detect_value_allowed_error=60,
+        threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
         archives=[], request_fdsn=False, min_det_chans=1, shift_len=0.8,
         min_cc=0.4, min_cc_from_mean_cc_factor=0.6, extract_len=240,
+        write_party=False, vertical_chans=['Z', 'H'],
+        horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
         sfile_path='Sfiles', operator='EQC', **kwargs):
     """
     Day-loop for picker
@@ -84,10 +88,12 @@ def pick_events_for_day(
             return
         Logger.info('Read in party of %s families for %s from %s.',
                     str(len(dayparty)), current_day_str, party_file)
-
         # replace the old templates in the detection-families with those for
         # picking (these contain more channels)
         # dayparty = replace_templates_for_picking(dayparty, tribe)
+
+    # TODO TMP change for debug # FH
+    dayparty = Party(dayparty[0])
 
     # Rethreshold if required
     if new_threshold is not None:
@@ -141,13 +147,10 @@ def pick_events_for_day(
                         if pick.time == min(
                             [p.time for p in detection.event.picks
                              if p.waveform_id.id == pick.waveform_id.id])]
-
-                # When the users uses adjusted templates for picking compared
-                # to detection(e.g., added stations etc.), then the exact pick
-                # times may need to be adjusted:
+                # Picks need to be adjusted for prepick-time. 
                 # Find time diff between template and detection to update 
                 # detection pick times:
-                time_diffs = []
+                time_diffs = []  # to get template prepick times
                 if len(detections_earliest_tr_picks) == 0:
                     continue
                 for det_pick in detections_earliest_tr_picks:
@@ -167,36 +170,38 @@ def pick_events_for_day(
                 #                           pick_tr[0].stats.starttime)
                 # Use mean time diff in case any picks were corrected slightly
                 time_diff = np.nanmean(time_diffs)
+                # Or shouldn't this better be the maximum of the time-diffs?
+                # (for sample alignment, template generation uses at most
+                # prepick length) TODO: Check and compare
+                # time_diff = np.nanmax(time_diffs)
                 detection.event = pick_template.event.copy()
                 for pick in detection.event.picks:
-                    pick.time = pick.time + time_diff
+                    pick.time = pick.time + time_diff  # add template prepick
             family.template = pick_template
 
     Logger.info('Starting to pick events with party of %s families for %s',
                 str(len(dayparty)), current_day_str)
-
     # Choose only stations that are relevant for any detection on that day.
-    requiredStations = relevantStations
+    required_stations = relevant_stations
     if only_request_detection_stations:
-        requiredStations = set([tr.stats.station for fam in dayparty
+        required_stations = set([tr.stats.station for fam in dayparty
                                 for tr in fam.template.st])
-        requiredStations = list(
-            set(relevantStations).intersection(requiredStations))
-        # requiredStations =set.intersection(relevantStations,requiredStations)
-        requiredStations = get_all_relevant_stations(
-            requiredStations, sta_translation_file=sta_translation_file)
+        required_stations = list(
+            set(relevant_stations).intersection(required_stations))
+        # required_stations =set.intersection(relevant_stations,required_stations)
+        required_stations = get_all_relevant_stations(
+            required_stations, sta_translation_file=sta_translation_file)
     # Start reading in data for day
     starttime = UTCDateTime(pd.to_datetime(date))
-    starttime_req = starttime - 15*60
-    endtime = starttime + 60*60*24
-    endtime_req = endtime + 15*60
-
+    starttime_req = starttime - 15 * 60
+    endtime = starttime + 60 * 60 * 24
+    endtime_req = endtime + 15 * 60
     # Create a smart request, i.e.: request only recordings that match
     # the quality metrics criteria and that best match the priorities.
     bulk_request, bulk_rejected, day_stats = create_bulk_request(
         starttime_req, endtime_req, stats=ispaq,
         parallel=parallel, cores=cores,
-        stations=requiredStations, **kwargs)
+        stations=required_stations, **kwargs)
     if not bulk_request:
         Logger.warning('No waveforms requested for %s', current_day_str)
         return
@@ -217,13 +222,11 @@ def pick_events_for_day(
         try_despike=False)
     # daily_plot(day_st, year, month, day, data_unit="counts",
     #            suffix='resp_removed')
-
     day_st = init_processing(
         day_st, starttime=starttime, endtime=endtime,
         remove_response=remove_response, inv=inv, parallel=parallel,
         cores=cores, **kwargs)
     original_stats_stream = day_st.copy()
-
     # WHY NEEDED HERE????
     # day_st.merge(method=0, fill_value=0, interpolation_samples=0)
     # Normalize NSLC codes
@@ -249,14 +252,16 @@ def pick_events_for_day(
         else:
             dayparty = reevaluate_detections(
                 dayparty, short_tribe, stream=day_st,
-                threshold=new_threshold-2, trig_int=3.0, threshold_type='MAD',
+                threshold=new_threshold-2, trig_int=trig_int/4,
+                threshold_type=threshold_type,
                 overlap='calculate', plotDir='ReDetectionPlots',
                 plot=False, fill_gaps=True, ignore_bad_data=True,
                 daylong=True, ignore_length=True, min_chans=min_det_chans,
                 concurrency='multiprocess', parallel_process=parallel,
                 cores=cores, xcorr_func='time_domain',
                 group_size=n_templates_per_run, process_cores=cores,
-                time_difference_threshold=8, detect_value_allowed_error=30,
+                time_difference_threshold=time_difference_threshold,
+                detect_value_allowed_error=detect_value_allowed_error,
                 return_party_with_short_templates=True)
         if not dayparty:
             Logger.warning('Party of families of detections is empty.')
@@ -269,29 +274,30 @@ def pick_events_for_day(
             dayparty.write(
                 detection_file_name + '.csv', format='csv', overwrite=True)
 
-    # Compute a minimum-CC value that makes sense for the templates
-    # avg_cc = stats.mean(
-    #     [d.detect_val / d.no_chans for f in dayparty for d in f])
-
-    # min_cc = avg_cc + (1 - avg_cc) * avg_cc * 3
-    # min_cc = avg_cc * 0.8 #/ 2
-    # TODO: would be better to make min_cc depend on the average CC and
-    #       the standard deviation of CC across the channels, but then I
-    #       would have to save the standard deviation in the tribe-file.
-
-    # min_cc = min(abs(avg_cc * 0.6), 0.5)
-    # Logger.info('I will run lag-calc with min_cc of %s', str(min_cc))
-
-    # Use the same filtering and sampling parameters as with templates!
-    # day_st = pre_processing.dayproc(
-    #    day_st, lowcut=2.5, highcut=8.0, filt_order=4, samp_rate=100,
-    #    debug=0, starttime=starttime, ignore_length=True,
-    #    seisan_chan_names=False, parallel=True, num_cores=cores)
+    # Check if I can do pre-processing just once:
+    if array_lac_calc:
+        pre_processed = False
+        lowcuts = list(set([tp.lowcut for tp in tribe]))
+        highcuts = list(set([tp.highcut for tp in tribe]))
+        filt_orders = list(set([tp.filt_order for tp in tribe]))
+        samp_rates = list(set([tp.samp_rate for tp in tribe]))
+        if (len(lowcuts) == 1 and len(highcuts) == 1 and
+                len(filt_orders) == 1 and len(samp_rates) == 1):
+            Logger.info(
+                'All templates have the same trace-processing parameters. '
+                'Preprocessing data once for lag-calc and array-lag-calc.')
+            day_st = dayproc(
+                day_st, lowcut=lowcuts[0], highcut=highcuts[0],
+                filt_order=filt_orders[0], samp_rate=samp_rates[0],
+                starttime=starttime, parallel=parallel, num_cores=cores,
+                ignore_length=False, seisan_chan_names=False, fill_gaps=True,
+                ignore_bad_data=False, fft_threads=1)
+            pre_processed = True
     picked_catalog = Catalog()
     picked_catalog = dayparty.copy().lag_calc(
-        day_st, pre_processed=False, shift_len=shift_len, min_cc=min_cc,
-        min_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
-        horizontal_chans=['E', 'N', '1', '2'], vertical_chans=['Z'],
+        day_st, pre_processed=pre_processed, shift_len=shift_len,
+        min_cc=min_cc, min_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
+        horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
         parallel=parallel, cores=cores, daylong=True, **kwargs)
     # try:
     # except LagCalcError:
@@ -305,17 +311,17 @@ def pick_events_for_day(
     if array_lag_calc:
         picked_catalog = array_lac_calc(
             day_st, picked_catalog, dayparty, tribe, stations_df,
-            min_cc=0.4, pre_processed=False, shift_len=0.8,
-            min_cc_from_mean_cc_factor=0.6,
-            horizontal_chans=['E', 'N', '1', '2'], vertical_chans=['Z'],
+            min_cc=min_cc, pre_processed=pre_processed, shift_len=shift_len,
+            min_cc_from_mean_cc_factor=min(min_cc_from_mean_cc_factor, 0.999),
+            horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
             parallel=parallel, cores=cores, daylong=True, **kwargs)
 
     export_catalog = postprocess_picked_events(
         picked_catalog, dayparty, tribe, original_stats_stream,
         det_tribe=det_tribe, write_sfiles=True, sfile_path=sfile_path,
-        operator=operator, all_channels_for_stations=relevantStations,
+        operator=operator, all_channels_for_stations=relevant_stations,
         extract_len=extract_len, write_waveforms=True, archives=archives,
-        request_fdsn=request_fdsn, template_path=templatePath,
+        request_fdsn=request_fdsn, template_path=template_path,
         min_pick_stations=8, min_picks_on_detection_stations=3)
 
     return export_catalog
@@ -330,7 +336,7 @@ if __name__ == "__main__":
     # client2 = Client(archive_path2)
 
     sta_translation_file = "station_code_translation.txt"
-    selectedStations = ['ASK','BER','BLS5','DOMB','FOO','HOMB','HYA','KMY',
+    selected_stations = ['ASK','BER','BLS5','DOMB','FOO','HOMB','HYA','KMY',
                         'ODD1','SKAR','SNART','STAV','SUE','KONO','DOMB',
                         #'NAO01','NB201','NBO00','NC204','NC303','NC602',
                         'NAO00','NAO01','NAO02','NAO03','NAO04','NAO05',
@@ -341,9 +347,9 @@ if __name__ == "__main__":
                         'NC400','NC401','NC402','NC403','NC404','NC405',
                         'NC600','NC601','NC602','NC603','NC604','NC605',
                         'STRU']
-    # selectedStations = ['ASK','BER']
+    # selected_stations = ['ASK','BER']
     # Add some extra stations from Denmark / Germany / Netherlands
-    # addStations =  ['NAO00','NAO02','NAO03','NAO04','NAO05',
+    # add_stations =  ['NAO00','NAO02','NAO03','NAO04','NAO05',
     #                 'NB200','NB202','NB203','NB204','NB205',
     #                 'NBO00','NBO01','NBO02','NBO03','NBO04','NBO05',
     #                 'NC200','NC201','NC202','NC203','NC205',
@@ -351,24 +357,24 @@ if __name__ == "__main__":
     #                 'NC400','NC401','NC402','NC403','NC404','NC405',
     #                 'NC600','NC601','NC603','NC604','NC605']
 
-    relevantStations = get_all_relevant_stations(
-        selectedStations, sta_translation_file=sta_translation_file)
-    # addStations = get_all_relevant_stations(
-    #     addStations, sta_translation_file=sta_translation_file)
-    # allStations = relevantStations + addStations
+    relevant_stations = get_all_relevant_stations(
+        selected_stations, sta_translation_file=sta_translation_file)
+    # add_stations = get_all_relevant_stations(
+    #     add_stations, sta_translation_file=sta_translation_file)
+    # all_stations = relevant_stations + add_stations
 
     startday = UTCDateTime(2021,4,1,0,0,0)
     endday = UTCDateTime(2021,4,30,0,0,0)
 
-    invFile = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.xml'
-    invFile = os.path.expanduser(invFile)
+    inv_file = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.xml'
+    inv_file = os.path.expanduser(inv_file)
     inv = get_updated_inventory_with_noise_models(
-        os.path.expanduser(invFile),
+        os.path.expanduser(inv_file),
         pdf_dir='~/repos/ispaq/WrapperScripts/PDFs/',
         outfile='inv.pickle', check_existing=True)
 
-    templatePath ='Templates'
-    #templatePath='LagCalcTemplates'
+    template_path ='Templates'
+    #template_path='LagCalcTemplates'
     parallel = True
     cores = 40
     # det_folder = 'Detections_onDelta'
@@ -407,13 +413,13 @@ if __name__ == "__main__":
             current_year = date.year
             ispaq = read_ispaq_stats(folder=
                 '/home/felix/repos/ispaq/WrapperScripts/Parquet_database/csv_parquet',
-                stations=relevantStations, startyear=current_year,
+                stations=relevant_stations, startyear=current_year,
                 endyear=current_year, ispaq_prefixes=['all'],
                 ispaq_suffixes=['simpleMetrics','PSDMetrics'],
                 file_type = 'parquet')
         pick_events_for_day(
-            date=date, det_folder=det_folder, templatePath=templatePath,
-            ispaq=ispaq, clients=[client], relevantStations=relevantStations,
+            date=date, det_folder=det_folder, template_path=template_path,
+            ispaq=ispaq, clients=[client], relevant_stations=relevant_stations,
             only_request_detection_stations=only_request_detection_stations,
             noise_balancing=noise_balancing, remove_response=remove_response,
             inv=inv, parallel=parallel, cores=cores,

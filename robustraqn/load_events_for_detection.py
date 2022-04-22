@@ -127,11 +127,13 @@ def read_seisan_database(database_path, cores=1, nordic_format='UKN',
     return cat
 
 
-def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
-                      clients=[], st=Stream(), min_samp_rate=np.nan,
-                      pre_event_time=30, template_length=300,
-                      search_only_month_folders=True, bulk_rejected=[],
-                      wav_suffixes=['', '.gz'], **kwargs):
+def load_event_stream(
+        event, sfile, seisan_wav_path, selected_stations, clients=[],
+        st=Stream(), min_samp_rate=np.nan, pre_event_time=30,
+        allowed_band_codes="ESBHNMCFDX", forbidden_instrument_codes="NGAL",
+        allowed_component_codes="ZNE0123ABCXYRTH", channel_priorities="HBSEN*",
+        template_length=300, search_only_month_folders=True, bulk_rejected=[],
+        wav_suffixes=['', '.gz'], **kwargs):
     """
     Load the waveforms for an event file (here: Nordic file) while performing
     some checks for duplicates, incompleteness, etc.
@@ -252,7 +254,7 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
         origin.time + template_length * 2)
     if clients:
         bulk_request = [("??", s, "*", "?H?", t1, t2)
-                        for s in selectedStations]
+                        for s in selected_stations]
     for client in clients:
         client = get_parallel_waveform_client(client)
         Logger.info('Requesting waveforms from client %s', client)
@@ -303,16 +305,16 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
             continue
         # channels with undecipherable channel names
         # potential names: MIC, SLZ, S Z, M, ALE, MSF, TC
-        if tr.stats.channel[0] not in 'ESBHNMCFDX' and tr in st:
+        if tr.stats.channel[0] not in allowed_band_codes and tr in st:
             st = st.remove(tr)
             continue
-        if (len(tr.stats.channel) == 3 and
-                tr.stats.channel[-1] not in 'ZNE0123ABC' and tr in st):
+        if (tr in st and len(tr.stats.channel) == 3 and
+                tr.stats.channel[-1] not in allowed_component_codes):
             st = st.remove(tr)
             continue
         # channels from accelerometers/ gravimeters/ tiltmeter/low-gain seism.
         if len(tr.stats.channel) == 3 and tr in st:
-            if tr.stats.channel[1] in 'NGAL':
+            if tr.stats.channel[1] in forbidden_instrument_codes:
                 st = st.remove(tr)
                 continue
         # channels whose sampling rate is lower than the one chosen for the
@@ -340,20 +342,20 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
         #    tr.stats.channel = tr.stats.channel[0] + 'H' + tr.stats.channel[2]
 
     # Add channels to template, but check if similar components are already
-    # present
-    channel_priorities = ["H*", "B*", "S*", "E*", "N*", "*"]
-    waveAtSelStations = Stream()
-    for station in selectedStations:
+    # present. first, expand input to wildcarded list:
+    channel_priorities = [chan_code + "*" for chan_code in channel_priorities]
+    wave_at_sel_stations = Stream()
+    for station in selected_stations:
         for channel_priority in channel_priorities:
-            waveAlreadyAtSelStation = waveAtSelStations.select(station=station)
+            waveAlreadyAtSelStation = wave_at_sel_stations.select(station=station)
             if not waveAlreadyAtSelStation:
                 addWaves = st.select(station=station, channel=channel_priority)
-                waveAtSelStations += addWaves
+                wave_at_sel_stations += addWaves
     # If there are more than one traces for the same station-component-
     # combination, then choose the "best" trace
-    waveAtSelStations_copy = waveAtSelStations.copy()
-    for tr in waveAtSelStations_copy:
-        sameStaChanSt = waveAtSelStations.select(
+    wave_at_sel_stations_copy = wave_at_sel_stations.copy()
+    for tr in wave_at_sel_stations_copy:
+        sameStaChanSt = wave_at_sel_stations.select(
             station=tr.stats.station, channel='*'+tr.stats.channel[-1])
         removeTrSt = Stream()
         keepTrSt = Stream()
@@ -385,30 +387,30 @@ def load_event_stream(event, sfile, seisan_wav_path, selectedStations,
                 if len(keepTrSt) > 1:
                     keepTrSt = Stream() + keepTrSt[0]
             for tt in sameStaChanSt:
-                waveAtSelStations.remove(tt)
-            waveAtSelStations += keepTrSt
+                wave_at_sel_stations.remove(tt)
+            wave_at_sel_stations += keepTrSt
 
     # Double-check to remove duplicate channels
-    # waveAtSelStations.merge(method=0, fill_value=0, interpolation_samples=0)
+    # wave_at_sel_stations.merge(method=0, fill_value=0, interpolation_samples=0)
     # 2021-01-22: changed merge method to below one to fix error with
     #             incomplete day.
-    waveAtSelStations.merge(method=1, fill_value=0, interpolation_samples=-1)
+    wave_at_sel_stations.merge(method=1, fill_value=0, interpolation_samples=-1)
     k = 0
     channelIDs = list()
-    for trace in waveAtSelStations:
+    for trace in wave_at_sel_stations:
         if trace.id in channelIDs:
             for j in range(0, k):
-                testSameIDtrace = waveAtSelStations[j]
+                testSameIDtrace = wave_at_sel_stations[j]
                 if trace.id == testSameIDtrace.id:
                     if (trace.stats.starttime >=
                             testSameIDtrace.stats.starttime):
-                        waveAtSelStations.remove(trace)
+                        wave_at_sel_stations.remove(trace)
                     else:
-                        waveAtSelStations.remove(testSameIDtrace)
+                        wave_at_sel_stations.remove(testSameIDtrace)
         else:
             channelIDs.append(trace.id)
             k += 1
-    st = waveAtSelStations
+    st = wave_at_sel_stations
     # Preprocessing
     # cut around origin plus some
 
@@ -982,7 +984,9 @@ def fix_phasehint_capitalization(event):
 def prepare_picks(
         event, stream, inv=Inventory(), normalize_NSLC=True,
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
-        sta_translation_file="station_code_translation.txt", *args, **kwargs):
+        sta_translation_file="station_code_translation.txt",
+        vertical_chans=['Z'], horizontal_chans=['E', 'N', '1', '2'],
+        *args, **kwargs):
     """
     Prepare the picks for being used in EQcorrscan. The following criteria are
     being considered:
@@ -992,7 +996,7 @@ def prepare_picks(
      - normalize network/station/channel codes
      - if the channel is not available, the pick will be switched to a suitable
        alternative channel
-     - put P-pick on Z-channel
+     - put P-pick on the vertical-channel(s)
      - put S-picks on horizontal channels if available
 
     :type template: obspy.core.stream.Stream
@@ -1076,20 +1080,25 @@ def prepare_picks(
                     std_channel_prefix + avail_comps[-1])
             # 3. If P-pick is not on vertical channel and there exists a 'Z'-
             #    channel, then switch P-pick to Z.
+            # TODO: allow different/multiple vertical chans (e.g., Z and H)
             if (pick.phase_hint.upper()[0] == 'P' and
-                    pick.waveform_id.channel_code[-1] != 'Z'):
-                if 'Z' in avail_comps:
-                    pick.waveform_id.channel_code = std_channel_prefix + 'Z'
+                    pick.waveform_id.channel_code[-1] not in vertical_chans):
+                for vertical_chan in vertical_chans:
+                    if vertical_chan in avail_comps:
+                        pick.waveform_id.channel_code = (
+                            std_channel_prefix + vertical_chan)
+                        break
             # 4. If S-pick is on vertical channel and there exist horizontal
             #    channels, then switch S_pick to the first horizontal.
             elif (pick.phase_hint.upper()[0] == 'S' and
-                    pick.waveform_id.channel_code[-1] == 'Z'):
-                horizontalTraces = stream.select(
+                    pick.waveform_id.channel_code[-1] in vertical_chans):
+                horizontal_traces = stream.select(
                     station=pick.waveform_id.station_code,
-                    channel=std_channel_prefix+'[EN123]')
-                if horizontalTraces:
+                    channel='{0}[{1}]'.format(
+                        std_channel_prefix, ''.join(horizontal_chans)))
+                if horizontal_traces:
                     pick.waveform_id.channel_code = (
-                        horizontalTraces[0].stats.channel)
+                        horizontal_traces[0].stats.channel)
                 # 4b. If S-pick is on vertical and there is no P-pick, then
                 # remove S-pick.
                 else:
@@ -2205,20 +2214,20 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
 
 
 def get_all_relevant_stations(
-        selectedStations, sta_translation_file="station_code_translation.txt",
+        selected_stations, sta_translation_file="station_code_translation.txt",
         **kwargs):
     """
     return list of relevant stations
     """
-    relevantStations = selectedStations
+    relevant_stations = selected_stations
     sta_fortransl_dict, sta_backtrans_dict = load_station_translation_dict(
         file=sta_translation_file)
 
-    for sta in selectedStations:
+    for sta in selected_stations:
         if sta in sta_backtrans_dict:
-            relevantStations.append(sta_backtrans_dict.get(sta))
-    relevantStations = sorted(set(relevantStations))
-    return relevantStations
+            relevant_stations.append(sta_backtrans_dict.get(sta))
+    relevant_stations = sorted(set(relevant_stations))
+    return relevant_stations
 
 
 def load_station_translation_dict(file="station_code_translation.txt",
@@ -2403,13 +2412,13 @@ def multiplot_detection(party, tribe, st, out_folder='DetectionPlots'):
 
 def reevaluate_detections(
         party, short_tribe, stream, threshold_type='MAD', threshold=9,
-        trig_int=40.0, overlap='calculate', plot=False,
-        plotDir='DetectionPlots', daylong=False, fill_gaps=False,
+        re_eval_thresh_factor=0.6, trig_int=40.0, overlap='calculate',
+        plot=False, plotDir='DetectionPlots', daylong=False, fill_gaps=False,
         ignore_bad_data=False, ignore_length=True, parallel_process=False,
         cores=None, xcorr_func='fftw', concurrency=None, arch='precise',
         group_size=1, full_peaks=False, save_progress=False,
         process_cores=None, spike_test=False, min_chans=4,
-        time_difference_threshold=2, detect_value_allowed_error=60,
+        time_difference_threshold=3, detect_value_allowed_error=60,
         return_party_with_short_templates=False):
     """
     This function takes a set of detections and reruns the match-filter
@@ -2422,6 +2431,12 @@ def reevaluate_detections(
     """
     # Maybe do some checks to see if tribe and short_tribe have somewhat of the
     # same templates?
+
+    # Need to scale factor slightly for fftw vs time-domain
+    # (based on empirical observation)
+    if xcorr_func == 'fftw':
+        re_eval_thresh_factor = re_eval_thresh_factor * 1.1
+    threshold = threshold * re_eval_thresh_factor
 
     # Select only the relevant templates
     det_templ_names = set([d.template_name for f in party for d in f])
@@ -2463,7 +2478,7 @@ def reevaluate_detections(
     # TODO: if threshold is MAD, then I would have to set the threshold lower
     # than before. Or use other threshold here.
     short_party = short_tribe.detect(
-        stream=det_st, threshold=threshold, trig_int=3.0,
+        stream=det_st, threshold=threshold, trig_int=trig_int/10,
         threshold_type=threshold_type, overlap=overlap, plot=plot,
         plotDir=plotDir, daylong=daylong, fill_gaps=fill_gaps,
         ignore_bad_data=ignore_bad_data, ignore_length=ignore_length,

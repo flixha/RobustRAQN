@@ -50,7 +50,7 @@ from spectral_tools import Noise_model, get_updated_inventory_with_noise_models
 archive_path = '/data/seismo-wav/SLARCHIVE'
 client = Client(archive_path)
 
-selectedStations = ['ASK','BER','BLS5','DOMB','EKO1','FOO','HOMB','HYA','KMY',
+selected_stations = ['ASK','BER','BLS5','DOMB','EKO1','FOO','HOMB','HYA','KMY',
                     'MOL','ODD1','SKAR','SNART','STAV','SUE','KONO',
                     'BIGH','DRUM','EDI','EDMD','ESK','GAL1','GDLE','HPK',
                     'INVG','KESW','KPL','LMK','LRW','PGB1',
@@ -64,11 +64,11 @@ selectedStations = ['ASK','BER','BLS5','DOMB','EKO1','FOO','HOMB','HYA','KMY',
                     'NC300','NC301','NC302','NC303','NC304','NC305',
                     'NC400','NC401','NC402','NC403','NC404','NC405',
                     'NC600','NC601','NC602','NC603','NC604','NC605']
-#selectedStations = ['ASK','BER','RUND']
-# selectedStations  = ['ASK', 'BLS5', 'KMY', 'ODD1', 'NAO01', 'ESK', 'EDI', 'KPL']
-# selectedStations  = ['ODD1', 'ESK']
-relevantStations = get_all_relevant_stations(
-    selectedStations, sta_translation_file="station_code_translation.txt")
+#selected_stations = ['ASK','BER','RUND']
+# selected_stations  = ['ASK', 'BLS5', 'KMY', 'ODD1', 'NAO01', 'ESK', 'EDI', 'KPL']
+# selected_stations  = ['ODD1', 'ESK']
+relevant_stations = get_all_relevant_stations(
+    selected_stations, sta_translation_file="station_code_translation.txt")
 
 seisan_rea_path = '../SeisanEvents/'
 seisan_wavpath = '../SeisanEvents/'
@@ -99,9 +99,9 @@ else:
     sfile_lol = [sfiles for d in startdays]
 
 
-invFile = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.xml'
+inv_file = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.xml'
 inv = get_updated_inventory_with_noise_models(
-    os.path.expanduser(invFile), pdf_dir='~/repos/ispaq/WrapperScripts/PDFs/',
+    os.path.expanduser(inv_file), pdf_dir='~/repos/ispaq/WrapperScripts/PDFs/',
     outfile='inv.pickle', check_existing=True, plot_station_pdf=True)
 
 ispaq_folder=\
@@ -266,7 +266,7 @@ def main():
                     
                     #tribe = Tribe().read('TemplateObjects/Templates_min8tr_8.tgz')
                     tribe = create_template_objects(
-                        sfile_list, selectedStations, template_length,
+                        sfile_list, selected_stations, template_length,
                         lowcut, highcut, min_snr, prepick, samp_rate,
                         seisan_wav_path, inv=inv, remove_response=True,
                         noise_balancing=noise_bal, min_n_traces=1,
@@ -290,7 +290,7 @@ def main():
                         # Load in Mustang-like ISPAQ stats for the whole year
                         if date.strftime("%Y-%m-%d") not in ispaq.index:
                             ispaq = read_ispaq_stats(
-                                folder=ispaq_folder, stations=selectedStations,
+                                folder=ispaq_folder, stations=selected_stations,
                                 startyear=date.year, endyear=date.year,
                                 ispaq_prefixes=['all'],
                                 ispaq_suffixes=['simpleMetrics','PSDMetrics'],
@@ -301,7 +301,7 @@ def main():
                             tribe=tribe, date=date, ispaq=ispaq, inv=inv,
                             remove_response=True, day_st=day_st,
                             parallel=parallel, cores=cores,
-                            selectedStations=selectedStations,
+                            selected_stations=selected_stations,
                             trig_int=3, noise_balancing=noise_bal, 
                             balance_power_coefficient=2, multiplot=False,
                             write_party=False, return_stream=True, 
@@ -395,4 +395,4 @@ if __name__ == "__main__":
 # %%
 
 
-# tribe = create_template_objects(sfile_list, selectedStations, 20, 2.5, 9.9, 3, 0.5, 20.0, seisan_wav_path, inv=inv, remove_response=True, noise_balancing=True, min_n_traces=1, parallel=True, cores=10, write_out=False, make_pretty_plot=False)
+# tribe = create_template_objects(sfile_list, selected_stations, 20, 2.5, 9.9, 3, 0.5, 20.0, seisan_wav_path, inv=inv, remove_response=True, noise_balancing=True, min_n_traces=1, parallel=True, cores=10, write_out=False, make_pretty_plot=False)

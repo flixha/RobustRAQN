@@ -92,9 +92,6 @@ def pick_events_for_day(
         # picking (these contain more channels)
         # dayparty = replace_templates_for_picking(dayparty, tribe)
 
-    # TODO TMP change for debug # FH
-    dayparty = Party(dayparty[0])
-
     # Rethreshold if required
     if new_threshold is not None:
         dayparty = Party(dayparty).rethreshold(

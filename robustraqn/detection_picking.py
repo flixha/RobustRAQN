@@ -141,16 +141,18 @@ def pick_events_for_day(
                 # (detection allows multiple picks per channel, picking does
                 # not yet).
                 detections_earliest_tr_picks = detection.event.picks
-                if len(family.template.st) > len(pick_template.st):
-                    detections_earliest_tr_picks = [
-                        pick for pick in detection.event.picks
-                        if pick.time == min(
-                            [p.time for p in detection.event.picks
-                             if p.waveform_id.id == pick.waveform_id.id])]
-                # Picks need to be adjusted for prepick-time. 
+                # if len(family.template.st) > len(pick_template.st):
+                detections_earliest_tr_picks = [
+                    pick for pick in detection.event.picks
+                    if pick.time == min(
+                        [p.time for p in detection.event.picks
+                            if p.waveform_id.id == pick.waveform_id.id])]
+                # Picks need to be adjusted when the user changes the templates
+                # a bit between detection and picking.
                 # Find time diff between template and detection to update 
                 # detection pick times:
-                time_diffs = []  # to get template prepick times
+                # TODO: this REALLY needs a better explanation
+                time_diffs = []
                 if len(detections_earliest_tr_picks) == 0:
                     continue
                 for det_pick in detections_earliest_tr_picks:
@@ -158,7 +160,11 @@ def pick_events_for_day(
                         pick for pick in pick_template.event.picks
                         if pick.waveform_id.id == det_pick.waveform_id.id]
                     if len(templ_picks) == 1:
-                        time_diffs.append(det_pick.time - templ_picks[0].time)
+                        _time_diff = det_pick.time - templ_picks[0].time
+                        # Do a sanity check in case incorrect picks (e.g., P
+                        # instead of S) were fixed for a new template
+                        if abs(_time_diff) < 3:
+                            time_diffs.append(_time_diff)
                     elif len(templ_picks) > 1:
                         msg = ('Lag-calc does not support two picks on the ' +
                                'same trace, check your picking-templates!')
@@ -170,10 +176,6 @@ def pick_events_for_day(
                 #                           pick_tr[0].stats.starttime)
                 # Use mean time diff in case any picks were corrected slightly
                 time_diff = np.nanmean(time_diffs)
-                # Or shouldn't this better be the maximum of the time-diffs?
-                # (for sample alignment, template generation uses at most
-                # prepick length) TODO: Check and compare
-                # time_diff = np.nanmax(time_diffs)
                 detection.event = pick_template.event.copy()
                 for pick in detection.event.picks:
                     pick.time = pick.time + time_diff  # add template prepick
@@ -304,6 +306,10 @@ def pick_events_for_day(
     #    pass
     #    Logger.error("LagCalc Error on " + str(year) +
     #           str(month).zfill(2) + str(day).zfill(2))
+    picks_per_event = [len([pk for pk in ev.picks]) for ev in picked_catalog]
+    Logger.info('Got %s events with at least %s and at most %s picks',
+                str(len(picked_catalog)), str(min(picks_per_event)),
+                str(max(picks_per_event)))
 
     picked_catalog = add_origins_to_detected_events(
         picked_catalog, dayparty, tribe=tribe)

@@ -173,6 +173,8 @@ def pick_events_for_day(
                 #                           pick_tr[0].stats.starttime)
                 # Use mean time diff in case any picks were corrected slightly
                 time_diff = np.nanmean(time_diffs)
+                if np.isnan(time_diff):
+                    time_diff = 0
                 detection.event = pick_template.event.copy()
                 for pick in detection.event.picks:
                     pick.time = pick.time + time_diff  # add template prepick

@@ -34,6 +34,7 @@ from robustraqn.quality_metrics import (
 from robustraqn.load_events_for_detection import (
     prepare_detection_stream, init_processing, init_processing_wRotation,
     get_all_relevant_stations, normalize_NSLC_codes, reevaluate_detections)
+from robustraqn.event_detection import prepare_day_overlap
 from robustraqn.spectral_tools import (
     Noise_model, get_updated_inventory_with_noise_models)
 from robustraqn.lag_calc_postprocessing import (
@@ -52,12 +53,110 @@ EQCS_logger = logging.getLogger('EQcorrscan')
 EQCS_logger.setLevel(logging.ERROR)
 
 
+def prepare_and_update_party(dayparty, tribe, day_st):
+    """
+    If the template was updated since the detection run, then the party and its
+    detections need to be updated with some information (pick-times, channels)
+    """
+    if len(tribe) == 0:
+        return dayparty
+    for family in dayparty:
+        try:
+            pick_template = tribe.select(family.template.name)
+        except IndexError:
+            Logger.error(
+                'Could not find picking-template %s for detection family',
+                family.template.name)
+            template_names = [templ.name for templ in tribe]
+            template_name_match = difflib.get_close_matches(
+                family.template.name, template_names)
+            if len(template_name_match) >= 1:
+                template_name_match = template_name_match[0]
+            else:
+                Logger.warning(
+                    'Did not find corresponding picking template for %s, '
+                    + 'using original detection template instead for %s')
+                continue
+            Logger.warning(
+                'Found template with name %s, using instead of %s',
+                template_name_match, family.template.name)
+            pick_template = tribe.select(template_name_match)
+        detect_chans = set([(tr.stats.station, tr.stats.channel)
+                            for tr in family.template.st])
+        pick_chans = set([(tr.stats.station, tr.stats.channel)
+                            for tr in pick_template.st])
+        for detection in family:
+            new_pick_channels = list(pick_chans.difference(detect_chans))
+            detection.chans = detection.chans + new_pick_channels
+            # Check that I only compare the first pick on each channel
+            # (detection allows multiple picks per channel, picking does
+            # not yet).
+            detections_earliest_tr_picks = detection.event.picks
+            # if len(family.template.st) > len(pick_template.st):
+            detections_earliest_tr_picks = [
+                pick for pick in detection.event.picks
+                if pick.time == min(
+                    [p.time for p in detection.event.picks
+                        if p.waveform_id.id == pick.waveform_id.id])]
+            # Picks need to be adjusted when the user changes the templates
+            # between detection and picking (e.g., add new stations or 
+            # chagne picks). Here we need to find the time difference
+            # between the picks of the new template and the picks of the
+            # detection so that we can add corrected picks for the
+            # previously missing stations/channels to the detection.
+            time_diffs = []
+            if len(detections_earliest_tr_picks) == 0:
+                continue
+            for det_pick in detections_earliest_tr_picks:
+                templ_picks = [
+                    pick for pick in pick_template.event.picks
+                    if pick.waveform_id.id == det_pick.waveform_id.id]
+                if len(templ_picks) == 1:
+                    _time_diff = det_pick.time - templ_picks[0].time
+                    time_diffs.append(_time_diff)
+                elif len(templ_picks) > 1:
+                    msg = ('Lag-calc does not support two picks on the ' +
+                            'same trace, check your picking-templates!')
+                    raise LagCalcError(msg)
+            # for det_tr in family.template.st:
+            #     pick_tr = pick_template.st.select(id=det_tr.id)
+            #     if len(pick_tr) == 1:
+            #         time_diffs.append(det_tr.stats.starttime -
+            #                           pick_tr[0].stats.starttime)
+            # Use mean time diff in case any picks were corrected slightly
+            time_diff = np.nanmean(time_diffs)
+            if np.isnan(time_diff):
+                time_diff = 0
+            else:
+                # Do a sanity check in case incorrect picks (e.g., P
+                # instead of S) were fixed for a new template
+                if abs(time_diff - np.nanmedian(time_diffs)) > 1:
+                    Logger.error(
+                        'Template used for detection of and picking of %s '
+                        'differ. Adjusting the pick times resulted in '
+                        'unexpectedly large differences between channels. '
+                        'This may point to problematic picks in one of the'
+                        ' templates.', detection.id)
+            detection.event = pick_template.event.copy()
+            for pick in detection.event.picks:
+                pick.time = pick.time + time_diff  # add template prepick
+            # when updating picks we have to add channels to detection
+            day_st_chans = set([(tr.stats.station, tr.stats.channel)
+                                for tr in day_st])
+            templ_st_chans = set([(tr.stats.station, tr.stats.channel)
+                                  for tr in pick_template.st])
+            detection.chans = sorted(
+                day_st_chans.intersection(templ_st_chans))
+        family.template = pick_template
+    return dayparty
+
+
 # @processify
 def pick_events_for_day(
         date, det_folder, template_path, ispaq, clients, tribe, dayparty=None,
         short_tribe=Tribe(), det_tribe=Tribe(), stations_df=None,
         only_request_detection_stations=True, array_lag_calc=False,
-        relevant_stations=[], sta_translation_file='',
+        relevant_stations=[], sta_translation_file='', let_days_overlap=True,
         noise_balancing=False, remove_response=False, inv=Inventory(),
         parallel=False, cores=None, io_cores=1,
         check_array_misdetections=False, trig_int=12,
@@ -65,7 +164,8 @@ def pick_events_for_day(
         threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
         archives=[], request_fdsn=False, min_det_chans=1, shift_len=0.8,
         min_cc=0.4, min_cc_from_mean_cc_factor=0.6, extract_len=240,
-        write_party=False, vertical_chans=['Z', 'H'],
+        write_party=False, all_vert=True, all_horiz=True, 
+        vertical_chans=['Z', 'H'],
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
         sfile_path='Sfiles', operator='EQC', **kwargs):
     """
@@ -103,82 +203,6 @@ def pick_events_for_day(
                     + 'families on %s', str(len(dayparty)),
                     current_day_str)
         return
-
-    # Replace template in party if there's an updated template
-    if len(tribe) > 0:
-        for family in dayparty:
-            try:
-                pick_template = tribe.select(family.template.name)
-            except IndexError:
-                Logger.error(
-                    'Could not find picking-template %s for detection family',
-                    family.template.name)
-                template_names = [templ.name for templ in tribe]
-                template_name_match = difflib.get_close_matches(
-                    family.template.name, template_names)
-                if len(template_name_match) >= 1:
-                    template_name_match = template_name_match[0]
-                else:
-                    Logger.warning(
-                        'Did not find corresponding picking template for %s, '
-                        + 'using original detection template instead for %s')
-                    continue
-                Logger.warning(
-                    'Found template with name %s, using instead of %s',
-                    template_name_match, family.template.name)
-                pick_template = tribe.select(template_name_match)
-            detect_chans = set([(tr.stats.station, tr.stats.channel)
-                                for tr in family.template.st])
-            pick_chans = set([(tr.stats.station, tr.stats.channel)
-                              for tr in pick_template.st])
-            for detection in family:
-                new_pick_channels = list(pick_chans.difference(detect_chans))
-                detection.chans = detection.chans + new_pick_channels
-                # Check that I only compare the first pick on each channel
-                # (detection allows multiple picks per channel, picking does
-                # not yet).
-                detections_earliest_tr_picks = detection.event.picks
-                # if len(family.template.st) > len(pick_template.st):
-                detections_earliest_tr_picks = [
-                    pick for pick in detection.event.picks
-                    if pick.time == min(
-                        [p.time for p in detection.event.picks
-                            if p.waveform_id.id == pick.waveform_id.id])]
-                # Picks need to be adjusted when the user changes the templates
-                # a bit between detection and picking.
-                # Find time diff between template and detection to update 
-                # detection pick times:
-                # TODO: this REALLY needs a better explanation
-                time_diffs = []
-                if len(detections_earliest_tr_picks) == 0:
-                    continue
-                for det_pick in detections_earliest_tr_picks:
-                    templ_picks = [
-                        pick for pick in pick_template.event.picks
-                        if pick.waveform_id.id == det_pick.waveform_id.id]
-                    if len(templ_picks) == 1:
-                        _time_diff = det_pick.time - templ_picks[0].time
-                        # Do a sanity check in case incorrect picks (e.g., P
-                        # instead of S) were fixed for a new template
-                        if abs(_time_diff) < 3:
-                            time_diffs.append(_time_diff)
-                    elif len(templ_picks) > 1:
-                        msg = ('Lag-calc does not support two picks on the ' +
-                               'same trace, check your picking-templates!')
-                        raise LagCalcError(msg)
-                # for det_tr in family.template.st:
-                #     pick_tr = pick_template.st.select(id=det_tr.id)
-                #     if len(pick_tr) == 1:
-                #         time_diffs.append(det_tr.stats.starttime -
-                #                           pick_tr[0].stats.starttime)
-                # Use mean time diff in case any picks were corrected slightly
-                time_diff = np.nanmean(time_diffs)
-                if np.isnan(time_diff):
-                    time_diff = 0
-                detection.event = pick_template.event.copy()
-                for pick in detection.event.picks:
-                    pick.time = pick.time + time_diff  # add template prepick
-            family.template = pick_template
 
     Logger.info('Starting to pick events with party of %s families for %s',
                 str(len(dayparty)), current_day_str)
@@ -227,6 +251,11 @@ def pick_events_for_day(
         day_st, starttime=starttime, endtime=endtime,
         remove_response=remove_response, inv=inv, parallel=parallel,
         cores=cores, **kwargs)
+
+    if let_days_overlap:
+        tribe, short_tribe = prepare_day_overlap(
+            tribe, short_tribe, starttime_req, endtime_req)
+
     original_stats_stream = day_st.copy()
     # WHY NEEDED HERE????
     # day_st.merge(method=0, fill_value=0, interpolation_samples=0)
@@ -235,6 +264,9 @@ def pick_events_for_day(
         day_st, inv, sta_translation_file=sta_translation_file,
         std_network_code="NS", std_location_code="00",
         std_channel_prefix="BH")
+
+    # Update parties for picking
+    dayparty = prepare_and_update_party(dayparty, tribe, day_st)
 
     # If there is no data for the day, then continue on next day.
     if not day_st.traces:
@@ -298,6 +330,7 @@ def pick_events_for_day(
     picked_catalog = dayparty.copy().lag_calc(
         day_st, pre_processed=pre_processed, shift_len=shift_len,
         min_cc=min_cc, min_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
+        all_vert=all_vert, all_horiz=all_horiz,
         horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
         parallel=parallel, cores=cores, daylong=True, **kwargs)
     # try:
@@ -318,6 +351,7 @@ def pick_events_for_day(
             day_st, picked_catalog, dayparty, tribe, stations_df,
             min_cc=min_cc, pre_processed=pre_processed, shift_len=shift_len,
             min_cc_from_mean_cc_factor=min(min_cc_from_mean_cc_factor, 0.999),
+            all_vert=all_vert, all_horiz=all_horiz,
             horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
             parallel=parallel, cores=cores, daylong=True, **kwargs)
 

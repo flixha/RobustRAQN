@@ -94,6 +94,20 @@ def append_list_completed_days(file, date, hash):
         list_completed_days.write(str(date) + ',' + str(hash) + '\n')
 
 
+def prepare_day_overlap(tribe, short_tribe, starttime_req, endtime_req):
+    """
+    set processing parameters to take care of 10 minutes overlap between days
+    """
+    starttime_overlap = starttime_req + 5 * 60
+    endtime_overlap = endtime_req - 5 * 60
+    process_length = endtime_overlap - starttime_overlap
+    for templ in tribe:
+        templ.process_length = process_length
+    for templ in short_tribe:
+        templ.process_length = process_length
+    return tribe, short_tribe
+
+
 def get_multi_obj_hash(hash_object_list):
     """
     """
@@ -135,8 +149,8 @@ def get_multi_obj_hash(hash_object_list):
 # @processify
 def run_day_detection(
         clients, tribe, date, ispaq, selected_stations,
-        parallel=False, cores=1, io_cores=1,
-        remove_response=False, inv=Inventory(), noise_balancing=False,
+        parallel=False, cores=1, io_cores=1, remove_response=False,
+        inv=Inventory(), noise_balancing=False, let_days_overlap=True,
         balance_power_coefficient=2, n_templates_per_run=20, xcorr_func='fftw',
         concurrency=None, arch='precise', trig_int=0, threshold=10,
         threshold_type='MAD', re_eval_thresh_factor=0.6, min_chans=10,
@@ -241,7 +255,8 @@ def run_day_detection(
         # Do initial processing (rotation, stats normalization, merging)
         # by parallelization across three-component seismogram sets.
         day_st = init_processing_wRotation(
-            day_st, starttime=starttime, endtime=endtime,
+            day_st, starttime=starttime_req, endtime=endtime_req,
+            # day_st, starttime=starttime, endtime=endtime,
             remove_response=remove_response, inv=inv,
             parallel=parallel, cores=cores,
             sta_translation_file=sta_translation_file,
@@ -277,6 +292,31 @@ def run_day_detection(
         else:
             return [Party(), Stream()]
 
+    # Figure out weights to take difference in template trace SNR and channel
+    # noise into account:
+    determine_snr_weights = False
+    if determine_snr_weights:
+        n_templates = len(tribe)
+        unique_trace_ids = sorted(set(
+            [tr.id for templ in tribe for tr in templ.st]))
+        n_traces = len(unique_trace_ids)
+        # need a 2D-array for templates x traces
+        weights = np.zeros(n_templates, n_traces)
+        for templ in tribe:
+            for tr in templ.st:
+                # Get trace snr from ispaq-stats  - need to calc noise-amp in
+                # relevant frequenc band
+                # if day_stats:
+                #     day_stats[tr.id]
+                # look up noise on this day /trace
+                weight = trace_snr * trace_noise_level
+
+    # tmp adjust process_lenght parameters
+    
+    if let_days_overlap:
+        tribe, short_tribe = prepare_day_overlap(
+            tribe, short_tribe, starttime_req, endtime_req)
+
     # Start the detection algorithm on all traces that are available.
     detections = []
     Logger.info('Start match_filter detection on %s with up to %s cores.',
@@ -285,8 +325,8 @@ def run_day_detection(
         party = tribe.detect(
             stream=day_st, threshold=threshold, trig_int=trig_int/4,
             threshold_type=threshold_type, overlap='calculate', plot=False,
-            plotDir='DetectionPlots', daylong=True, fill_gaps=True,
-            ignore_bad_data=False, ignore_length=True, 
+            plotDir='DetectionPlots', daylong=False,
+            fill_gaps=True, ignore_bad_data=False, ignore_length=True, 
             parallel_process=parallel, cores=cores,
             # concurrency='multiprocess', xcorr_func='time_domain',
             xcorr_func=xcorr_func, concurrency=concurrency, arch=arch,

@@ -1,7 +1,6 @@
 
 # %%
 import os
-from cmath import sin
 from collections import defaultdict
 from obspy import read_inventory
 # import wcmatch
@@ -9,12 +8,14 @@ from wcmatch import fnmatch
 import pandas as pd
 import numpy as np
 import math
+import traceback
 
 import logging
 Logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s")
+    format=("%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)" +
+            "20s()\t%(levelname)s\t%(message)s"))
 
 from collections import Counter, defaultdict
 
@@ -24,6 +25,7 @@ from obspy.io.nordic.core import read_nordic, write_select
 from obspy.signal.array_analysis import get_timeshift
 from obspy.geodetics import (degrees2kilometers, kilometers2degrees,
                              gps2dist_azimuth, locations2degrees)
+from obspy.taup import TauPyModel
 from obspy.taup.velocity_model import VelocityModel
 from obspy.core.event import (Catalog, Pick, Arrival, WaveformStreamID,
                               CreationInfo)
@@ -374,8 +376,8 @@ def get_geometry(stations_df, array_prefix='', coordsys='lonlat',
 def find_array_picks_baz_appvel(
         event, phase_hints=None, seisarray_prefixes=SEISARRAY_PREFIXES,
         array_picks_dict=None, array_baz_dict=None, array_app_vel_dict=None,
-        vel_mod=None, vel_mod_file=os.path.join(
-            os.path.dirname(__file__), 'models','NNSN1D_plusAK135.tvel')):
+        vel_mod=None, taup_mod=None, mod_file=os.path.join(
+            os.path.dirname(__file__), 'models','NNSN1D_plusAK135')):
     """
     For one event, for every phase, find all picks at the same array, find the
     backazimuth and the apparent velocity, either from measurements or from the
@@ -421,10 +423,10 @@ def find_array_picks_baz_appvel(
     :param vel_mod:
         Velocity model that is to be used for computing time delays between
         stations of an array considering back-azimuth and apparent velocity.
-    :type vel_mod_file: str
-    :param vel_mod_file:
-        Path to a *.tvel-file containing a velocity model conforming to
-        class:`obspy.taup.velocity_model.VelocityModel`
+    :type mod_file: str
+    :param mod_file:
+        Path to a model file (*.tvel and *.npz) containing a taup / velocity
+        model conforming to class:`obspy.taup.velocity_model.VelocityModel`
         
     :returns:
         Tuple of three dictionaries of seismic-array prefixes and phase-hints
@@ -433,7 +435,9 @@ def find_array_picks_baz_appvel(
     :rtype: tuple of (dict, dict, dict)
     """
     if vel_mod is None:
-        vel_mod = VelocityModel.read_tvel_file(vel_mod_file)
+        vel_mod = VelocityModel.read_tvel_file(mod_file + '.tvel')
+    if taup_mod is None:
+        taup_mod = TauPyModel(mod_file + '.npz')
     update_array_picks = False
     update_bazs = False
     update_app_vels = False
@@ -468,15 +472,19 @@ def find_array_picks_baz_appvel(
             #         # phase_picks --> pha_picks_dict
             #         if pick.phase_hint == phase_hint]
             if update_bazs:
-                array_baz_dict[seisarray_prefix][phase_hint] = np.mean(
+                baz_mean = np.nanmean(
                     [pick.backazimuth
                      for pick in array_picks_dict[seisarray_prefix][phase_hint]
                      if pick.backazimuth is not None])
+                #if baz_mean is not None and not np.isnan(baz_mean):
+                array_baz_dict[seisarray_prefix][phase_hint] = baz_mean
             if update_app_vels:
-                array_app_vel_dict[seisarray_prefix][phase_hint] = np.mean(
+                app_vel_mean = np.nanmean(
                     [degrees2kilometers(1.0 / pick.horizontal_slowness)
                      for pick in array_picks_dict[seisarray_prefix][phase_hint]
                      if pick.horizontal_slowness is not None])
+                #if app_vel_mean is not None and not np.isnan(app_vel_mean):
+                array_app_vel_dict[seisarray_prefix][phase_hint] = app_vel_mean
 
             # If there is no origin (e.g., for newly picked events),
             # then don't try to compute BAZ or app-vel
@@ -489,7 +497,7 @@ def find_array_picks_baz_appvel(
                     continue
             if origin is None:
                 can_calculate_baz_appvel = False
-                
+
             # if there is no measurements for BAZ, compute it from arrivals:
             if update_bazs and can_calculate_baz_appvel:
                 calculated_bazs = []
@@ -502,29 +510,64 @@ def find_array_picks_baz_appvel(
                                     (arrival.azimuth + 180) % 360)
                     array_baz_dict[seisarray_prefix][phase_hint] = np.mean(
                         calculated_bazs)
-            # compute apparent velocity if there is not measurement for phase
+            # compute apparent velocity if there is no measurement for phase
             if update_app_vels and can_calculate_baz_appvel:
                 calculated_app_vels = []
                 if np.isnan(array_app_vel_dict[seisarray_prefix][phase_hint]):
                     for pick in array_picks_dict[seisarray_prefix][phase_hint]:
-                        for arrival in origin.arrivals:
-                            # takeoff_angle is incidence angle read from Seisan
-                            # TODO compute from: incidence angle and velocity
-                            #  model should be simple calculation with topmost
-                            # velocity and AIN
-                            if (arrival.pick_id == pick.resource_id and
-                                    arrival.takeoff_angle is not None):
-                                if pick.phase_hint[0] == 'P':
-                                    vel = vel_mod.layers[0][2]
-                                elif  pick.phase_hint[0] == 'S':
-                                    vel = vel_mod.layers[0][4]
-                                else:
-                                    continue
-                                app_vel = vel / math.sin(math.radians(
-                                    arrival.takeoff_angle))
-                                calculated_app_vels.append(app_vel)
-                    array_app_vel_dict[seisarray_prefix][phase_hint] = np.mean(
-                        calculated_app_vels)
+                        arrivals = [arr for arr in origin.arrivals if
+                                    arr.pick_id == pick.resource_id and
+                                    arr.distance is not None]
+                        for arrival in arrivals:
+                            # takeoff_angle known, but not incidence angle
+                            if pick.phase_hint[0] == 'P':
+                                vel = vel_mod.layers[0][2]
+                            elif pick.phase_hint[0] == 'S':
+                                vel = vel_mod.layers[0][4]
+                            else:
+                                continue
+                            # Compute indicence angle at station with taup
+                            try:
+                                taup_arrivals = taup_mod.get_travel_times(
+                                    source_depth_in_km=origin.depth / 1000,
+                                    distance_in_degree=arrival.distance,
+                                    phase_list=[arrival.phase])
+                            except ValueError as e:
+                                Logger.exception(
+                                    'Taupy failed when computing phase %s for '
+                                    'array %s: ', phase_hint, seisarray_prefix)
+                                # Logger.error(e)
+                                Logger.error(traceback.print_exception(
+                                    e, value=e, tb=e.__traceback__, limit=1))
+                                continue
+                            if not taup_arrivals:
+                                continue
+                            inc_angle = taup_arrivals[0].incident_angle
+                            # TODO: correct? or get it from arrival.ray_param?
+                            app_vel = vel / math.sin(math.radians(inc_angle))
+                            calculated_app_vels.append(app_vel)
+                            # Save incident angle with arrival
+                            # try:
+                            #     if arrival.extra.incident_angle:
+                            #         continue
+                            # except KeyError:
+                            #     arrival.extra = {'incident_angle': {
+                            #         'value': inc_angle, 'namespace': ''}}
+                    app_vel = np.nanmean(calculated_app_vels)
+                    if not np.isnan(app_vel):
+                        array_app_vel_dict[seisarray_prefix][phase_hint] = (
+                            app_vel)
+    # TODO: if baz or app-vel ar none, compute them from 1-D velmodel rays:
+    # taup_arrivals = taup_mod.get_travel_times(
+    #     source_depth_in_km=origin.depth / 1000,
+    #     distance_in_degree=arrival.distance,
+    #     phase_list=[arrival.phase])
+    # if not arrivals:
+    #     continue
+    # inc_angle = taup_arrivals[0].incident_angle
+    # app_vel = vel / math.sin(math.radians(inc_angle))
+    # calculated_app_vels.append(app_vel)
+    # horizontal_slowness = arrival.ray_param * 360  # check!
 
     return array_picks_dict, array_baz_dict, array_app_vel_dict
 
@@ -576,12 +619,26 @@ def _check_extra_info(new_pick, pick):
     return new_pick
 
 
+def _check_existing_and_add_pick(event, new_pick):
+    """
+    pick to event, but only if event does not have similar pick yet
+    """
+    existing_array_picks_tuples = [
+        (p.waveform_id.station_code, p.waveform_id.channel_code, p.phase_hint)
+        for p in event.picks]
+    new_pick_tuple = (new_pick.waveform_id.station_code,
+                      new_pick.waveform_id.channel_code, new_pick.phase_hint)
+    if new_pick_tuple not in existing_array_picks_tuples:
+        event.picks.append(new_pick)
+    return event
+
+
 def add_array_station_picks(
         event, stations_df, array_picks_dict=None, array_baz_dict=None,
         array_app_vel_dict=None, baz=None, app_vel=None,
         seisarray_prefixes=SEISARRAY_PREFIXES, min_array_distance_factor=10,
-        vel_mod_file=os.path.join(os.path.dirname(__file__), 'models',
-                                  'NNSN1D_plusAK135.tvel'), **kwargs):
+        mod_file=os.path.join(os.path.dirname(__file__), 'models',
+                                  'NNSN1D_plusAK135'), **kwargs):
     """
     Returns all picks at array stations from 
         # ARRAY stuff
@@ -644,12 +701,8 @@ def add_array_station_picks(
         times at individual stations based on assumed plane wave). The function
         checks that the event-array distance is larger than the factor times
         the array's aperture.
-    :type vel_mod: class:`obspy.taup.velocity_model.VelocityModel`
-    :param vel_mod:
-        Velocity model that is to be used for computing time delays between
-        stations of an array considering back-azimuth and apparent velocity.
-    :type vel_mod_file: str
-    :param vel_mod_file:
+    :type mod_file: str
+    :param mod_file:
         Path to a *.tvel-file containing a velocity model conforming to
         class:`obspy.taup.velocity_model.VelocityModel`
         
@@ -660,15 +713,22 @@ def add_array_station_picks(
     :rtype: class:`obspy.core.event.Event`
     """
     n_picks_before = len(event.picks)
-    vel_mod = VelocityModel.read_tvel_file(vel_mod_file)
+    vel_mod = VelocityModel.read_tvel_file(mod_file + '.tvel')
+    taup_mod = TauPyModel(mod_file + '.npz')
+    update_app_vel = True
+    if app_vel is not None:
+        update_app_vel = False
+    update_baz = True
+    if baz is not None:
+        update_baz = False
     # 2. For each array:
     #   2.1 collect all equivalent picks from the same array
     #       lets either user supply baz- and app-vel dicts, or lets code find
     #       the values
     array_picks_dict, array_baz_dict, array_app_vel_dict = (
         find_array_picks_baz_appvel(
-            event, array_picks_dict=array_picks_dict,
-            seisarray_prefixes=seisarray_prefixes, vel_mod=vel_mod))
+            event, array_picks_dict=array_picks_dict, vel_mod=vel_mod,
+            seisarray_prefixes=seisarray_prefixes, taup_mod=taup_mod))
     # Try to find the best origin - the preferred one if it has lon/lat, else
     # check further
     origin = event.preferred_origin()
@@ -723,23 +783,24 @@ def add_array_station_picks(
             Logger.info(
                 'Computing average picks for %s at stations of array %s',
                 phase_hint, seisarray_prefix)
-            if app_vel is None:
+            if update_app_vel:
                 app_vel = array_app_vel_dict[seisarray_prefix][phase_hint]
-            horizontal_slowness_km = 1.0 / app_vel
-            if baz is None:
+            horizontal_slowness_spkm = 1.0 / app_vel
+            if update_baz:
                 baz = array_baz_dict[seisarray_prefix][phase_hint]
             # Check for missing information for array arrival
-            if (baz is None or np.isnan(baz) or horizontal_slowness_km is None
-                    or np.isnan(horizontal_slowness_km)):
+            if (baz is None or np.isnan(baz)
+                    or horizontal_slowness_spkm is None
+                    or np.isnan(horizontal_slowness_spkm)):
                 Logger.error(
                     'Cannot compute timeshifts for array %s arrival %s - '
                     'missing backazimuth (%s) and/or slowness (%s). You may '
                     'need to locate or update event %s.', seisarray_prefix,
-                    phase_hint, str(baz), str(horizontal_slowness_km),
+                    phase_hint, str(baz), str(horizontal_slowness_spkm),
                     event.short_str())
                 continue
-            sll_x = math.cos(math.radians(baz)) * horizontal_slowness_km
-            sll_y = math.sin(math.radians(baz)) * horizontal_slowness_km
+            sll_x = math.cos(math.radians(baz)) * horizontal_slowness_spkm
+            sll_y = math.sin(math.radians(baz)) * horizontal_slowness_spkm
             # timeshifts2 = -array_geometry[:,2] / 1000 * 1/3
             pick_time_list = []
             pick_time_list_ns = []
@@ -822,8 +883,8 @@ def add_array_station_picks(
                     new_pick = Pick(
                         time=pick_time, phase_hint=phase_hint,
                         waveform_id=new_waveform_id,
-                        horizontal_slowness=kilometers2degrees(
-                            horizontal_slowness_km),
+                        horizontal_slowness=1 / kilometers2degrees(
+                            1 / horizontal_slowness_spkm),
                         # backazimuth=array_baz_dict[seisarray_prefix][phase_hint],
                         backazimuth=baz,
                         onset=onset,
@@ -832,8 +893,8 @@ def add_array_station_picks(
                         creation_info=CreationInfo(agency_id='RR'))
                     new_pick.extra = {'nordic_pick_weight': {'value': 2}}
                     new_pick = _check_extra_info(new_pick, pick)
-                    # TODO: check that similar array-pick isn't there yet
-                    event.picks.append(new_pick)
+                    # Check that similar array-pick isn't in pick-list yet
+                    event =_check_existing_and_add_pick(event, new_pick)
 
     # 3. add picks for array stations that did not have pick to pick-list
     # out_picks = event.picks.copy()
@@ -864,6 +925,37 @@ def _find_associated_detection_id(party, event_index):
                 return detection_id
             nd += 1
     return ''
+
+
+def _check_picks_within_shiftlen(party, event, detection_id, shift_len):
+    """
+    """
+    # Check whether pick is within shift_len
+    keep_picks = list()
+    detection_events = [det.event for fam in party for det in fam
+                        if det.id == detection_id]
+    if len(detection_events) != 1:
+        Logger.error(
+            'Found more than one matching detection events when comparing '
+            'new array picks against detection %s', detection_id)
+        return event
+    detection_event = detection_events[0]
+    for pick in event.picks:
+        detection_picks = [
+            p for p in detection_event.picks
+            if p.phase_hint == pick.phase_hint and
+            (p.waveform_id.station_code == pick.waveform_id.station_code)]
+        if len(detection_events) != 1:
+            continue
+        detection_pick = detection_picks[0]
+        if abs(detection_pick.time - pick.time) <= shift_len:
+            keep_picks.append(pick)
+        else:
+            Logger.info('Pick for phase %s for array station %s outside '
+                        'shift_len for detection %s', pick.phase_hint,
+                        pick.waveform_id.station_code, detection_id)
+    event.picks = keep_picks
+    return event
 
 
 def array_lac_calc(
@@ -997,7 +1089,6 @@ def array_lac_calc(
                          flags=fnmatch.EXTMATCH)]) > 0])
             # Factor to relax cc-requirement by - noise of stacked traces
             # should in theory reduce by sqrt(n_traces)
-            # TODO - remove the factor 10 below after testing!!!!!
             cc_relax_factor = np.sqrt(len(array_st_dict[seisarray_prefix]))
             Logger.info('Preparing traces for array %s, for picking phase %s'
                         ' with lag-calc. CC relax factor is %s',
@@ -1015,14 +1106,22 @@ def array_lac_calc(
                 parallel=parallel, cores=cores, process_cores=1,
                 ignore_bad_data=ignore_bad_data,
                 ignore_length=ignore_length, **kwargs)
-            # TODO: need to check whether pick is within shift_len
-            
+
             Logger.info('Got new array picks for %s events.',
                         str(len(array_catalog)))
             # sort picks into previously lag-calc-picked catalog
             for i_event, event in enumerate(array_catalog):
                 # find the event that was picked from the same detection for
                 # the whole network
+                detection_id = _find_associated_detection_id(
+                    party=array_party, event_index=i_event)
+                # Check whether pick is within shift_len
+                event = _check_picks_within_shiftlen(
+                    party=array_party, event=event, detection_id=detection_id,
+                    shift_len=shift_len)
+                if len(event.picks) == 0:
+                    continue
+                # Figure out beam / reference station pick from all traces
                 try:
                     ref_station_code = SEISARRAY_REF_STATIONS[seisarray_prefix]
                 except KeyError:
@@ -1042,8 +1141,6 @@ def array_lac_calc(
                     pick for pick in picked_event.picks
                     if (pick.waveform_id.station_code == ref_equi_stacode and
                         pick.phase_hint == phase_hint)]
-                detection_id = _find_associated_detection_id(
-                        party=array_party, event_index=i_event)
                 # if there's already a pick for the array's reference beam
                 # station, then I don't need to compute it and can save time.
                 if len(existing_ref_picks) > 0:
@@ -1076,14 +1173,13 @@ def array_lac_calc(
                         new_pick.extra = {'nordic_pick_weight': {'value': 2}}
                         new_pick = _check_extra_info(new_pick, equi_pick)
                         # TODO can I add baz and app-vel here?
-                        # horizontal_slowness=kilometers2degrees(
-                        #     1 / horizontal_slowness_km),
+                        # horizontal_slowness=1 / kilometers2degrees(
+                        #     1 / horizontal_slowness_spkm),
                         # backazimuth=array_baz_dict[seisarray_prefix][
                         #   phase_hint],
                         # backazimuth=baz,
-                        # TODO: check that similar array-pick isn't there yet
-                                            
-                        picked_event.picks.append(new_pick)
+                        picked_event = _check_existing_and_add_pick(
+                            picked_event, new_pick)
                     continue  # avoid new computations
 
                 # compute the pick at the array's reference station
@@ -1132,26 +1228,26 @@ def array_lac_calc(
                     array_baz_dict=array_baz_dict,
                     array_app_vel_dict=array_app_vel_dict,
                     seisarray_prefixes=[seisarray_prefix],
-                    # TODO - need  to send baz and app-vel!!!!!
                     baz=array_baz_dict[seisarray_prefix][phase_hint],
                     app_vel=array_app_vel_dict[seisarray_prefix][phase_hint])
                 ref_station = SEISARRAY_REF_STATIONS[seisarray_prefix]
                 ref_picks = [pick for pick in event_with_array_picks.picks
-                            if pick.waveform_id.station_code == ref_station]
+                            if pick.waveform_id.station_code == ref_station
+                            and pick.phase_hint == phase_hint]
 
                 Logger.info('Got %s picks for reference station, adding these'
                             + ' to the event (has %s picks now)',
                             str(len(ref_picks)), str(len(picked_event.picks)))
                 # Add new lag-calc pick for array's reference station
                 for ref_pick in ref_picks:
-                    # TODO: Add baz and app-vel to picks
-                    # horizontal_slowness=kilometers2degrees(
-                    #     1 / array_app_vel_dict[phase_hint]),
-                    # backazimuth=array_baz_dict[phase_hint],
                     ref_pick.backazimuth = array_baz_dict[
                         seisarray_prefix][phase_hint]
-                    ref_pick.horizontal_slowness = kilometers2degrees(
-                         1 / array_app_vel_dict[seisarray_prefix][phase_hint])
+                    app_vel = array_app_vel_dict[seisarray_prefix][phase_hint]
+                    # TODO: This should never be nan really
+                    if np.isnan(app_vel):
+                        continue
+                    ref_pick.horizontal_slowness = 1 / kilometers2degrees(
+                         app_vel)
                     picked_event.picks.append(ref_pick)
 
     return picked_cat
@@ -1266,7 +1362,7 @@ if __name__ == "__main__":
     event2 = add_array_station_picks(
         event=event, array_picks_dict=array_picks_dict,
         stations_df=stations_df)
-        
+
 
     write_select(catalog=Catalog([event2]), filename='array.out', userid='RR',
                  evtype='R', wavefiles=None, high_accuracy=True,
@@ -1339,11 +1435,11 @@ if __name__ == "__main__":
 
 
 # %%
-# picked_catalog = array_lac_calc(
-#     day_st, export_catalog, party, tribe, stations_df, min_cc=0.4,
-#     pre_processed=False, shift_len=0.8, min_cc_from_mean_cc_factor=0.6,
-#     horizontal_chans=['E', 'N', '1', '2'], vertical_chans=['Z'],
-#     parallel=False, cores=1, daylong=True)
+    picked_catalog = array_lac_calc(
+        day_st, export_catalog, party, tribe, stations_df, min_cc=0.4,
+        pre_processed=False, shift_len=0.8, min_cc_from_mean_cc_factor=0.6,
+        horizontal_chans=['E', 'N', '1', '2'], vertical_chans=['Z'],
+        parallel=False, cores=1, daylong=True)
     
 # %%
     # arr_st_dict = extract_array_stream(day_st)

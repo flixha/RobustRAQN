@@ -429,7 +429,8 @@ def extract_stream_for_picked_events(
     # stream-list.
     for sl in list_of_stream_lists:
         for n_st, st in enumerate(sl):
-            stream_list[n_st] += st
+            if isinstance(st, Stream):
+                stream_list[n_st] += st
 
     wavefiles = list()
     for stream in stream_list:

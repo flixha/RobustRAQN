@@ -411,7 +411,7 @@ def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
         except KeyError:
             Logger.error('No data quality metrics available for %s - %s.',
                         str(starttime)[0:19], str(endtime)[0:19])
-            return None, None
+            return None, None, None
         stats = stats.set_index(['startday'])
     if 'short_target' not in stats.columns:
         stats['short_target'] = stats['target'].str[3:-2]
@@ -421,7 +421,7 @@ def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
     except KeyError:
         Logger.warning('No data quality metrics for %s',
                         str(reqtime1)[0:10])
-        return None, None
+        return None, None, None
     # Now set "short_target" as index-column to speed up the selection in
     # the loop across stations below.
     day_stats = day_stats.set_index(['short_target'])
@@ -520,8 +520,8 @@ def get_station_bulk_request(station, location_priority, band_priority,
         day_stats, components, pattern_position=[2, 2])
     bulk = list()
     bulk_rejected = list()
-    # Now magically find the channels that best fulfill all criteria like
-    # availability, num_spikes, etc. etc...
+    # Now magically find the prioritized channels that best fulfill all
+    # criteria like availability, num_spikes, etc. etc...
     for location in location_priority:
         if all_channels_requested(bulk, station, components):
             break
@@ -923,6 +923,7 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
     """
     function to read in Mustang-style data metrics from an ispaq-"csv"-output
     folder.
+    TODO: should support ispaq 3.0 MySQL-database
 
     :type folder: str
     :param folder: Path to a folder that contains ISPAQ's csv-output files.
@@ -978,6 +979,7 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
                 ispaq = pd.read_parquet(merged_metrics_file[0])
                 load_all_files = False
 
+    # Find all files that match criteria
     if load_all_files:
         df_list = list()
         relevant_files = []

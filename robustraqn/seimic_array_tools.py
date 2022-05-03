@@ -929,8 +929,8 @@ def _find_associated_detection_id(party, event_index):
 
 def _check_picks_within_shiftlen(party, event, detection_id, shift_len):
     """
+    Check whether pick is within shift_len
     """
-    # Check whether pick is within shift_len
     keep_picks = list()
     detection_events = [det.event for fam in party for det in fam
                         if det.id == detection_id]
@@ -1059,6 +1059,8 @@ def array_lac_calc(
         have been added for phases arriving at seismic arrays.
     :rtype picked_cat: class:`obspy.core.event.catalog`
     """
+    if len(picked_cat) == 0:
+        return picked_cat
     tribe_array_picks_dict = dict()
     for family in party:
         tribe_array_picks_dict[family.template.name] = extract_array_picks(
@@ -1132,7 +1134,12 @@ def array_lac_calc(
                 ref_equi_stacode = SEISARRAY_REF_EQUIVALENT_STATIONS[
                     ref_station_code]
                 picked_event = [ev for ev in picked_cat
-                                if ev.resource_id == event.resource_id][0]
+                                if ev.resource_id == event.resource_id]
+                # There may be no matching picked event if CCCSUM check (lag-
+                # calc vs match_filter CCC) failed in xcorr_pick_family.
+                if len(picked_event) == 0:
+                    continue
+                picked_event = picked_event[0]
                 existing_ref_picks = [
                     pick for pick in picked_event.picks
                     if (pick.waveform_id.station_code == ref_station_code and

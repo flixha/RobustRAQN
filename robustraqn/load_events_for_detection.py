@@ -61,7 +61,7 @@ def _read_nordic(sfile, **kwargs):
     """
     """
     Logger.info('Reading sfile %s', sfile)
-    select = read_nordic(sfile, **kwargs)
+    select = read_nordic(sfile, unused_kwargs=True, **kwargs)
     return select
 
 
@@ -140,7 +140,8 @@ def load_event_stream(
     """
     origin = event.preferred_origin() or event.origins[0]
     # Stop event processing if there are no waveform files
-    select, wavname = read_nordic(sfile, return_wavnames=True, **kwargs)
+    select, wavname = read_nordic(sfile, return_wavnames=True,
+                                  unused_kwargs=True, **kwargs)
     wavfilenames = wavname[0]
 
     # # Read extra wavefile names from comments

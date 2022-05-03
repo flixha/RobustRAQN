@@ -96,7 +96,7 @@ def _shorten_tribe_streams(
                     templ.st, background=False, event=templ.event,
                     sort_by='distance', show=False, return_figure=False,
                     size=(25, 50), save=True, savefile=image_name)
-            Logger.info("Made template %s", templ_name)
+            Logger.info("Made shortened template %s", templ_name)
             Logger.info(templ)
     label = ''
     if noise_balancing:
@@ -234,7 +234,8 @@ def _create_template_objects(
     # Loop over all S-files that each contain one event
     for j, sfile in enumerate(sfiles):
         Logger.info('Working on S-file: ' + sfile)
-        select, wavname = read_nordic(sfile, return_wavnames=True, **kwargs)
+        select, wavname = read_nordic(sfile, return_wavnames=True,
+                                      unused_kwargs=True, **kwargs)
         relevant_stations = get_all_relevant_stations(
             selected_stations, sta_translation_file=sta_translation_file)
         event = select[0]

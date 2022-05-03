@@ -50,7 +50,7 @@ from robustraqn.fancy_processify import fancy_processify
 # from eqcorrscan.core import match_filter, lag_calc
 # from eqcorrscan.utils.correlate import CorrelationError
 from eqcorrscan.core.match_filter import Template, Tribe, MatchFilterError
-from eqcorrscan.core.match_filter.party import Party
+from eqcorrscan.core.match_filter.party import Party, Family
 # from eqcorrscan.utils.clustering import extract_detections
 from eqcorrscan.utils.plotting import detection_multiplot
 # from eqcorrscan.utils.despike import median_filter
@@ -94,10 +94,12 @@ def append_list_completed_days(file, date, hash):
         list_completed_days.write(str(date) + ',' + str(hash) + '\n')
 
 
-def prepare_day_overlap(tribe, short_tribe, starttime_req, endtime_req):
+def prepare_day_overlap(tribe, short_tribe, stream,
+                        starttime_req, endtime_req, overlap_length=600):
     """
     set processing parameters to take care of 10 minutes overlap between days
     """
+    # TODO: implement variable overlap
     starttime_overlap = starttime_req + 5 * 60
     endtime_overlap = endtime_req - 5 * 60
     process_length = endtime_overlap - starttime_overlap
@@ -105,7 +107,8 @@ def prepare_day_overlap(tribe, short_tribe, starttime_req, endtime_req):
         templ.process_length = process_length
     for templ in short_tribe:
         templ.process_length = process_length
-    return tribe, short_tribe
+    stream.trim(starttime=starttime_overlap, endtime=endtime_overlap)
+    return tribe, short_tribe, stream
 
 
 def get_multi_obj_hash(hash_object_list):
@@ -179,9 +182,9 @@ def run_day_detection(
     n_runs = math.ceil(n_templates / n_templates_per_run)
 
     starttime = UTCDateTime(pd.to_datetime(date))
-    starttime_req = starttime - 15*60
-    endtime = starttime + 60*60*24
-    endtime_req = endtime + 15*60
+    starttime_req = starttime - 15 * 60
+    endtime = starttime + 60 * 60 * 24
+    endtime_req = endtime + 15 * 60
     current_day_str = date.strftime('%Y-%m-%d')
 
     if not os.path.exists(detection_path):
@@ -312,10 +315,11 @@ def run_day_detection(
                 weight = trace_snr * trace_noise_level
 
     # tmp adjust process_lenght parameters
-    
+    daylong = True
     if let_days_overlap:
-        tribe, short_tribe = prepare_day_overlap(
-            tribe, short_tribe, starttime_req, endtime_req)
+        daylong = False
+        tribe, short_tribe, day_st = prepare_day_overlap(
+            tribe, short_tribe, day_st, starttime_req, endtime_req)
 
     # Start the detection algorithm on all traces that are available.
     detections = []
@@ -325,7 +329,7 @@ def run_day_detection(
         party = tribe.detect(
             stream=day_st, threshold=threshold, trig_int=trig_int/4,
             threshold_type=threshold_type, overlap='calculate', plot=False,
-            plotDir='DetectionPlots', daylong=False,
+            plotDir='DetectionPlots', daylong=daylong,
             fill_gaps=True, ignore_bad_data=False, ignore_length=True, 
             parallel_process=parallel, cores=cores,
             # concurrency='multiprocess', xcorr_func='time_domain',
@@ -360,6 +364,12 @@ def run_day_detection(
     party = party.decluster(trig_int=trig_int, timing='detect',
                             metric='thresh_exc', min_chans=min_chans,
                             absolute_values=True)
+    # check that detection occurred on request day, not during overlap time
+    if let_days_overlap:
+        families = [Family([detection for detection in family
+                           if detection.detect_time >= starttime])
+                    for family in party]
+        party = Party([family for family in families if len(family) > 0])
 
     if not party:
         Logger.warning('Party of families of detections is empty')
@@ -398,7 +408,7 @@ def run_day_detection(
                 re_eval_thresh_factor=re_eval_thresh_factor,
                 trig_int=trig_int, threshold_type=threshold_type,
                 overlap='calculate', plot=False, plotDir='ReDetectionPlots',
-                fill_gaps=True, ignore_bad_data=False, daylong=True,
+                fill_gaps=True, ignore_bad_data=False, daylong=daylong,
                 ignore_length=True, parallel_process=parallel, cores=cores,
                 xcorr_func=xcorr_func, concurrency=concurrency, arch=arch,
                 #xcorr_func='time_domain', concurrency='multiprocess', 

@@ -253,8 +253,8 @@ def pick_events_for_day(
         cores=cores, **kwargs)
 
     if let_days_overlap:
-        tribe, short_tribe = prepare_day_overlap(
-            tribe, short_tribe, starttime_req, endtime_req)
+        tribe, short_tribe, day_st  = prepare_day_overlap(
+            tribe, short_tribe, day_st, starttime_req, endtime_req)
 
     original_stats_stream = day_st.copy()
     # WHY NEEDED HERE????

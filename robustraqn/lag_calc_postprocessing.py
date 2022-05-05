@@ -112,7 +112,7 @@ def postprocess_picked_events(
         min_pick_stations=4, min_picks_on_detection_stations=6,
         write_waveforms=False, archives=list(), request_fdsn=False,
         template_path=None, origin_longitude=None, origin_latitude=None,
-        origin_depth=None):
+        origin_depth=None, parallel=False, cores=1):
     """
     :type picked_catalog: :class:`obspy.core.Catalog`
     :param picked_catalog: Catalog of events picked, e.g., with lag_calc.
@@ -335,7 +335,8 @@ def postprocess_picked_events(
             export_catalog, party, template_path, archives,
             request_fdsn=request_fdsn, wav_out_dir=sfile_path,
             extract_len=extract_len, det_tribe=det_tribe,
-            all_chans_for_stations=all_channels_for_stations)
+            all_chans_for_stations=all_channels_for_stations,
+            parallel=parallel, cores=cores)
 
     # Create Seisan-style Sfiles for the whole day
     # catalogFile = os.path.join(sfile_path, + str(orig.time.year)\
@@ -367,11 +368,14 @@ def postprocess_picked_events(
 def extract_stream_for_picked_events(
         catalog, party, template_path, archives, det_tribe=Tribe(),
         request_fdsn=False, wav_out_dir='.', extract_len=300,
-        all_chans_for_stations=[]):
+        all_chans_for_stations=[], parallel=False, cores=1):
     """
     Extracts a stream object with all channels from the SDS-archive.
     Allows the input of multiple archives as a list
     """
+    # TODO: write functionality to use the whole day's waveforms to cut it
+    #       into smaller pieces for the events - avoid multiple requests to
+    #       SDS archive.  - no, I already have that. But why so slow?
     detection_list = list()
     for event in catalog:
         for family in party:
@@ -417,7 +421,8 @@ def extract_stream_for_picked_events(
         stream_list = extract_detections(
             detection_list, templ_tuple, archive, "SDS",
             request_fdsn=request_fdsn, extract_len=extract_len,
-            outdir=None, additional_stations=additional_stations)
+            outdir=None, additional_stations=additional_stations,
+            cores=cores, parallel=parallel)
         list_of_stream_lists.append(stream_list)
 
     stream_list = list()
@@ -467,7 +472,9 @@ def replace_templates_for_picking(party, tribe, set_sample_rate=100.0):
     return party
 
 
-def check_duplicate_template_channels(tribe):
+def check_duplicate_template_channels(
+        tribe, all_vert=False, all_horiz=False, vertical_chans=['Z'],
+        horizontal_chans=['E', 'N', '1', '2']):
     """
     Check templates for duplicate channels (happens when there are  P- and
         S-picks on the same channel). Then throw away the S-trace (the later
@@ -475,43 +482,137 @@ def check_duplicate_template_channels(tribe):
     """
     Logger.info('Checking templates in %s for duplicate channels', tribe)
     for template in tribe:
-        nt = 0
-        channel_ids = list()
-        stream_copy = template.st.copy()
-        for nt, trace in enumerate(stream_copy):
-            if trace.id in channel_ids:
-                for j in range(0, nt):
-                    test_same_id_trace = stream_copy[j]
-                    if trace.id == test_same_id_trace.id:
-                        if trace.stats.starttime >= test_same_id_trace.stats.\
-                                starttime:
-                            if trace in template.st:
-                                template.st.remove(trace)
-                        else:
-                            if test_same_id_trace in template.st:
-                                template.st.remove(test_same_id_trace)
-                        continue
-            else:
-                channel_ids.append(trace.id)
+        # Keep only the earliest trace for traces with same ID
+        temp_st_new = Stream()
+        unique_trace_ids = sorted(list(set([tr.id for tr in template.st])))
+        for trace_id in unique_trace_ids:
+            trace_check_id = trace_id
+            if (all_vert and len(vertical_chans) > 1
+                    and trace_id[-1] in vertical_chans):
+                # Formulate wildcards to select existing traces
+                trace_check_id = (
+                    trace_id[0:-1] + '[' + ''.join(vertical_chans) + ']')
+            elif (all_horiz and len(horizontal_chans) > 1
+                    and trace_id[-1] in horizontal_chans):
+                trace_check_id = (
+                    trace_id[0:-1] + '[' + ''.join(horizontal_chans) + ']')
+            same_id_st = template.st.select(id=trace_check_id)
+            if len(same_id_st) == 1 and same_id_st[0] not in temp_st_new:
+                temp_st_new += same_id_st
+            elif len(same_id_st) > 1:  # keep only earliest traces
+                starttimes = [tr.stats.starttime for tr in same_id_st]
+                earliest_starttime = min(starttimes)
+                for tr in same_id_st:
+                    if (tr.stats.starttime == earliest_starttime
+                            and tr not in temp_st_new):
+                        temp_st_new += tr
+        template.st = temp_st_new  # replace previous template stream
 
         # Also throw away the later pick from the template's event
-        np = 0
-        pick_ids = list()
-        picks_copy = template.event.picks.copy()
-        for np, pick in enumerate(picks_copy):
-            if pick.waveform_id.id in pick_ids:
-                for j in range(0, np):
-                    test_same_id_pick = picks_copy[j]
-                    if pick.waveform_id.id == test_same_id_pick.waveform_id.id:
-                        if pick.time >= test_same_id_pick.time:
-                            if pick in template.event.picks:
-                                template.event.picks.remove(pick)
-                        else:
-                            if test_same_id_pick in template.event.picks:
-                                template.event.picks.remove(test_same_id_pick)
-                        continue
-            else:
-                pick_ids.append(pick.waveform_id.id)
+        new_pick_list = list()
+        uniq_pick_trace_ids = sorted(list(set(
+            [pick.waveform_id.id for pick in template.event.picks])))
+        for pick_tr_id in uniq_pick_trace_ids:
+            pick_tr_check_id = [pick_tr_id]
+            if (all_vert and len(vertical_chans) > 1
+                    and pick_tr_id[-1] in vertical_chans):
+                for vert_chan in vertical_chans:
+                    if vert_chan != pick_tr_id[-1]:
+                        pick_tr_check_id.append(pick_tr_id[0:-1] + vert_chan)
+            elif (all_horiz and len(horizontal_chans) > 1
+                    and pick_tr_id[-1] in horizontal_chans):
+                for hor_chan in horizontal_chans:
+                    if hor_chan != pick_tr_id[-1]:
+                        pick_tr_check_id.append(pick_tr_id[0:-1] + hor_chan)
+            same_id_picks = [pick for pick in template.event.picks
+                             if pick.waveform_id.id in pick_tr_check_id]
+            if (len(same_id_picks) == 1
+                    and same_id_picks[0] not in new_pick_list):
+                new_pick_list.append(same_id_picks[0])
+            elif len(same_id_picks) > 1:  # keep only earliest picks per trace
+                pick_times = [pick.time for pick in same_id_picks]
+                earliest_pick_time = min(pick_times)
+                for pick in same_id_picks:
+                    if (pick.time == earliest_pick_time
+                            and pick not in new_pick_list):
+                        new_pick_list.append(pick)
+        template.event.picks = new_pick_list
+
+    # for template in tribe:
+    #     nt = 0
+    #     # loop through stream and keep only earliest traces for each trace-ID.
+    #     channel_ids = list()
+    #     stream_copy = template.st.copy()
+    #     for nt, trace in enumerate(stream_copy):
+    #         if trace.id in channel_ids:
+    #             for j in range(0, nt):
+    #                 test_same_id_trace = stream_copy[j]
+    #                 similar_trace_in_stream = False
+    #                 if trace.id == test_same_id_trace.id:
+    #                     similar_trace_in_stream = True
+    #                 elif all_vert and len(vertical_chans) > 1:
+    #                     # Check for equivalent vertical channels
+    #                     for vert_chan in vertical_chans:
+    #                         alt_trace_id = trace.id[0:-1] + vert_chan
+    #                         if alt_trace_id == test_same_id_trace.id:
+    #                             similar_trace_in_stream = True
+    #                             break
+    #                 elif all_horiz and len(horizontal_chans) > 1:
+    #                     # Check for equivalent horizontal channels
+    #                     for hor_chan in horizontal_chans:
+    #                         alt_trace_id = trace.id[0:-1] + hor_chan
+    #                         if alt_trace_id == test_same_id_trace.id:
+    #                             similar_trace_in_stream = True
+    #                             break
+    #                 if similar_trace_in_stream:
+    #                     if trace.stats.starttime >= test_same_id_trace.stats.\
+    #                             starttime:
+    #                         if trace in template.st:
+    #                             # TODO: check that all traces 
+    #                             template.st.remove(trace)
+    #                     else:
+    #                         if test_same_id_trace in template.st:
+    #                             template.st.remove(test_same_id_trace)
+    #                     continue
+    #         else:
+    #             channel_ids.append(trace.id)
+
+        # Also throw away the later pick from the template's event
+        # np = 0
+        # pick_ids = list()
+        # picks_copy = template.event.picks.copy()
+        # for np, pick in enumerate(picks_copy):
+        #     if pick.waveform_id.id in pick_ids:
+        #         for j in range(0, np):
+        #             test_same_id_pick = picks_copy[j]
+        #             # if pick.waveform_id.id == test_same_id_pick.waveform_id.id:
+        #             similar_pick_in_picks = False
+        #             if pick.waveform_id.id == test_same_id_pick.waveform_id.id:
+        #                 similar_pick_in_picks = True
+        #             elif all_vert and len(vertical_chans) > 1:
+        #                 # Check for equivalent vertical channels
+        #                 for vert_chan in vertical_chans:
+        #                     alt_pick_id = pick.waveform_id.id[0:-1] + vert_chan
+        #                     if alt_pick_id == test_same_id_pick.waveform_id.id:
+        #                         similar_pick_in_picks = True
+        #                         break
+        #             elif all_horiz and len(horizontal_chans) > 1:
+        #                 # Check for equivalent horizontal channels
+        #                 for hor_chan in horizontal_chans:
+        #                     alt_pick_id = pick.waveform_id.id[0:-1] + hor_chan
+        #                     if alt_pick_id == test_same_id_pick.waveform_id.id:
+        #                         similar_pick_in_picks = True
+        #                         break
+        #             if similar_pick_in_picks:
+        #                 if pick.time >= test_same_id_pick.time:
+        #                     if pick in template.event.picks:
+        #                         template.event.picks.remove(pick)
+        #                 else:
+        #                     if test_same_id_pick in template.event.picks:
+        #                         template.event.picks.remove(test_same_id_pick)
+        #                 continue
+        #     else:
+        #         pick_ids.append(pick.waveform_id.id)
 
     return tribe
 

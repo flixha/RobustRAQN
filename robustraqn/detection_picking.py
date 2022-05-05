@@ -252,7 +252,9 @@ def pick_events_for_day(
         remove_response=remove_response, inv=inv, parallel=parallel,
         cores=cores, **kwargs)
 
+    daylong = True
     if let_days_overlap:
+        daylong = False
         tribe, short_tribe, day_st  = prepare_day_overlap(
             tribe, short_tribe, day_st, starttime_req, endtime_req)
 
@@ -289,7 +291,7 @@ def pick_events_for_day(
                 threshold_type=threshold_type,
                 overlap='calculate', plotDir='ReDetectionPlots',
                 plot=False, fill_gaps=True, ignore_bad_data=True,
-                daylong=True, ignore_length=True, min_chans=min_det_chans,
+                daylong=daylong, ignore_length=True, min_chans=min_det_chans,
                 concurrency='multiprocess', parallel_process=parallel,
                 cores=cores, xcorr_func='time_domain',
                 group_size=n_templates_per_run, process_cores=cores,
@@ -332,7 +334,7 @@ def pick_events_for_day(
         min_cc=min_cc, min_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
         all_vert=all_vert, all_horiz=all_horiz,
         horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
-        parallel=parallel, cores=cores, daylong=True, **kwargs)
+        parallel=parallel, cores=cores, daylong=daylong, **kwargs)
     # try:
     # except LagCalcError:
     #    pass
@@ -353,7 +355,7 @@ def pick_events_for_day(
             min_cc_from_mean_cc_factor=min(min_cc_from_mean_cc_factor, 0.999),
             all_vert=all_vert, all_horiz=all_horiz,
             horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
-            parallel=parallel, cores=cores, daylong=True, **kwargs)
+            parallel=parallel, cores=cores, daylong=daylong, **kwargs)
 
     export_catalog = postprocess_picked_events(
         picked_catalog, dayparty, tribe, original_stats_stream,
@@ -361,7 +363,8 @@ def pick_events_for_day(
         operator=operator, all_channels_for_stations=relevant_stations,
         extract_len=extract_len, write_waveforms=True, archives=archives,
         request_fdsn=request_fdsn, template_path=template_path,
-        min_pick_stations=8, min_picks_on_detection_stations=3)
+        min_pick_stations=8, min_picks_on_detection_stations=3,
+        parallel=parallel, cores=io_cores)
 
     return export_catalog
 

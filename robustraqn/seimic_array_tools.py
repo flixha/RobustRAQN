@@ -945,7 +945,7 @@ def _check_picks_within_shiftlen(party, event, detection_id, shift_len):
             p for p in detection_event.picks
             if p.phase_hint == pick.phase_hint and
             (p.waveform_id.station_code == pick.waveform_id.station_code)]
-        if len(detection_events) != 1:
+        if len(detection_picks) != 1:
             continue
         detection_pick = detection_picks[0]
         if abs(detection_pick.time - pick.time) <= shift_len:
@@ -1219,7 +1219,7 @@ def array_lac_calc(
                             template_event, phase_hints=[phase_hint],
                             seisarray_prefixes=[seisarray_prefix]))
                 except KeyError as e:
-                    Logger.error(
+                    Logger.warning(
                         'Cannot find backazimuth or apparent velocity for '
                         'array %s, phase %s, for template %s. Cannot compute '
                         'pick for array beam.', seisarray_prefix, phase_hint,

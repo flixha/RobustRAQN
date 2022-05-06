@@ -19,6 +19,7 @@ from collections import Counter
 from obspy.core.event import (Catalog, Pick, Arrival, WaveformStreamID,
                               CreationInfo)
 from obspy.core.stream import Stream
+from obspy.core.event import Comment
 from obspy.core.inventory.inventory import Inventory
 from obspy.io.nordic.core import read_nordic
 from obspy import read as obspyread
@@ -116,13 +117,14 @@ def read_seisan_database(database_path, cores=1, nordic_format='UKN',
         sfile, nordic_format=nordic_format) for sfile in sfiles)
     cat = Catalog([cat[0] for cat in cats if cat])
     for event, sfile in zip(cat, sfiles):
+        event.comments.append(Comment(text='Sfile-name: ' + sfile))
         extra = {'sfile_name': {'value': sfile, 'namespace': 'Seisan'}}
         event.extra = extra
         if check_resource_ids:
             attach_all_resource_ids(event)
     # attach_all_resource_ids(cat)
     # validate_catalog(cat)
-        # event.comments.append(Comment(text='Sfile-name: ' + sfile))
+    
 
     return cat
 

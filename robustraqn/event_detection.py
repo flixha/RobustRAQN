@@ -355,7 +355,10 @@ def run_day_detection(
             return
         else:
             return [Party(), return_st]
-    Logger.info('Got a party of families of detections!')
+    n_families = len([f for f in party if len(f) > 0])
+    n_detections = len([d for f in party for d in f])
+    Logger.info('Got a party of %s families with %s detections!',
+                str(n_families), str(n_detections))
     
     # Decluster detection and save them to files
     # metric='avg_cor' isn't optimal when one detection may only be good on
@@ -366,10 +369,13 @@ def run_day_detection(
                             absolute_values=True)
     # check that detection occurred on request day, not during overlap time
     if let_days_overlap:
-        families = [Family([detection for detection in family
-                           if detection.detect_time >= starttime])
+        families = [Family(template=family.template,
+                           detections=[
+                               detection for detection in family
+                               if detection.detect_time >= starttime])
                     for family in party]
-        party = Party([family for family in families if len(family) > 0])
+        party = Party(
+            families=[family for family in families if len(family) > 0])
 
     if not party:
         Logger.warning('Party of families of detections is empty')

@@ -186,7 +186,7 @@ def _create_template_objects(
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         vertical_chans=['Z', 'H'],
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
-        parallel=False, cores=1, *args, **kwargs):
+        parallel=False, cores=1, unused_kwargs=True, *args, **kwargs):
     """
     """
     Logger.info('Start work on %s sfiles to create templates...',
@@ -235,7 +235,7 @@ def _create_template_objects(
     for j, sfile in enumerate(sfiles):
         Logger.info('Working on S-file: ' + sfile)
         select, wavname = read_nordic(sfile, return_wavnames=True,
-                                      unused_kwargs=True, **kwargs)
+                                      unused_kwargs=unused_kwargs, **kwargs)
         relevant_stations = get_all_relevant_stations(
             selected_stations, sta_translation_file=sta_translation_file)
         event = select[0]

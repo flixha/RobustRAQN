@@ -58,11 +58,11 @@ MY_ENV = os.environ.copy()
 MY_ENV["SEISAN_TOP"] = '/home/felix/Software/SEISANrick'
 
 
-def _read_nordic(sfile, **kwargs):
+def _read_nordic(sfile, unused_kwargs=True, **kwargs):
     """
     """
     Logger.info('Reading sfile %s', sfile)
-    select = read_nordic(sfile, unused_kwargs=True, **kwargs)
+    select = read_nordic(sfile, unused_kwargs=unused_kwargs, **kwargs)
     return select
 
 
@@ -135,7 +135,7 @@ def load_event_stream(
         allowed_band_codes="ESBHNMCFDX", forbidden_instrument_codes="NGAL",
         allowed_component_codes="ZNE0123ABCXYRTH", channel_priorities="HBSEN*",
         template_length=300, search_only_month_folders=True, bulk_rejected=[],
-        wav_suffixes=['', '.gz'], **kwargs):
+        wav_suffixes=['', '.gz'], unused_kwargs=True, **kwargs):
     """
     Load the waveforms for an event file (here: Nordic file) while performing
     some checks for duplicates, incompleteness, etc.
@@ -143,7 +143,7 @@ def load_event_stream(
     origin = event.preferred_origin() or event.origins[0]
     # Stop event processing if there are no waveform files
     select, wavname = read_nordic(sfile, return_wavnames=True,
-                                  unused_kwargs=True, **kwargs)
+                                  unused_kwargs=unused_kwargs, **kwargs)
     wavfilenames = wavname[0]
 
     # # Read extra wavefile names from comments

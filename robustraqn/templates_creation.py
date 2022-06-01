@@ -10,6 +10,7 @@ import glob
 # from importlib import reload
 from multiprocessing import Pool, cpu_count, get_context
 from multiprocessing.pool import ThreadPool
+from re import A
 from joblib import Parallel, delayed, parallel_backend
 import pandas as pd
 
@@ -48,7 +49,7 @@ from robustraqn.spectral_tools import (
 from robustraqn.quality_metrics import (
     create_bulk_request, get_parallel_waveform_client)
 from robustraqn.seimic_array_tools import (
-    extract_array_picks, add_array_station_picks,
+    extract_array_picks, add_array_station_picks, get_station_sites,
     LARGE_APERTURE_SEISARRAY_PREFIXES, get_updated_stations_df)
 
 import logging
@@ -177,8 +178,8 @@ def _create_template_objects(
         prepick, samp_rate, seisan_wav_path, inv=Inventory(), clients=[],
         remove_response=False, noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
-        min_n_traces=8, write_out=False, templ_path='Templates/' ,
-        make_pretty_plot=False, prefix='',
+        min_n_traces=8, min_n_station_sites=4, write_out=False,
+        templ_path='Templates/' , make_pretty_plot=False, prefix='',
         check_template_strict=True, allow_channel_duplication=True,
         normalize_NSLC=True, add_array_picks=False, stations_df=pd.DataFrame(),
         add_large_aperture_array_picks=False, ispaq=None,
@@ -248,6 +249,7 @@ def _create_template_objects(
 
         # Add picks at array stations if requested
         if add_array_picks:
+            # need to fix phase hints once alreay here
             event = fix_phasehint_capitalization(event)
             array_picks_dict = extract_array_picks(event=event)
             event = add_array_station_picks(
@@ -383,7 +385,14 @@ def _create_template_objects(
                      filt_order=4, process_length=86400.0, prepick=prepick)
         # highcut=8.0, samp_rate=20, filt_order=4, process_length=86400.0,
 
-        if len(t.st) >= min_n_traces:
+        # minimum number of different stations, considering that one array
+        # counts only as one station
+        unique_stations = list(set([
+            p.waveform_id.station_code for p in t.event.picks]))
+        n_station_sites = len(list(set(get_station_sites(unique_stations))))
+
+        if (len(t.st) >= min_n_traces and
+                n_station_sites >= min_n_station_sites):
             if write_out:
                 templ_filename = os.path.join(templ_path, templ_name + '.mseed')
                 t.write(templ_filename, format="MSEED")
@@ -403,9 +412,14 @@ def _create_template_objects(
             Logger.info("Made template %s for sfile %s", templ_name, sfile)
             Logger.info(t)
         else:
-            Logger.info("Rejected template %s (sfile %s): too few traces: %s <"
-                        " %s", templ_name, sfile, str(len(t.st)),
-                        str(min_n_traces))
+            if n_station_sites < min_n_station_sites:
+                Logger.info("Rejected template %s (sfile %s): too few unique "
+                            " station sites %s < %s", templ_name, sfile,
+                            str(n_station_sites), str(min_n_station_sites))
+            else:
+                Logger.info("Rejected template %s (sfile %s): too few traces: "
+                            "%s < %s", templ_name, sfile, str(len(t.st)),
+                            str(min_n_traces))
 
     # clusters = tribe.cluster(method='space_cluster', d_thresh=1.0, show=True)
     template_list = []

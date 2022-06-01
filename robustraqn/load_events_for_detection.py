@@ -46,6 +46,7 @@ from obsplus.stations.pd import stations_to_df
 # import obustraqn.spectral_tools
 from robustraqn.spectral_tools import st_balance_noise, Noise_model
 from robustraqn.quality_metrics import get_parallel_waveform_client
+from robustraqn.seimic_array_tools import get_station_sites
 from timeit import default_timer
 import logging
 Logger = logging.getLogger(__name__)
@@ -2422,7 +2423,7 @@ def reevaluate_detections(
         group_size=1, full_peaks=False, save_progress=False,
         process_cores=None, spike_test=False, min_chans=4,
         time_difference_threshold=3, detect_value_allowed_error=60,
-        return_party_with_short_templates=False):
+        return_party_with_short_templates=False, min_n_station_sites=4):
     """
     This function takes a set of detections and reruns the match-filter
     detection with a set of templates that are shortened to XX length. Only if
@@ -2434,6 +2435,24 @@ def reevaluate_detections(
     """
     # Maybe do some checks to see if tribe and short_tribe have somewhat of the
     # same templates?
+    
+    # Check there's enough individual station sites for detection - otherwise
+    # don't bother with the detection. This should avoid spurious picks that
+    # are only due to one array.
+    checked_party = Party()
+    for family in party:
+        checked_family = family.copy()
+        checked_family.detections = []
+        for detection in family:
+            unique_stations = list(set([
+                p.waveform_id.station_code for p in detection.event.picks]))
+            n_station_sites = len(list(set(
+                get_station_sites(unique_stations))))
+            if n_station_sites >= min_n_station_sites:
+                checked_family.detections.append(detection)
+        if len(family.detections) > 0:
+            checked_party += checked_family
+    party = checked_party
 
     # Need to scale factor slightly for fftw vs time-domain
     # (based on empirical observation)

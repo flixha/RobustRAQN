@@ -144,6 +144,26 @@ SEISARRAY_REF_EQUIVALENT_STATIONS = defaultdict(
 """
 
 
+def get_station_sites(stations, seisarray_prefixes=SEISARRAY_PREFIXES):
+    """
+    Return a list of stations sites, i.e., for arrays, return the array name,
+    while for single stations return the station code.
+    """
+    station_sites = []
+    for station in stations:
+        try:
+            check_prefix = None
+            for seisarray_prefix in seisarray_prefixes:
+                if fnmatch.fnmatch(station, seisarray_prefix,
+                                   flags=fnmatch.EXTMATCH):
+                    check_prefix = seisarray_prefix
+            ref_station = SEISARRAY_REF_STATIONS[check_prefix]
+        except KeyError:
+            ref_station = station
+        station_sites.append(ref_station)
+    return station_sites
+
+
 def get_array_stations_from_df(stations_df=pd.DataFrame(),
                                seisarray_prefixes=SEISARRAY_PREFIXES):
     # array_list is a list of tuples, with the first tuple element containing

@@ -248,15 +248,18 @@ def pick_events_for_day(
     # daily_plot(day_st, year, month, day, data_unit="counts",
     #            suffix='resp_removed')
     day_st = init_processing(
-        day_st, starttime=starttime, endtime=endtime,
+        day_st, starttime=starttime_req, endtime=endtime_req,
         remove_response=remove_response, inv=inv, parallel=parallel,
         cores=cores, **kwargs)
 
     daylong = True
     if let_days_overlap:
         daylong = False
-        tribe, short_tribe, day_st  = prepare_day_overlap(
-            tribe, short_tribe, day_st, starttime_req, endtime_req)
+        tribe, short_tribe, day_st = prepare_day_overlap(
+            tribe, short_tribe, day_st, starttime_req, endtime_req, **kwargs)
+    else:
+        tribe, short_tribe, day_st = prepare_day_overlap(
+            tribe, short_tribe, day_st, starttime, endtime, overlap_length=0)
 
     original_stats_stream = day_st.copy()
     # WHY NEEDED HERE????

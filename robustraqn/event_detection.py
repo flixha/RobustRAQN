@@ -94,8 +94,9 @@ def append_list_completed_days(file, date, hash):
         list_completed_days.write(str(date) + ',' + str(hash) + '\n')
 
 
-def prepare_day_overlap(tribe, short_tribe, stream,
-                        starttime_req, endtime_req, overlap_length=600):
+def prepare_day_overlap(
+        tribe, short_tribe, stream, starttime_req, endtime_req,
+        overlap_length=600, **kwargs):
     """
     set processing parameters to take care of 10 minutes overlap between days
     """
@@ -360,7 +361,7 @@ def run_day_detection(
     Logger.info('Got a party of %s families with %s detections!',
                 str(n_families), str(n_detections))
     
-    # Decluster detection and save them to files
+    # Decluster detection and save them to filesf
     # metric='avg_cor' isn't optimal when one detection may only be good on
     # very few channels - i.e., allowing higher CC than any detection made on
     # many channels
@@ -422,7 +423,8 @@ def run_day_detection(
                 group_size=n_templates_per_run, process_cores=cores,
                 time_difference_threshold=time_difference_threshold,
                 detect_value_allowed_error=detect_value_allowed_error,
-                return_party_with_short_templates=True)
+                return_party_with_short_templates=True,
+                min_n_station_sites=min_n_station_sites)
 
             append_list_completed_days(
                 file=day_hash_file, date=current_day_str, hash=settings_hash)

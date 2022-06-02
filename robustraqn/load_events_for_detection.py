@@ -1632,13 +1632,13 @@ def _init_processing_per_channel_wRotation(
 
 
 def check_normalize_sampling_rate(
-        st, inv, min_segment_length_s=10, max_sample_rate_diff=1,
-        skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
+        stream, inventory, min_segment_length_s=10, max_sample_rate_diff=1,
+        skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 250, 500],
         skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
         **kwargs):
     """
     Function to check the sampling rates of traces against the response-
-        provided sampling rate and the against all other segments from the same
+        provided sampling rate and against all other segments from the same
         NSLC-object in the stream. Traces with mismatching sample-rates are
         excluded. If the sample rate is only slightly off, then the trace is
         interpolated onto the response-defined sample rate.
@@ -1649,33 +1649,68 @@ def check_normalize_sampling_rate(
         100 Hz). A value of 1e-7 implies that for a 100 Hz-sampled channel, the
         sample-wise offset across 24 hours is less than 1 sample.
 
-    returns: stream, bool
+    :type stream: obspy.core.Stream
+    :param stream: Stream that will be checked and corrected.
+    :type inventory: obspy.core.Inventory
+    :param inventory:
+        Inventory of stations that is required to check for what the sampling
+        rate of the channels should be.
+    :type min_segment_length_s: float
+    :param min_segment_length_s:
+        Minimum length of segments that should be kept in stream - shorter
+        segments are most likley signs of some data problems that cannot easily
+        be mended.
+    :type max_sample_rate_diff: float
+    :param max_sample_rate_diff:
+        Upper limit for the difference in sampling rate between the intended 
+        sampling rate (from channel response) and the actual sampling rate of
+        the trace. If the difference is larger than max_sample_rate_diff, the
+        trace will be removed.
+    :type skip_check_sampling_rates: list of float
+    :param skip_check_sampling_rates:
+        List of typical sampling rates for which not interpolation-checks
+        are performed (when sampling rates match exactly).
+    :type skip_interp_sample_rate_smaller:
+    :param skip_interp_sample_rate_smaller:
+        Limit under which no interpolation of the trace is required; instead
+        the time stamps can just be adjusted to stretch the trace slightly if
+        the sampling rate is just slighly off (e.g, one sample per day). Can
+        save time.
+    :type interpolation_method: string
+    :param interpolation_method:
+        Type of method for interpolation used by
+        `obspy.core.trace.Trace.interpolate`
+
+    returns:
+        stream with corrected traces, True/False if any traces were corrected
+        or not.
+    :rtype: tuple of (:class:`obspy.core.event.Catalog`, boolean)
     """
 
     # First, throw out trace bits that are too short, and hence, likely
     # problematic (e.g., shorter than 10 s):
     keep_st = Stream()
-    # st_copy = st.copy()
+    # st_copy = stream.copy()
     st_tr_to_be_removed = Stream()
-    for tr in st:
+    for tr in stream:
         if tr.stats.npts < min_segment_length_s * tr.stats.sampling_rate:
             # st_copy.remove(tr)
             st_tr_to_be_removed += tr
     for tr in st_tr_to_be_removed:
-        if tr in st:
-            st.remove(tr)
-    # st = st_copy
+        if tr in stream:
+            stream.remove(tr)
+    # stream = st_copy
 
     # Create list of unique Seed-identifiers (NLSC-objects)
-    seed_id_list = [tr.id for tr in st]
+    seed_id_list = [tr.id for tr in stream]
     unique_seed_id_list = set(seed_id_list)
 
     # Do a quick check: if all sampling rates are the same, and all values are
     # one of the allowed default values, then skip all the other tests.
-    channel_rates = [tr.stats.sampling_rate for tr in st]
+    channel_rates = [tr.stats.sampling_rate for tr in stream]
     if (all([cr in skip_check_sampling_rates for cr in channel_rates])
             and len(set(channel_rates)) <= 1):
-        return st, False
+        return stream, False
 
     # Now do a thorough check of the sampling rates; exclude traces if needed;
     # interpolate if needed.
@@ -1685,10 +1720,10 @@ def check_normalize_sampling_rate(
         # Need to check for the inventory-information only once per seed_id
         # (Hopefully - I'd rather not do this check for every segment in a
         # mseed-file; in case there are many segments.)
-        check_st = st.select(id=seed_id).copy()
+        check_st = stream.select(id=seed_id).copy()
         tr = check_st[0]
 
-        check_inv = inv.select(
+        check_inv = inventory.select(
             network=tr.stats.network, station=tr.stats.station,
             location=tr.stats.location,
             channel=tr.stats.channel, time=tr.stats.starttime)
@@ -1696,7 +1731,7 @@ def check_normalize_sampling_rate(
             found_matching_resp = True
         else:
             found_matching_resp, tr, check_inv =\
-                try_find_matching_response(tr, inv)
+                try_find_matching_response(tr, inventory)
 
         def_channel_sample_rate = None
         if found_matching_resp:
@@ -1758,7 +1793,7 @@ def check_normalize_sampling_rate(
 
         # And then we need to correct the offending trace's sampling rates
         # through interpolation.
-        raw_datatype = st[0].data.dtype
+        raw_datatype = stream[0].data.dtype
         channel_rates = [tr.stats.sampling_rate for tr in keep_st]
         if any(cr != def_channel_sample_rate for cr in channel_rates):
             for tr in keep_st:
@@ -1788,24 +1823,24 @@ def check_normalize_sampling_rate(
     return new_st, True
 
 
-def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
+def try_remove_responses(stream, inventory, taper_fraction=0.05, pre_filt=None,
                          parallel=False, cores=None, output='DISP',
                          gain_traces=True, **kwargs):
     """
     """
-    if len(st) == 0:
+    if len(stream) == 0:
         Logger.warning('Stream is empty')
-        return st
+        return stream
 
     # remove response
     if not parallel:
-        for tr in st:
-            tr = _try_remove_responses(tr, inv, taper_fraction=taper_fraction,
-                                       pre_filt=pre_filt, output=output,
-                                       gain_traces=gain_traces)
+        for tr in stream:
+            tr = _try_remove_responses(
+                tr, inventory, taper_fraction=taper_fraction,
+                pre_filt=pre_filt, output=output, gain_traces=gain_traces)
     else:
         if cores is None:
-            cores = min(len(st), cpu_count())
+            cores = min(len(stream), cpu_count())
 
         # If this function is called from a subprocess and asked for parallel
         # execution, then open a thread-pool to distribute work further.
@@ -1815,14 +1850,15 @@ def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
         #     my_pool = ThreadPool
 
         # with threadpool_limits(limits=1, user_api='blas'):
-        #     with pool_boy(Pool=my_pool, traces=len(st), cores=cores) as pool:
-        #         # params = ((tr, inv, taper_fraction, parallel, cores)
-        #         #          for tr in st)
+        #     with pool_boy(
+        #         Pool=my_pool, traces=len(stream), cores=cores) as pool:
+        #         # params = ((tr, inventory, taper_fraction, parallel, cores)
+        #         #          for tr in stream)
         #         results = [pool.apply_async(
         #             _try_remove_responses,
-        #             args=(tr, inv.select(station=tr.stats.station),
+        #             args=(tr, inventory.select(station=tr.stats.station),
         #                   taper_fraction, pre_filt, output)
-        #             ) for tr in st]
+        #             ) for tr in stream]
         # traces = [res.get() for res in results]
         # traces = [tr for tr in traces if tr is not None]
         # st = Stream(traces=traces)
@@ -1834,10 +1870,11 @@ def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
         with threadpool_limits(limits=1, user_api='blas'):
             streams = Parallel(n_jobs=cores)(
                 delayed(_try_remove_responses)
-                (tr, inv.select(station=tr.stats.station), taper_fraction,
-                 pre_filt, output, gain_traces) for tr in st)
+                (tr, inventory.select(station=tr.stats.station),
+                 taper_fraction, pre_filt, output, gain_traces)
+                for tr in stream)
         # st = Stream([tr for trace_st in streams for tr in trace_st])
-        st = Stream([tr for tr in streams])
+        stream = Stream([tr for tr in streams])
 
         # params = ((sub_arr, arr_thresh, trig_int, full_peaks)
         #             for sub_arr, arr_thresh in zip(arr, thresh))
@@ -1851,7 +1888,7 @@ def try_remove_responses(st, inv, taper_fraction=0.05, pre_filt=None,
         # for result in results:
         #     processed_stream_dict.update(result.get())
 
-    return st
+    return stream
 
 
 def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
@@ -2439,6 +2476,7 @@ def reevaluate_detections(
     # Check there's enough individual station sites for detection - otherwise
     # don't bother with the detection. This should avoid spurious picks that
     # are only due to one array.
+    # TODO: this check should be executed before declustering in EQcorrscan
     checked_party = Party()
     for family in party:
         checked_family = family.copy()

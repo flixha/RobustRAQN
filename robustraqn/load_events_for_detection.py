@@ -996,6 +996,8 @@ def prepare_picks(
     being considered:
      - remove all amplitude-picks
      - remove picks without phase_hint
+     - remove picks for stations that have timing problems (indicated by any
+       picks with pick.extra.nordic_pick_weight.value == 9)
      - compare picks to the available waveform-traces
      - normalize network/station/channel codes
      - if the channel is not available, the pick will be switched to a suitable
@@ -1029,6 +1031,15 @@ def prepare_picks(
     sta_fortransl_dict, sta_backtrans_dict = load_station_translation_dict(
         file=sta_translation_file)
 
+    timing_issue_stations = []
+    for pick in event.picks:
+        try:
+            if pick.extra.nordic_pick_weight.value == 9:
+                timing_issue_stations.append(pick.waveform_id.station_code)
+        except AttributeError:
+            pass
+    timing_issue_stations = list(set(timing_issue_stations))
+
     new_event = event.copy()
     new_event.picks = list()
     # Remove all picks for amplitudes etc: keep only P and S
@@ -1037,9 +1048,13 @@ def prepare_picks(
         if len(pick.phase_hint) == 0:
             continue
         request_station = pick.waveform_id.station_code
+        original_station_code = request_station
         if normalize_NSLC:
             if request_station in sta_fortransl_dict:
                 request_station = sta_fortransl_dict.get(request_station)
+        if (request_station in timing_issue_stations or
+                original_station_code in timing_issue_stations):
+            continue
         # Check which channels are available for pick's station in stream
         avail_comps = [tr.stats.channel[-1] for tr in
                        stream.select(station=request_station)]

@@ -160,9 +160,9 @@ def run_day_detection(
         threshold_type='MAD', re_eval_thresh_factor=0.6, min_chans=10,
         time_difference_threshold=3, detect_value_allowed_error=60,
         multiplot=False, day_st=Stream(), check_array_misdetections=False,
-        short_tribe=Tribe(), write_party=False, detection_path='Detections',
-        redetection_path='ReDetections', return_stream=False,
-        dump_stream_to_disk=False, day_hash_file=None,
+        min_n_station_sites=4, short_tribe=Tribe(), write_party=False,
+        detection_path='Detections', redetection_path=None,
+        return_stream=False, dump_stream_to_disk=False, day_hash_file=None,
         sta_translation_file=os.path.expanduser(
             "~/Documents2/ArrayWork/Inventory/station_code_translation.txt"),
         **kwargs):
@@ -190,6 +190,8 @@ def run_day_detection(
 
     if not os.path.exists(detection_path):
         os.mkdir(detection_path)
+    if redetection_path is None:
+        redetection_path = 'Re' + detection_path
     if not os.path.exists(redetection_path):
         os.mkdir(redetection_path)
 
@@ -360,14 +362,7 @@ def run_day_detection(
     n_detections = len([d for f in party for d in f])
     Logger.info('Got a party of %s families with %s detections!',
                 str(n_families), str(n_detections))
-    
-    # Decluster detection and save them to filesf
-    # metric='avg_cor' isn't optimal when one detection may only be good on
-    # very few channels - i.e., allowing higher CC than any detection made on
-    # many channels
-    party = party.decluster(trig_int=trig_int, timing='detect',
-                            metric='thresh_exc', min_chans=min_chans,
-                            absolute_values=True)
+
     # check that detection occurred on request day, not during overlap time
     if let_days_overlap:
         families = [Family(template=family.template,
@@ -395,13 +390,6 @@ def run_day_detection(
         else:
             return [party, return_st]
 
-    if write_party:
-        detection_file_name = os.path.join(detection_path,
-                                           'UniqueDet' + current_day_str)
-        party.write(detection_file_name, format='tar', overwrite=True)
-        party.write(detection_file_name + '.csv', format='csv',
-                    overwrite=True)
-
     # Check for erroneous detections of real signals (mostly caused by smaller
     # seismic events near one of the arrays). Solution: check whether templates
     # with shorter length increase detection value - if not; it's not a
@@ -410,7 +398,7 @@ def run_day_detection(
         if len(short_tribe) < len(tribe):
             Logger.error('Missing short templates for detection-reevaluation.')
         else:
-            party = reevaluate_detections(
+            party, short_party = reevaluate_detections(
                 party, short_tribe, stream=day_st, threshold=threshold,
                 re_eval_thresh_factor=re_eval_thresh_factor,
                 trig_int=trig_int, threshold_type=threshold_type,
@@ -424,7 +412,7 @@ def run_day_detection(
                 time_difference_threshold=time_difference_threshold,
                 detect_value_allowed_error=detect_value_allowed_error,
                 return_party_with_short_templates=True,
-                min_n_station_sites=min_n_station_sites)
+                min_n_station_sites=min_n_station_sites, **kwargs)
 
             append_list_completed_days(
                 file=day_hash_file, date=current_day_str, hash=settings_hash)
@@ -438,12 +426,32 @@ def run_day_detection(
                     return
                 else:
                     return [party, return_st]
+            short_party = short_party.decluster(
+                trig_int=trig_int, timing='detect', metric='thresh_exc',
+                min_chans=min_chans, absolute_values=True)
+            # TODO: maybe the order should be:
+            # check array-misdet - decluster party - compare short-party vs. party
             if write_party:
                 detection_file_name = os.path.join(
                     redetection_path, 'UniqueDet_short_' + current_day_str)
-                party.write(detection_file_name, format='tar', overwrite=True)
-                party.write(detection_file_name + '.csv', format='csv',
+                short_party.write(detection_file_name, format='tar', overwrite=True)
+                short_party.write(detection_file_name + '.csv', format='csv',
                             overwrite=True)
+
+    # Decluster detection and save them to filesf
+    # metric='avg_cor' isn't optimal when one detection may only be good on
+    # very few channels - i.e., allowing higher CC than any detection made on
+    # many channels
+    party = party.decluster(trig_int=trig_int, timing='detect',
+                            metric='thresh_exc', min_chans=min_chans,
+                            absolute_values=True)
+
+    if write_party:
+        detection_file_name = os.path.join(detection_path,
+                                           'UniqueDet' + current_day_str)
+        party.write(detection_file_name, format='tar', overwrite=True)
+        party.write(detection_file_name + '.csv', format='csv',
+                    overwrite=True)
 
     if multiplot:
         multiplot_detection(party, tribe, day_st, out_folder='DetectionPlots')

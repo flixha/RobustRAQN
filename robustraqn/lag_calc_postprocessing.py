@@ -30,6 +30,7 @@ from eqcorrscan.core.match_filter.party import Party
 # import obspy
 
 from robustraqn.quality_metrics import (get_waveforms_bulk, read_ispaq_stats)
+from robustraqn.seimic_array_tools import get_station_sites
 
 import logging
 Logger = logging.getLogger(__name__)
@@ -109,10 +110,11 @@ def postprocess_picked_events(
         picked_catalog, party, tribe, original_stats_stream,
         det_tribe=Tribe(), write_sfiles=False, sfile_path='Sfiles',
         operator='feha', all_channels_for_stations=[], extract_len=300,
-        min_pick_stations=4, min_picks_on_detection_stations=6,
-        write_waveforms=False, archives=list(), request_fdsn=False,
-        template_path=None, origin_longitude=None, origin_latitude=None,
-        origin_depth=None, parallel=False, cores=1):
+        min_pick_stations=4, min_n_station_sites=4,
+        min_picks_on_detection_stations=6, write_waveforms=False,
+        archives=list(), request_fdsn=False, template_path=None,
+        origin_longitude=None, origin_latitude=None, origin_depth=None,
+        parallel=False, cores=1):
     """
     :type picked_catalog: :class:`obspy.core.Catalog`
     :param picked_catalog: Catalog of events picked, e.g., with lag_calc.
@@ -309,12 +311,20 @@ def postprocess_picked_events(
             text='EQC_detection_id: ' + detection.id,
             creation_info=CreationInfo(agency='eqcorrscan',
                                        author=getpass.getuser())))
+        event.event_type = family.template.event.event_type
+        event.event_type_certainty = family.template.event.event_type_certainty
+        # TODO: nordic write function may not prop. translate type uncertainty
+        event.event_descriptions = family.template.event.event_descriptions
         # if (len(pick_stations) >= 3\
         #     and num_pPicks_onDetSta >= 2\
         #     and num_pPicks_onDetSta + num_sPicks_onDetSta >= 6)\
         #     or (len(pick_stations) >= 4\
         #     and num_sPicks_onDetSta >= 5):
-        if ((len(pick_stations) >= min_pick_stations) and (
+        unique_stations = list(set([
+            p.waveform_id.station_code for p in event.picks]))
+        n_station_sites = len(list(set(get_station_sites(unique_stations))))
+        if ((len(pick_stations) >= min_pick_stations) and 
+                n_station_sites >= min_n_station_sites and (
                 num_pPicks_onDetSta + num_sPicks_onDetSta >=
                 min_picks_on_detection_stations)):
             export_catalog += event

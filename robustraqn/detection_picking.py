@@ -305,8 +305,10 @@ def pick_events_for_day(
             Logger.warning('Party of families of detections is empty.')
             return
         if write_party:
+            if not os.path.exists('Re' + det_folder):
+                os.mkdir('Re' + det_folder)
             detection_file_name = os.path.join(
-                'ReDetections_MAD9', 'UniqueDet_short_' + current_day_str)
+                'Re' + det_folder, 'UniqueDet_short_' + current_day_str)
             dayparty.write(
                 detection_file_name, format='tar', overwrite=True)
             dayparty.write(

@@ -5,6 +5,7 @@
 
 **Here is a list of some of the features:**
 - performs checks of data quality based on IRIS Mustang data quality metrics (see [ispaq](https://github.com/iris-edu/ispaq) if you'd like to compute quality metrics for your own datasets)
+- reads in mseed data from a Seiscomp Data Structure in parallel
 - takes care of changes in the station setups (e.g., changes in instrument response) and network/station/location/channel codes
 - takes care of mismatches, e.g. for the names of network, channel and location codes between seismic data and metadata in the most sensible way
 - corrects the sampling rate of traces that differ slightly
@@ -29,3 +30,5 @@ In a conda environment:
 - `conda install --file requirements.txt`
 - (you may have to install wcmatch through pip)
 - `python setup.py develop`
+
+Some functionality may require EQcorrscan's `master ` branch, and some considerable speedups (e.g., for response correction) are not yet merged into obspy's master branch.

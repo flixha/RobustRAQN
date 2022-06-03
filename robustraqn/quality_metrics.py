@@ -321,12 +321,11 @@ def check_request_for_wildcards(stats, pattern_list, pattern_position):
     return pattern_list
 
 
-def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
-                        parallel=False, cores=1,
-                        stations=['*'], location_priority=['??'],
-                        band_priority=['B', 'H', 'S', 'E', 'N'],
-                        instrument_priority=['H'],
-                        components=['Z', 'N', 'E', '1', '2'], **kwargs):
+def create_bulk_request(
+        inventory, starttime, endtime, stats=pd.DataFrame(), stations=['*'],
+        location_priority=['??'], band_priority=['B', 'H', 'S', 'E', 'N'],
+        instrument_priority=['H'], components=['Z', 'N', 'E', '1', '2'],
+        minimum_sample_rate=20, parallel=False, cores=1, **kwargs):
     """
     stats = read_ispaq_stats(folder, starttime,endtime, networks=['??'],
                              stations=['*'],)
@@ -435,10 +434,11 @@ def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
             cores = min(len(stations), cpu_count())
         out_lists = Parallel(n_jobs=cores)(
             delayed(get_station_bulk_request)(
+                inventory.select(station=station, time=reqtime1),
                 station, location_priority, band_priority, instrument_priority,
-                components,  # send only stats relevant to station to worker
+                components, # send only stats relevant to station to worker
                 day_stats[day_stats.index.str.startswith(station + '.')],
-                reqtime1, starttime, endtime, **kwargs)
+                minimum_sample_rate, reqtime1, starttime, endtime, **kwargs)
             for station in stations)
         bulk_lists = [out_l[0] for out_l in out_lists]
         rejected_bulk_lists = [out_l[1] for out_l in out_lists]
@@ -447,8 +447,9 @@ def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
         rejected_bulk_lists = list()
         for station in stations:
             bulk_new, rejected_bulk = get_station_bulk_request(
-                station, location_priority, band_priority,
-                instrument_priority, components, day_stats, reqtime1,
+                inventory.select(station=station, time=reqtime1),
+                station, location_priority, band_priority, instrument_priority,
+                components, day_stats, minimum_sample_rate, reqtime1,
                 starttime, endtime, **kwargs)
             bulk_lists.append(bulk_new)
             rejected_bulk_lists.append(rejected_bulk)
@@ -461,9 +462,10 @@ def create_bulk_request(starttime, endtime, stats=pd.DataFrame(),
     return bulk, rejected_bulk, day_stats
 
 
-def get_station_bulk_request(station, location_priority, band_priority,
-                             instrument_priority, components, day_stats,
-                             request_time, starttime, endtime, **kwargs):
+def get_station_bulk_request(
+        inventory, station, location_priority, band_priority,
+        instrument_priority, components, day_stats, minimum_sample_rate,
+        request_time, starttime, endtime, **kwargs):
     """
     Inner function to create a bulk-request for one specific day.
 
@@ -532,13 +534,22 @@ def get_station_bulk_request(station, location_priority, band_priority,
                 if all_channels_requested(bulk, station, components):
                     break
                 for component in components:
+                    channel = band + instrument + component
                     if all_channels_requested(bulk, station, components):
                         break
                     if same_comp_requested(bulk, station, component):
                         continue
+                    if not _sample_rate_ok(
+                            inventory, request_time, minimum_sample_rate,
+                            station, location, channel):
+                        Logger.info(
+                            'Sample rate for %s.%s.%s%s%s too low on %s, '
+                            'looking for alternative location / channel.',
+                            station, location, band, instrument, component,
+                            request_time)
+                        continue
                     # Add target if it passes some metrics-checks
                     add_target_request = True
-                    channel = band + instrument + component
                     short_scnl = station + "." + location + '.' + channel
                     # With "short_target" as index-column:
                     if day_stats.index.name == "short_target":
@@ -861,11 +872,37 @@ def check_metrics(day_stats, request_time, availability, min_availability=0.8,
     return add_target_request, target
 
 
+def _sample_rate_ok(inventory, time, minimum_sample_rate, station_code,
+                    location_code, channel_code):
+    """
+    Check sampling rate of channel response in inventory; return False
+    if it does not fulfill minimum criterion.
+    """
+    sample_rate_ok = True
+    sel_inv = inventory.select(
+        station=station_code, location=location_code, channel=channel_code,
+        time=time)
+    if len(sel_inv.networks) > 0:
+        channels = [channel for net in sel_inv.networks
+                     for station in net for channel in station]
+        if len(channels) > 1:
+            Logger.warning(
+                'Found more than one matching response for %s on %s, comparing'
+                ' sampling rate only against first match.',
+                station_code + location_code + channel_code, time)
+        s_rate = channels[0].sample_rate
+        if s_rate < minimum_sample_rate * 0.99:
+            sample_rate_ok = False
+    # If there is no response then we shouldn't reject the request - return OK
+    return sample_rate_ok
+
+
 def all_channels_requested(bulk_request, station, requested_components):
     """
     :type bulk_request: list of lists
-    :param bulk_request: list of lists, with each list item containing network,
-                         station, location, channel, starttime, endtime
+    :param bulk_request:
+        list of lists, with each list item containing network, station,
+        location, channel, starttime, endtime
     :type station: str
     :param station: string describing station name
     :type requested_components: list

@@ -214,8 +214,10 @@ def _create_template_objects(
             if ispaq is not None:
                 bulk_request, bulk_rejected, day_stats = (
                     create_bulk_request(
+                        inv.select(starttime=starttime, endtime=endtime),
                         starttime=starttime, endtime=endtime, stats=ispaq,
-                        stations=selected_stations, **kwargs))
+                        stations=selected_stations,
+                        minimum_sample_rate=samp_rate, **kwargs))
             else:
                 bulk_request = [("??", s, "*", "?H?", starttime, endtime)
                                 for s in selected_stations]

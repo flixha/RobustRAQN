@@ -1031,14 +1031,14 @@ def prepare_picks(
     sta_fortransl_dict, sta_backtrans_dict = load_station_translation_dict(
         file=sta_translation_file)
 
-    timing_issue_stations = []
+    stations_w_timing_issue = []
     for pick in event.picks:
         try:
             if pick.extra.nordic_pick_weight.value == 9:
-                timing_issue_stations.append(pick.waveform_id.station_code)
+                stations_w_timing_issue.append(pick.waveform_id.station_code)
         except AttributeError:
             pass
-    timing_issue_stations = list(set(timing_issue_stations))
+    stations_w_timing_issue = list(set(stations_w_timing_issue))
 
     new_event = event.copy()
     new_event.picks = list()
@@ -1052,8 +1052,8 @@ def prepare_picks(
         if normalize_NSLC:
             if request_station in sta_fortransl_dict:
                 request_station = sta_fortransl_dict.get(request_station)
-        if (request_station in timing_issue_stations or
-                original_station_code in timing_issue_stations):
+        if (request_station in stations_w_timing_issue or
+                original_station_code in stations_w_timing_issue):
             continue
         # Check which channels are available for pick's station in stream
         avail_comps = [tr.stats.channel[-1] for tr in
@@ -2492,6 +2492,9 @@ def reevaluate_detections(
     # don't bother with the detection. This should avoid spurious picks that
     # are only due to one array.
     # TODO: this check should be executed before declustering in EQcorrscan
+    # TODO: function should always return both the party for the long templates
+    #       that have a short-template detection, and the party for the short
+    #       templates.
     checked_party = Party()
     for family in party:
         checked_family = family.copy()
@@ -2505,7 +2508,7 @@ def reevaluate_detections(
                 checked_family.detections.append(detection)
         if len(family.detections) > 0:
             checked_party += checked_family
-    party = checked_party
+    long_party = checked_party
 
     # Need to scale factor slightly for fftw vs time-domain
     # (based on empirical observation)
@@ -2514,15 +2517,16 @@ def reevaluate_detections(
     threshold = threshold * re_eval_thresh_factor
 
     # Select only the relevant templates
-    det_templ_names = set([d.template_name for f in party for d in f])
+    det_templ_names = set([d.template_name for f in long_party for d in f])
     short_tribe = Tribe(
         [short_tribe.select(templ_name) for templ_name in det_templ_names])
     # Find the relevant parts of the stream so as not to rerun the whole day:
-    det_times = [d.detect_time for f in party for d in f]
-    Logger.info('Re-evaluating party to sort out misdetections, checking %s'
-                + ' detections.', len(det_times))
+    det_times = [d.detect_time for f in long_party for d in f]
+    Logger.info(
+        'Re-evaluating party to sort out misdetections, checking %s'
+        + ' detections.', len(det_times))
     if len(det_times) == 0:
-        return party
+        return long_party, long_party
     earliest_det_time = min(det_times)
     latest_det_time = max(det_times)
     # if detections on significan part of the day:
@@ -2567,28 +2571,33 @@ def reevaluate_detections(
     # or if the detect_value is a lot worse, then remove original detection
     # from party.
     return_party = Party()
+    long_return_party = Party()
+    short_return_party = Party()
     short_party_templ_names = [
         f.template.name for f in short_party if f is not None]
-    for fam in party:
-        if fam.template.name not in short_party_templ_names:
+    for long_fam in long_party:
+        if long_fam.template.name not in short_party_templ_names:
             continue  # do not retain the whole family
         # select matching family
-        short_fam = short_party.select(fam.template.name)
+        short_fam = short_party.select(long_fam.template.name)
         if len(short_fam) == 0:
-            Logger.info('Re-evaluation obtained no detections for %s.', fam)
+            Logger.info('Re-evaluation obtained no detections for %s.',
+                        long_fam)
             continue
         short_det_times_np = np.array(
             [np.datetime64(d.detect_time.ns, 'ns') for d in short_fam])
 
         # Allow to return either partys with the original templates or the
         # short templates
-        if return_party_with_short_templates:
-            return_family = Family(short_fam.template)
-        else:
-            return_family = Family(fam.template)
+        # if return_party_with_short_templates:
+        #     return_family = Family(short_fam.template)
+        # else:
+        #     return_family = Family(long_fam.template)
+        long_family = Family(long_fam.template)
+        short_family = Family(short_fam.template)
 
         # Check detections for whether they fulfill the reevaluation-criteria.
-        for det in fam:
+        for det in long_fam:
             time_diffs = abs(
                 short_det_times_np - np.datetime64(det.detect_time.ns, 'ns'))
             time_diff_thresh = np.timedelta64(
@@ -2607,25 +2616,30 @@ def reevaluate_detections(
                 # the original detection.
                 if (abs(short_det.detect_val) >= abs(
                   det.detect_val * (1 - detect_value_allowed_error/100))):
-                    if return_party_with_short_templates:
-                        return_family += short_det
-                    else:
-                        return_family += det
+                    # if return_party_with_short_templates:
+                    #     return_family += short_det
+                    # else:
+                    #     return_family += det
+                    long_family += det
+                    short_family += short_det
                 else:
                     Logger.info('Re-evaluation detections did not meet '
                                 + 'detection-value criterion for %s at %s',
                                 det.template_name, det.detect_time)
-        if len(return_family) >= 0:
-            return_party += return_family
+        # if len(return_family) >= 0:
+        #     return_party += return_family
+        if len(long_family) >= 0:
+            long_return_party += long_family
+            short_return_party += short_family
 
-    if len(return_party) == 0:
+    if len(long_return_party) == 0:
         n_det = 0
     else:
-        return_party = return_party.decluster(
-            trig_int=trig_int, timing='detect', metric='thresh_exc',
-            min_chans=min_chans, absolute_values=True)
-        n_det = len([d for f in return_party for d in f])
+    #     return_party = return_party.decluster(
+    #         trig_int=trig_int, timing='detect', metric='thresh_exc',
+    #         min_chans=min_chans, absolute_values=True)
+        n_det = len([d for f in long_return_party for d in f])
     Logger.info('Re-evaluation finished, remaining are %s detections.',
                 str(n_det))
 
-    return return_party
+    return long_return_party, short_return_party

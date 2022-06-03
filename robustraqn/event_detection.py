@@ -158,7 +158,8 @@ def run_day_detection(
         balance_power_coefficient=2, n_templates_per_run=20, xcorr_func='fftw',
         concurrency=None, arch='precise', trig_int=0, threshold=10,
         threshold_type='MAD', re_eval_thresh_factor=0.6, min_chans=10,
-        time_difference_threshold=3, detect_value_allowed_error=60,
+        minimum_sample_rate=20, time_difference_threshold=3,
+        detect_value_allowed_error=60,
         multiplot=False, day_st=Stream(), check_array_misdetections=False,
         min_n_station_sites=4, short_tribe=Tribe(), write_party=False,
         detection_path='Detections', redetection_path=None,
@@ -229,9 +230,10 @@ def run_day_detection(
         # Create a smart request, i.e.: request only recordings that match
         # the quality metrics criteria and that best match the priorities.
         bulk_request, bulk_rejected, day_stats = create_bulk_request(
+            inv.select(starttime=starttime_req, endtime=endtime_req),
             starttime_req, endtime_req, stats=ispaq,
-            parallel=parallel, cores=cores,
-            stations=selected_stations, **kwargs)
+            parallel=parallel, cores=cores, stations=selected_stations,
+            minimum_sample_rate=minimum_sample_rate, **kwargs)
         if not bulk_request:
             Logger.warning('No waveforms requested for %s - %s',
                            str(starttime)[0:19], str(endtime)[0:19])

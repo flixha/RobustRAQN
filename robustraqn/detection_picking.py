@@ -159,7 +159,7 @@ def pick_events_for_day(
         relevant_stations=[], sta_translation_file='', let_days_overlap=True,
         noise_balancing=False, remove_response=False, inv=Inventory(),
         parallel=False, cores=None, io_cores=1,
-        check_array_misdetections=False, trig_int=12,
+        check_array_misdetections=False, trig_int=12, minimum_sample_rate=20,
         time_difference_threshold=8, detect_value_allowed_error=60,
         threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
         archives=[], request_fdsn=False, min_det_chans=1, shift_len=0.8,
@@ -224,7 +224,9 @@ def pick_events_for_day(
     # Create a smart request, i.e.: request only recordings that match
     # the quality metrics criteria and that best match the priorities.
     bulk_request, bulk_rejected, day_stats = create_bulk_request(
+        inv.select(starttime=starttime_req, endtime=endtime_req),
         starttime_req, endtime_req, stats=ispaq,
+        minimum_sample_rate=minimum_sample_rate,
         parallel=parallel, cores=cores,
         stations=required_stations, **kwargs)
     if not bulk_request:
@@ -288,7 +290,7 @@ def pick_events_for_day(
             Logger.error(
                 'Missing short templates for detection-reevaluation.')
         else:
-            dayparty = reevaluate_detections(
+            dayparty, short_party = reevaluate_detections(
                 dayparty, short_tribe, stream=day_st,
                 threshold=new_threshold-2, trig_int=trig_int/4,
                 threshold_type=threshold_type,

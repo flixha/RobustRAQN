@@ -72,7 +72,10 @@ LARGE_APERTURE_SEISARRAY_PREFIXES = [
     '@(GILDE|NBB05|NBB30|MELSS|NBB17|N1304)',  # South 2 of NOrdland
     '@(FAUS|N2TV|NBB08|N2ST)',                 # North 2 of Nordland
     '@(VBYGD|STEI|N2LO|N2DI|N2HS|N2IH)',       # Northern part of Nordland
-    '@(KTK|HEF)',
+    '@(KUA|RATU|NIKU|KOVU|KIR|KURU)',
+    '@(SALU|SA15|N7010)',
+    '@(DUNU|SA16|N7017)',
+    '@(KTK|HEF|LP71|LP81)',
     '@(VADS|SA05|SA05A|SA03)',
     '@(HAMF|SA04|SA07)',
     '@(TRO|JETT)',

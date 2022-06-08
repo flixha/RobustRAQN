@@ -889,7 +889,7 @@ def _sample_rate_ok(inventory, time, minimum_sample_rate, station_code,
             Logger.warning(
                 'Found more than one matching response for %s on %s, comparing'
                 ' sampling rate only against first match.',
-                station_code + location_code + channel_code, time)
+                station_code + '.' + location_code + '.' + channel_code, time)
         s_rate = channels[0].sample_rate
         if s_rate < minimum_sample_rate * 0.99:
             sample_rate_ok = False

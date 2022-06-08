@@ -178,6 +178,7 @@ def _create_template_objects(
         prepick, samp_rate, seisan_wav_path, inv=Inventory(), clients=[],
         remove_response=False, noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
+        apply_agc=False, agc_window_sec=5,
         min_n_traces=8, min_n_station_sites=4, write_out=False,
         templ_path='Templates/' , make_pretty_plot=False, prefix='',
         check_template_strict=True, allow_channel_duplication=True,
@@ -358,6 +359,10 @@ def _create_template_objects(
                          'with matching picks that fulfill quality criteria.',
                          event.short_str(), sfile)
             continue
+        # Apply AGC if required
+        if apply_agc:
+            Logger.info('Applying AGC to template stream')
+            wavef = wavef.agc(agc_window_sec, **kwargs)
         if check_template_strict:
             templateSt = check_template(
                 templateSt, template_length, remove_nan_strict=True,
@@ -467,6 +472,7 @@ def create_template_objects(
         prepick, samp_rate, seisan_wav_path, clients=[], inv=Inventory(),
         remove_response=False, noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
+        apply_agc=False, agc_window_sec=5,
         min_n_traces=8, write_out=False, templ_path='Templates',
         prefix='', make_pretty_plot=False,
         check_template_strict=True, allow_channel_duplication=True,
@@ -586,6 +592,7 @@ def create_template_objects(
                 remove_response=remove_response,
                 noise_balancing=noise_balancing,
                 balance_power_coefficient=balance_power_coefficient,
+                apply_agc=apply_agc, agc_window_sec=agc_window_sec,
                 ground_motion_input=ground_motion_input,
                 write_out=write_out, templ_path=templ_path, prefix=prefix,
                 min_n_traces=min_n_traces, make_pretty_plot=make_pretty_plot, 
@@ -632,6 +639,8 @@ def create_template_objects(
     label = ''
     if noise_balancing:
         label = label + 'balNoise_'
+    if apply_agc:
+        label = label + 'agc_'
     if write_out:
         tribe.write('TemplateObjects/' + prefix + 'Templates_min'
                     + str(min_n_traces) + 'tr_' + label + str(len(tribe)))

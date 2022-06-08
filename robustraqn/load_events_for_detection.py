@@ -18,7 +18,7 @@ from collections import Counter
 
 from obspy.core.event import (Catalog, Pick, Arrival, WaveformStreamID,
                               CreationInfo)
-from obspy.core.stream import Stream
+# from obspy.core.stream import Stream
 from obspy.core.event import Comment
 from obspy.core.inventory.inventory import Inventory
 from obspy.io.nordic.core import read_nordic
@@ -42,8 +42,10 @@ from eqcorrscan.utils.catalog_utils import filter_picks
 
 from obsplus.events.validate import attach_all_resource_ids
 from obsplus.stations.pd import stations_to_df
+from rtm.waveform import _agc
 
 # import obustraqn.spectral_tools
+from robustraqn.obspy.core.stream import Stream
 from robustraqn.spectral_tools import st_balance_noise, Noise_model
 from robustraqn.quality_metrics import get_parallel_waveform_client
 from robustraqn.seimic_array_tools import get_station_sites
@@ -1559,8 +1561,9 @@ def _init_processing_per_channel_wRotation(
         skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
         std_network_code="NS", std_location_code="00", std_channel_prefix="BH",
         detrend_type='simple', taper_fraction=0.005, downsampled_max_rate=25,
-        noise_balancing=False, balance_power_coefficient=2, parallel=False,
-        cores=1, **kwargs):
+        noise_balancing=False, balance_power_coefficient=2, apply_agc=False,
+        agc_window_sec=5, agc_method='gismo',
+        parallel=False, cores=1, **kwargs):
     """
     Inner loop over which the initial processing can be parallelized
     """
@@ -1614,6 +1617,13 @@ def _init_processing_per_channel_wRotation(
         st = st_balance_noise(
             st, inv, balance_power_coefficient=balance_power_coefficient)
         st = st.taper(0.005, type='hann', max_length=None, side='both')
+
+    # TODO: agc needs to be moved to after filtering
+    # if apply_agc and agc_window_sec and agc_method:
+    #     Logger.info('Applying AGC...')
+    #     # Using the "newest" Stream below (copied within the AGC function)
+    #     # st = _automatic_gain_control(st, agc_window_sec=, agc_method=agc_method)
+    #     st = st.agc(agc_window_sec=agc_window_sec, agc_method=agc_method)
 
     # Put masked array into response-corrected stream st:
     for j, tr in enumerate(st):
@@ -2470,10 +2480,10 @@ def reevaluate_detections(
         party, short_tribe, stream, threshold_type='MAD', threshold=9,
         re_eval_thresh_factor=0.6, trig_int=40.0, overlap='calculate',
         plot=False, plotDir='DetectionPlots', daylong=False, fill_gaps=False,
-        ignore_bad_data=False, ignore_length=True, parallel_process=False,
-        cores=None, xcorr_func='fftw', concurrency=None, arch='precise',
-        group_size=1, full_peaks=False, save_progress=False,
-        process_cores=None, spike_test=False, min_chans=4,
+        ignore_bad_data=False, ignore_length=True, pre_processed=False,
+        parallel_process=False, cores=None, xcorr_func='fftw',
+        concurrency=None, arch='precise', group_size=1, full_peaks=False,
+        save_progress=False, process_cores=None, spike_test=False, min_chans=4,
         time_difference_threshold=3, detect_value_allowed_error=60,
         return_party_with_short_templates=False, min_n_station_sites=4):
     """
@@ -2559,8 +2569,9 @@ def reevaluate_detections(
     short_party = short_tribe.detect(
         stream=det_st, threshold=threshold, trig_int=trig_int/10,
         threshold_type=threshold_type, overlap=overlap, plot=plot,
-        plotDir=plotDir, daylong=daylong, fill_gaps=fill_gaps,
-        ignore_bad_data=ignore_bad_data, ignore_length=ignore_length,
+        plotDir=plotDir, daylong=daylong, pre_processed=pre_processed,
+        fill_gaps=fill_gaps, ignore_bad_data=ignore_bad_data,
+        ignore_length=ignore_length,
         parallel_process=parallel_process, cores=cores,
         concurrency=concurrency, xcorr_func=xcorr_func, group_size=group_size,
         full_peaks=full_peaks, save_progress=save_progress,

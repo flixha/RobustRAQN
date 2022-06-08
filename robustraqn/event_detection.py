@@ -29,6 +29,7 @@ from importlib import reload
 import numpy as np
 import pickle
 import hashlib
+from joblib import Parallel, delayed, parallel_backend
 
 from timeit import default_timer
 import logging
@@ -36,7 +37,7 @@ import logging
 
 from obspy import read_inventory
 #from obspy.core.event import Event, Origin, Catalog
-from obspy.core.stream import Stream
+# from obspy.core.stream import Stream
 from obspy.core.inventory.inventory import Inventory
 #from obspy import read as obspyread
 from obspy import UTCDateTime
@@ -46,7 +47,7 @@ from obspy.clients.filesystem.sds import Client
 from robustraqn.processify import processify
 from robustraqn.fancy_processify import fancy_processify
 
-# from eqcorrscan.utils import pre_processing
+from eqcorrscan.utils import pre_processing
 # from eqcorrscan.core import match_filter, lag_calc
 # from eqcorrscan.utils.correlate import CorrelationError
 from eqcorrscan.core.match_filter import Template, Tribe, MatchFilterError
@@ -55,10 +56,12 @@ from eqcorrscan.core.match_filter.party import Party, Family
 from eqcorrscan.utils.plotting import detection_multiplot
 # from eqcorrscan.utils.despike import median_filter
 # from eqcorrscan.core.match_filter import _spike_test
+from eqcorrscan.utils.pre_processing import dayproc, shortproc
 
 # import quality_metrics, spectral_tools, load_events_for_detection
 # reload(quality_metrics)
 # reload(load_events_for_detection)
+from robustraqn.obspy.core import Stream, Trace
 from robustraqn.quality_metrics import (
     create_bulk_request, get_waveforms_bulk, read_ispaq_stats,
     get_parallel_waveform_client)
@@ -155,7 +158,8 @@ def run_day_detection(
         clients, tribe, date, ispaq, selected_stations,
         parallel=False, cores=1, io_cores=1, remove_response=False,
         inv=Inventory(), noise_balancing=False, let_days_overlap=True,
-        balance_power_coefficient=2, n_templates_per_run=20, xcorr_func='fftw',
+        balance_power_coefficient=2, apply_agc=False, agc_window_sec=5,
+        n_templates_per_run=20, xcorr_func='fftw',
         concurrency=None, arch='precise', trig_int=0, threshold=10,
         threshold_type='MAD', re_eval_thresh_factor=0.6, min_chans=10,
         minimum_sample_rate=20, time_difference_threshold=3,
@@ -326,6 +330,47 @@ def run_day_detection(
         tribe, short_tribe, day_st = prepare_day_overlap(
             tribe, short_tribe, day_st, starttime_req, endtime_req)
 
+    pre_processed = False
+    if apply_agc and agc_window_sec:
+        lowcuts = list(set([tp.lowcut for tp in tribe]))
+        highcuts = list(set([tp.highcut for tp in tribe]))
+        filt_orders = list(set([tp.filt_order for tp in tribe]))
+        samp_rates = list(set([tp.samp_rate for tp in tribe]))
+        if (len(lowcuts) == 1 and len(highcuts) == 1 and
+                len(filt_orders) == 1 and len(samp_rates) == 1):
+            Logger.info(
+                'All templates have the same trace-processing parameters. '
+                'Preprocessing data once for AGC application.')
+            day_st = shortproc(
+                day_st, lowcut=lowcuts[0], highcut=highcuts[0],
+                filt_order=filt_orders[0], samp_rate=samp_rates[0],
+                starttime=starttime, parallel=parallel, num_cores=cores,
+                ignore_length=False, seisan_chan_names=False, fill_gaps=True,
+                ignore_bad_data=False, fft_threads=1)
+            # TODO: fix error eqcorrscan.core.match_filter.matched_filter:315
+            # _group_process() ERROR Data must be process_length or longer, not computing
+            # when applying agc
+            pre_processed = True
+            Logger.info('Applying AGC to preprocessed stream.')
+            outtic = default_timer()
+            if parallel:
+                # This parallel exection cannot use Loky backend because Loky
+                # reimports Trace and Stream without the monkey-patch for agc.
+                # TODO: figure out how to monkey-patch such that Loky works.
+                with parallel_backend('multiprocessing', n_jobs=cores):
+                    traces = Parallel(n_jobs=cores)(
+                        delayed(tr.agc)(agc_window_sec=agc_window_sec, **kwargs)
+                        for tr in day_st)
+                day_st = Stream(traces)
+            else:
+                day_st = day_st.agc(agc_window_sec=agc_window_sec, **kwargs)
+            outtoc = default_timer()
+            Logger.info('Applying AGC took: {0:.4f}s'.format(outtoc - outtic))
+        else:
+            msg = ('Templates do not have the same trace-processing ' +
+                   'parameters, cannot apply AGC.')
+            raise NotImplementedError(msg)
+
     # Start the detection algorithm on all traces that are available.
     detections = []
     Logger.info('Start match_filter detection on %s with up to %s cores.',
@@ -336,6 +381,8 @@ def run_day_detection(
             threshold_type=threshold_type, overlap='calculate', plot=False,
             plotDir='DetectionPlots', daylong=daylong,
             fill_gaps=True, ignore_bad_data=False, ignore_length=True, 
+            #apply_agc=apply_agc, agc_window_sec=agc_window_sec,
+            pre_processed=pre_processed,
             parallel_process=parallel, cores=cores,
             # concurrency='multiprocess', xcorr_func='time_domain',
             xcorr_func=xcorr_func, concurrency=concurrency, arch=arch,
@@ -363,7 +410,7 @@ def run_day_detection(
     n_families = len([f for f in party if len(f) > 0])
     n_detections = len([d for f in party for d in f])
     Logger.info('Got a party of %s families with %s detections!',
-                str(n_families), str(n_detections))
+                 str(n_families), str(n_detections))
 
     # check that detection occurred on request day, not during overlap time
     if let_days_overlap:
@@ -406,6 +453,7 @@ def run_day_detection(
                 trig_int=trig_int, threshold_type=threshold_type,
                 overlap='calculate', plot=False, plotDir='ReDetectionPlots',
                 fill_gaps=True, ignore_bad_data=False, daylong=daylong,
+                pre_processed=pre_processed,
                 ignore_length=True, parallel_process=parallel, cores=cores,
                 xcorr_func=xcorr_func, concurrency=concurrency, arch=arch,
                 #xcorr_func='time_domain', concurrency='multiprocess', 
@@ -649,3 +697,10 @@ if __name__ == "__main__":
             threshold=12, check_array_misdetections=check_array_misdetections,
             trig_int=40, short_tribe=short_tribe, multiplot=True,
             write_party=True, min_chans=1)
+
+
+# TODO: option to use C|C| instead of C for correlation stats
+# - in line 476 multi_corr.c         # fftw
+# - in line 51, 85 in time_corr.c    # time domain
+# - in line 134 in matched_filter.cu # fmf-gpu
+# - in line 109 in matched_filter.c  # fmf-cpu

@@ -152,8 +152,8 @@ SOFTWARE.
                 n_width, min_periods=n_width, center=True).max())
             scale = scale[half_win_samp : -half_win_samp].ravel()
             # need to remove last sample so that it is the same as old
-            # implementation
-            scale = scale[:-1]
+            # implementation -- or NOT?!
+            # scale = scale[:-1]
         # Fill any Zeros in scale
         if np.any(scale==0): # or np.any(np.isnan(scale))
             Logger.debug('Filling some zeros in AGC scale.')

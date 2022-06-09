@@ -357,10 +357,10 @@ def run_day_detection(
                 # This parallel exection cannot use Loky backend because Loky
                 # reimports Trace and Stream without the monkey-patch for agc.
                 # TODO: figure out how to monkey-patch such that Loky works.
-                with parallel_backend('multiprocessing', n_jobs=cores):
-                    traces = Parallel(n_jobs=cores)(
-                        delayed(tr.agc)(agc_window_sec=agc_window_sec, **kwargs)
-                        for tr in day_st)
+                # with parallel_backend('multiprocessing', n_jobs=cores):
+                traces = Parallel(n_jobs=cores, prefer='threads')(
+                    delayed(tr.agc)(agc_window_sec=agc_window_sec, **kwargs)
+                    for tr in day_st)
                 day_st = Stream(traces)
             else:
                 day_st = day_st.agc(agc_window_sec=agc_window_sec, **kwargs)

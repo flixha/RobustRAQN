@@ -82,83 +82,21 @@ SOFTWARE.
     for tr in self:
         tr.agc(agc_window_sec=agc_window_sec, agc_method=agc_method,
                 method_exec=method_exec)
-
-    # if agc_method == 'gismo':
-    #     for tr in self:
-    #         win_samp = int(tr.stats.sampling_rate * agc_window_sec)
-    #         if win_samp >= tr.stats.npts:
-    #             Logger.warning(
-    #                 'AGC window (%s samples) is longer than trace %s, hence '
-    #                 'amplitudes remain unchanged.', str(win_samp), tr)
-    #             continue
-    #         if method_exec == 'old':
-    #             scale = np.zeros(tr.count() - 2 * win_samp)
-    #             for i in range(-1 * win_samp, win_samp + 1):
-    #                 scale = scale + np.abs(
-    #                     tr.data[win_samp + i : win_samp + i + scale.size])
-    #         elif method_exec == 'new':
-    #             # Quicker version of above code (?)
-    #             # slower:
-    #             # scales = np.zeros((tr.count() - 2 * win_samp, 2 * win_samp + 3))
-    #             # for ns, i in enumerate(range(-1 * win_samp, win_samp + 1)):
-    #             #     scales[:, ns] = np.abs(tr.data[
-    #             #         win_samp + i:win_samp + i + scale.size])
-    #             # scale = np.sum(scales, 1)
-    #             n_width = 2 * win_samp + 1
-    #             # faster!
-    #             # scale = scipy.convolve(
-    #             #     tr.data, np.ones(n_width), mode='valid') / n_width
-    #             # even faster!
-    #             # scale = np.convolve(np.abs(tr.data), np.ones(n_width),
-    #             #                     'valid') / n_width
-    #             # fastest!
-    #             scale = np.array(pd.DataFrame(np.abs(tr.data)).rolling(
-    #                 n_width, min_periods=n_width, center=True).mean())
-    #             scale = np.transpose(scale[~np.isnan(scale)])
-    #         scale = scale / scale.mean()  # Using max() here may better
-    #                                       # preserve inter-trace amplitudes
-    #         # Fill out the ends of scale with its first/last values
-    #         scale = np.hstack((np.ones(win_samp) * scale[0],
-    #                            scale,
-    #                            np.ones(win_samp) * scale[-1]))
-    #         tr.data = tr.data / scale  # "Scale" the data, sample-by-sample
-    #         tr.stats.processing.append('AGC applied via '
-    #                                    f'_agc(agc_window_sec={agc_window_sec}, '
-    #                                    f'method=\'{agc_method}\')')
-
-    # elif agc_method == 'walker':
-    #     for tr in self:
-    #         half_win_samp = int(tr.stats.sampling_rate * agc_window_sec / 2)
-    #         if half_win_samp >= tr.stats.npts:
-    #             Logger.warning(
-    #                 'AGC window (%s samples) is longer than trace %s, hence '
-    #                 'amplitudes remain unchanged.', str(half_win_samp), tr)
-    #             continue
-    #         scale = []
-    #         if method_exec == 'old':
-    #             for i in range(half_win_samp, tr.count() - half_win_samp):
-    #                 # The window is centered on index i
-    #                 scale_max = np.abs(tr.data[i - half_win_samp:
-    #                                         i + half_win_samp]).max()
-    #                 scale.append(scale_max)
-    #         elif method_exec == 'new':
-    #             n_width = 2 * half_win_samp + 1
-    #             scale = np.array(pd.DataFrame(np.abs(tr.data)).rolling(
-    #                 n_width, min_periods=n_width, center=True).max())
-    #             scale = np.transpose(scale[~np.isnan(scale)])
-
-    #         # Fill out the ends of scale with its first/last values
-    #         scale = np.hstack((np.ones(half_win_samp) * scale[0],
-    #                            scale,
-    #                            np.ones(half_win_samp) * scale[-1]))
-    #         tr.data = tr.data / scale  # "Scale" the data, sample-by-sample
-    #         tr.stats.processing.append('AGC applied via '
-    #                                    f'_agc(agc_window_sec={agc_window_sec}, '
-    #                                    f'agc_method=\'{agc_method}\')')
-    # else:
-    #     raise ValueError(f'AGC method \'{agc_method}\' not recognized. Method '
-    #                      'must be either \'gismo\' or \'walker\'.')
     return self
+
+
+# TODO: maybe monkey patch these functions onto Stream ?
+# def extract_array_stream(st, seisarray_prefixes=SEISARRAY_PREFIXES):
+# def normalize_NSLC_codes(st, inv, std_network_code="NS",
+# def try_remove_responses(stream, inventory, taper_fraction=0.05, pre_filt=None,
+# def check_normalize_sampling_rate(
+# load_events_for_detection.py:def init_processing(day_st, starttime, endtime, remove_response=False,
+# load_events_for_detection.py:def init_processing_wRotation(
+# load_events_for_detection.py:def prepare_detection_stream(
+# load_events_for_detection.py:def parallel_detrend(st, parallel=True, cores=None, type='simple'):
+# load_events_for_detection.py:def parallel_merge(st, method=0, fill_value=None, interpolation_samples=0,
+# load_events_for_detection.py:def robust_rotate(stream, inventory, method="->ZNE"):
+# load_events_for_detection.py:def parallel_rotate(st, inv, cores=None, method="->ZNE"):
 
 
 Stream.automatic_gain_control = automatic_gain_control

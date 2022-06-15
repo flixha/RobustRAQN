@@ -13,6 +13,7 @@ from multiprocessing.pool import ThreadPool
 from re import A
 from joblib import Parallel, delayed, parallel_backend
 import pandas as pd
+from itertools import groupby
 
 # from obspy import read_events, read_inventory
 from obspy.core.event import Catalog
@@ -25,6 +26,7 @@ from obspy.core.event import Event
 from obspy.io.nordic.core import read_nordic
 from obspy.core.inventory.inventory import Inventory
 
+from obsplus import events_to_df
 from obsplus.stations.pd import stations_to_df
 
 # reload(eqcorrscan)
@@ -604,13 +606,22 @@ def create_template_objects(
                                     event.preferred_origin().time.month,
                                     event.preferred_origin().time.day))[0:10]
                     for event in catalog])))
-                event_batches = [[
-                    event for event in catalog
-                    if uniq_date == str(UTCDateTime(
-                        event.preferred_origin().time.year,
-                        event.preferred_origin().time.month,
-                        event.preferred_origin().time.day))[0:10]]
-                                 for uniq_date in unique_date_list]
+                # TODO: speed up event batch creation
+                cat_df = events_to_df(catalog)
+                cat_df['events'] = catalog.events
+                cat_df['day'] = cat_df.time.astype(str).str[0:10]
+                event_groups = cat_df.groupby('day')
+                event_batches = [
+                    event_groups.get_group(unique_date_utc).events
+                    for unique_date_utc in unique_date_list]
+                
+                # event_batches = [[
+                #     event for event in catalog
+                #     if uniq_date == str(UTCDateTime(
+                #         event.preferred_origin().time.year,
+                #         event.preferred_origin().time.month,
+                #         event.preferred_origin().time.day))[0:10]]
+                #                  for uniq_date in unique_date_list]
             else:
                 event_batches = [[event] for event in catalog]
                 unique_date_list = list([

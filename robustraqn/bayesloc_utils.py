@@ -643,7 +643,8 @@ def read_bayesloc_events(bayesloc_output_folder, custom_epoch=None):
     return catalog
 
 
-def update_cat_from_bayesloc(cat, bayesloc_stats_out_file, custom_epoch=None):
+def update_cat_from_bayesloc(cat, bayesloc_stats_out_file, custom_epoch=None,
+                             **kwargs):
     """
     Update a catalog's locations from a bayesloc-relocation run
     """
@@ -701,6 +702,8 @@ def update_cat_from_bayesloc(cat, bayesloc_stats_out_file, custom_epoch=None):
             ).arrivals
 
     # Code to sort in the new locations from BAYESLOC / Seisan into catalog
+    # TODO: can this be done in a parallel loop to speed it up? - maybe not
+    #       because of object-id references.
     for event in cat:
         bayes_orig = event.preferred_origin().copy()
         lower_dtime = (bayes_orig.time - s_diff)._get_datetime()

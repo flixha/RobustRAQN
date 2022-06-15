@@ -53,6 +53,7 @@ from robustraqn.quality_metrics import (
 from robustraqn.seimic_array_tools import (
     extract_array_picks, add_array_station_picks, get_station_sites,
     LARGE_APERTURE_SEISARRAY_PREFIXES, get_updated_stations_df)
+from robustraqn.bayesloc_utils import update_cat_from_bayesloc
 
 import logging
 Logger = logging.getLogger(__name__)
@@ -191,6 +192,7 @@ def _create_template_objects(
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         vertical_chans=['Z', 'H'],
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
+        bayesloc_event_solutions=None,
         parallel=False, cores=1, unused_kwargs=True, *args, **kwargs):
     """
     """
@@ -265,6 +267,10 @@ def _create_template_objects(
             select, wavname = read_nordic(
                 event_file, return_wavnames=True, unused_kwargs=unused_kwargs,
                 **kwargs)
+            if bayesloc_event_solutions:
+                Logger.info('Updating catalog from bayesloc solutions')
+                select = update_cat_from_bayesloc(
+                    select, bayesloc_event_solutions, **kwargs)
             # add wavefile-name to output
             wavnames.append(wavname[0])
             event = select[0]
@@ -582,22 +588,30 @@ def create_template_objects(
                 unique_dates = sorted(
                     set([sfile[-6:] + os.path.split(sfile)[-1][0:2]
                         for sfile in sfiles]))
-                for unique_date in unique_dates:
-                    sfile_batch = []
-                    for sfile in sfiles:
-                        check_date = sfile[-6:] + os.path.split(sfile)[-1][0:2]
-                        if (check_date == unique_date):
-                            sfile_batch.append(sfile)
-                    unique_date_utc = str(UTCDateTime(unique_date))[0:10]
-                    unique_date_list.append(unique_date_utc)
-                    if sfile_batch:
-                        sfile_batches.append(sfile_batch)
+                sfiles_df = pd.DataFrame(sfiles, columns =['sfiles'])
+                sfiles_df['day'] = (sfiles_df.sfiles.str[-6:] + pd.DataFrame(
+                    sfiles_df['sfiles'].apply(os.path.split).tolist(),
+                    index=sfiles_df.index).iloc[:, -1].str[0:2])
+                unique_date_list = list(set(sfiles_df['day']))
+                sfile_groups = sfiles_df.groupby('day')
+                event_file_batches = [
+                    list(sfile_groups.get_group(unique_date_utc)['sfiles'])
+                    for unique_date_utc in unique_date_list]
+                # for unique_date in unique_dates:
+                #     sfile_batch = []
+                #     for sfile in sfiles:
+                #         check_date = sfile[-6:] + os.path.split(sfile)[-1][0:2]
+                #         if (check_date == unique_date):
+                #             sfile_batch.append(sfile)
+                #     unique_date_utc = str(UTCDateTime(unique_date))[0:10]
+                #     unique_date_list.append(unique_date_utc)
+                #     if sfile_batch:
+                #         event_file_batches.append(sfile_batch)
             else:
-                sfile_batches = [[sfile] for sfile in sfiles]
+                event_file_batches = [[sfile] for sfile in sfiles]
                 unique_date_list = [
                     str(UTCDateTime(sfile[-6:] + os.path.split(sfile)[-1][0:2]))
                     for sfile in sfiles]
-            event_file_batches = sfile_batches
         elif catalog:
             Logger.info('Preparing event batches from provided catalog')
             if len(catalog) > cores and clients:

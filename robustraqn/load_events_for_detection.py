@@ -137,6 +137,7 @@ def load_event_stream(
         allowed_band_codes="ESBHNMCFDX", forbidden_instrument_codes="NGAL",
         allowed_component_codes="ZNE0123ABCXYRTH", channel_priorities="HBSEN*",
         template_length=300, search_only_month_folders=True, bulk_rejected=[],
+        wavetool_path='/home/felix/Software/SEISANrick/PRO/linux64/wavetool',
         wav_suffixes=['', '.gz'], unused_kwargs=True, cores=1, **kwargs):
     """
     Load the waveforms for an event file (here: Nordic file) while performing
@@ -253,7 +254,7 @@ def load_event_stream(
                 # wavetool:
                 Logger.info('Trying to use wavetool to convert %s:', wav_file)
                 subprocess.run(
-                    ["/home/felix/Software/SEISANrick/PRO/linux64/wavetool " +
+                    [wavetool_path + " " +
                     " -wav_in_file {}".format(full_wav_file) +
                     " -wav_out_file {}".format(new_wav_file_name) +
                     " -format MSEED"], shell=True, env=MY_ENV)

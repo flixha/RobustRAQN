@@ -193,6 +193,7 @@ def _create_template_objects(
         vertical_chans=['Z', 'H'],
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
         bayesloc_event_solutions=None,
+        wavetool_path='/home/felix/Software/SEISANrick/PRO/linux64/wavetool',
         parallel=False, cores=1, unused_kwargs=True, *args, **kwargs):
     """
     """
@@ -325,7 +326,8 @@ def _create_template_objects(
         wavef = load_event_stream(
             event, sfile, seisan_wav_path, relevant_stations, clients=clients,
             st=day_st.copy(), min_samp_rate=samp_rate, pre_event_time=prepick,
-            template_length=template_length, bulk_rejected=bulk_rejected)
+            template_length=template_length, bulk_rejected=bulk_rejected,
+            wavetool_path=wavetool_path)
         if wavef is None or len(wavef) == 0:
             Logger.info('Rejected template: event %s for sfile %s has no '
                         'waveforms available', event.short_str(), sfile)
@@ -526,6 +528,7 @@ def create_template_objects(
         sta_translation_file="station_code_translation.txt",
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         vertical_chans=['Z', 'H'],
+        wavetool_path='/home/felix/Software/SEISANrick/PRO/linux64/wavetool',
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
         parallel=False, cores=1, *args, **kwargs):
     """
@@ -704,6 +707,7 @@ def create_template_objects(
                 std_channel_prefix=std_channel_prefix,
                 vertical_chans=vertical_chans,
                 horizontal_chans=horizontal_chans,
+                wavetool_path=wavetool_path,
                 parallel=thread_parallel, cores=n_threads,
                 *args, **kwargs)
             for nbatch, event_file_batch in enumerate(event_file_batches))
@@ -742,6 +746,7 @@ def create_template_objects(
             std_location_code=std_location_code,
             std_channel_prefix=std_channel_prefix,
             vertical_chans=vertical_chans, horizontal_chans=horizontal_chans,
+            wavetool_path=wavetool_path,
             *args, **kwargs)
 
     label = ''

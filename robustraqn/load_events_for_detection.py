@@ -363,6 +363,10 @@ def load_event_stream(
         # if tr.stats.channel[1] == ' ' and len(tr.stats.channel) == 3:
         #    tr.stats.channel = tr.stats.channel[0] + 'H' + tr.stats.channel[2]
 
+        # try:  # Convert special encodings to something obspy can write
+        # what about: , 'SRO', 'GEOSCOPE', 'CDSN'
+        # if tr.stats.mseed.encoding in ['DWWSSN']:
+
     # Add channels to template, but check if similar components are already
     # present. first, expand input to wildcarded list:
     channel_priorities = [chan_code + "*" for chan_code in channel_priorities]
@@ -2000,6 +2004,10 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
     # Now convert back to 32bit-double to save memory ! (?)
     # if np.dtype(tr.data[0]) == 'float64':
     tr.data = np.float32(tr.data)
+    try:
+        tr.stats.mseed.encoding = 'FLOAT32'
+    except (KeyError, AttributeError):
+        pass
     # before response removed: tr.data is in int32
     # after response removed, tr.data is in float64)
 

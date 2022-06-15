@@ -177,7 +177,7 @@ SOFTWARE.
             #                             f'_agc(agc_window_sec={agc_window_sec}, '
             #                             f'agc_method=\'{agc_method}\')')
         except IndexError:
-            Logger.error('Could not compute AGC scaling for %s', tr)
+            Logger.error('Could not compute AGC scaling for %s', self)
     else:
         raise ValueError(f'AGC method \'{agc_method}\' not recognized. Method '
                          'must be either \'gismo\' or \'walker\'.')

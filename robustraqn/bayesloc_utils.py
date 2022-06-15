@@ -392,12 +392,12 @@ def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
         #         'custom_epoch needs to be of type numpy.datetime64')
         # np.datetime64('1960-01-01T00:00:00') - 
         #     np.datetime64('1970-01-01T00:00:00')
-        if not isinstance(custom_epoch, datetime.datetime):
+        if not isinstance(custom_epoch, datetime):
             raise TypeError(
                 'custom_epoch needs to be of type datetime.datetime')
         # custom_epoch = datetime.datetime(1960,1,1,0,0,0)
         epoch_correction_s = (
-            custom_epoch - datetime.datetime(1970,1,1,0,0,0)).total_seconds()
+            custom_epoch - datetime(1970,1,1,0,0,0)).total_seconds()
         bayes_times = [time.gmtime(value + epoch_correction_s)
                        for value in bayes_df.time_mean.values]
     bayes_utctimes = [
@@ -405,7 +405,7 @@ def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
                     bt.tm_sec + (et - int(et)))
         for bt, et in zip(bayes_times, bayes_df.time_mean.values)]
     bayes_df['utctime'] = bayes_utctimes
-    bayes_df['datetime'] = [butc._get_datetime() for butc in bayes_utctimes]
+    bayes_df['datetime'] = [butc.datetime for butc in bayes_utctimes]
 
     # cat_SgLoc = read_seisan_database('Sfiles_MAD10_Saga_02_Sg')
     # cat_Sgloc_df = events_to_df(cat_SgLoc)
@@ -504,12 +504,12 @@ def read_bayesloc_arrivals(arrival_file, custom_epoch=None):
     arrival_times = [time.gmtime(value) for value in arrival_df.time.values]
     # Allow a custom epoch time, e.g., one that starts before 1970
     if custom_epoch is not None:
-        if not isinstance(custom_epoch, datetime.datetime):
+        if not isinstance(custom_epoch, datetime):
             raise TypeError(
                 'custom_epoch needs to be of type datetime.datetime')
         # custom_epoch = datetime.datetime(1960,1,1,0,0,0)
         epoch_correction_s = (
-            custom_epoch - datetime.datetime(1970,1,1,0,0,0)).total_seconds()
+            custom_epoch - datetime(1970,1,1,0,0,0)).total_seconds()
         arrival_times = [time.gmtime(value + epoch_correction_s)
                          for value in arrival_df.time.values]
     bayes_utctimes = [
@@ -521,10 +521,34 @@ def read_bayesloc_arrivals(arrival_file, custom_epoch=None):
     return arrival_df
 
 
+def get_bayesloc_filepath(path_or_file, default_output_file):
+    """
+    Check if a string is either the final path or the directory to a Bayesloc
+    run - in the latter case, return the path to the relevant file.
+    """
+    if os.path.isdir(path_or_file):
+        test_f = os.path.join(path_or_file, 'origins_ned_stats.out')
+        if os.path.isfile(test_f):
+            path_or_file = test_f
+        else:
+            test_f = os.path.join(path_or_file, 'output',
+                                  'origins_ned_stats.out')
+            if os.path.isfile(test_f):
+                path_or_file = test_f
+            else:
+                msg = ('bayesloc_stats_out_file should be the origin-output ' +
+                       ' file or the directory of the Bayesloc run.')
+                TypeError(msg)
+    return path_or_file
+
+
 def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
     """
     Add bayesloc arrivals to a catalog
     """
+    arrival_file = get_bayesloc_filepath(
+        arrival_file, default_output_file='arrival')
+
     if len(catalog) == 0:
         raise TypeError(
             'Catalog is empty, use bayesloc_utils.read_bayesloc_origins')
@@ -625,7 +649,8 @@ def update_cat_from_bayesloc(cat, bayesloc_stats_out_file, custom_epoch=None):
     """
     # '/home/felix/Documents2/BASE/Detection/Bitdalsvatnet/Relocation/BayesLoc/'
     #     + 'Bitdalsvatnet_04_prior_955_N_Sg/output/origins_ned_stats.out',
-
+    bayesloc_stats_out_file = get_bayesloc_filepath(
+        bayesloc_stats_out_file, default_output_file='origins_ned_stats.out')
     cat_backup = cat.copy()
     # for event in cat:
     #     attach_all_resource_ids(event)
@@ -647,12 +672,14 @@ def update_cat_from_bayesloc(cat, bayesloc_stats_out_file, custom_epoch=None):
         #         'custom_epoch needs to be of type numpy.datetime64')
         # np.datetime64('1960-01-01T00:00:00') - 
         #     np.datetime64('1970-01-01T00:00:00')
-        if not isinstance(custom_epoch, datetime.datetime):
+        if isinstance(custom_epoch, UTCDateTime):
+            custom_epoch = custom_epoch.datetime
+        if not isinstance(custom_epoch, datetime):
             raise TypeError(
                 'custom_epoch needs to be of type datetime.datetime')
         # custom_epoch = datetime.datetime(1960,1,1,0,0,0)
         epoch_correction_s = (
-            custom_epoch - datetime.datetime(1970,1,1,0,0,0)).total_seconds()
+            custom_epoch - datetime(1970,1,1,0,0,0)).total_seconds()
         bayes_times = [time.gmtime(value + epoch_correction_s)
                        for value in bayes_df.time_mean.values]
     bayes_utctimes = [
@@ -711,6 +738,9 @@ def update_cat_from_bayesloc(cat, bayesloc_stats_out_file, custom_epoch=None):
             event.origins.append(bayes_orig)
             event.preferred_origin_id = bayes_orig.resource_id
             # TODO indicate that this solution is from Bayesloc
+            # TODO: load phase probabilities, take the one that is most likely
+            #       the "correct" pick for each phase, and fix picks
+            #       accordingly.
     return cat
 
 

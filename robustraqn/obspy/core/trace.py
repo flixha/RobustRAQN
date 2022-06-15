@@ -80,6 +80,9 @@ SOFTWARE.
         applied
     """
     Logger.debug('Applying AGC to %s', self)
+    if len(self.data) == 0:
+        Logger.warning('Empty trace, cannot apply AGC to %s', self)
+        return self
     if agc_method == 'gismo':
         win_samp = int(self.stats.sampling_rate * agc_window_sec)
         if win_samp >= self.stats.npts:
@@ -123,14 +126,17 @@ SOFTWARE.
                                       # preserve inter-trace amplitudes
 
         # Fill out the ends of scale with its first/last values
-        scale = np.hstack((np.ones(win_samp) * scale[0],
-                            scale,
-                            np.ones(win_samp) * scale[-1]))
+        try:
+            scale = np.hstack((np.ones(win_samp) * scale[0],
+                               scale,
+                               np.ones(win_samp) * scale[-1]))
 
-        self.data = self.data / scale  # "Scale" the data, sample-by-sample
-        # self.stats.processing.append('AGC applied via '
-        #                             f'_agc(agc_window_sec={agc_window_sec}, '
-        #                             f'method=\'{agc_method}\')')
+            self.data = self.data / scale  # "Scale" the data, sample-by-sample
+            # self.stats.processing.append('AGC applied via '
+            #                             f'_agc(agc_window_sec={agc_window_sec}, '
+            #                             f'method=\'{agc_method}\')')
+        except IndexError:
+            Logger.error('Could not compute AGC scaling for %s', tr)
 
     elif agc_method == 'walker':
         half_win_samp = int(self.stats.sampling_rate * agc_window_sec / 2)
@@ -161,14 +167,17 @@ SOFTWARE.
             scale_s.replace(to_replace=0, method='ffill', inplace=True)
             scale = scale_s.values
 
-        # Fill out the ends of scale with its first/last values
-        scale = np.hstack((np.ones(half_win_samp) * scale[0],
-                           scale,
-                           np.ones(half_win_samp) * scale[-1]))
-        self.data = self.data / scale  # "Scale" the data, sample-by-sample
-        # self.stats.processing.append('AGC applied via '
-        #                             f'_agc(agc_window_sec={agc_window_sec}, '
-        #                             f'agc_method=\'{agc_method}\')')
+        try:
+            # Fill out the ends of scale with its first/last values
+            scale = np.hstack((np.ones(half_win_samp) * scale[0],
+                            scale,
+                            np.ones(half_win_samp) * scale[-1]))
+            self.data = self.data / scale  # "Scale" the data, sample-by-sample
+            # self.stats.processing.append('AGC applied via '
+            #                             f'_agc(agc_window_sec={agc_window_sec}, '
+            #                             f'agc_method=\'{agc_method}\')')
+        except IndexError:
+            Logger.error('Could not compute AGC scaling for %s', tr)
     else:
         raise ValueError(f'AGC method \'{agc_method}\' not recognized. Method '
                          'must be either \'gismo\' or \'walker\'.')

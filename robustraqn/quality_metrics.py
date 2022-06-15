@@ -379,6 +379,9 @@ def create_bulk_request(
     """
     Logger.info('Creating bulk request for %s - %s.', str(starttime)[0:19],
                 str(endtime)[0:19])
+    if len(stations) == 0:
+        Logger.warning('Creating bulk request for Zero stations, are you sure '
+                       'about that?')
     # Do no yet allow requests that are much longer than one day (some overlap
     # at day-boundary can be requested).
     if endtime - starttime > 86400 * 1.5:

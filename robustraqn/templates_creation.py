@@ -575,6 +575,7 @@ def create_template_objects(
         unique_date_list = []
         event_file_batches = []
         if sfiles:
+            Logger.info('Preparing file batches from provided filenames')
             if len(sfiles) > cores and clients:
                 unique_dates = sorted(
                     set([sfile[-6:] + os.path.split(sfile)[-1][0:2]
@@ -596,6 +597,7 @@ def create_template_objects(
                     for sfile in sfiles]
             event_file_batches = sfile_batches
         elif catalog:
+            Logger.info('Preparing event batches from provided catalog')
             if len(catalog) > cores and clients:
                 unique_date_list = sorted(list(set([
                     str(UTCDateTime(event.preferred_origin().time.year,
@@ -622,6 +624,7 @@ def create_template_objects(
 
         # Split ispaq-stats into batches if they exist
         if ispaq is not None:
+            Logger.info('Preparing quality metrics batches.')
             if ispaq.index.name != 'startday':
                 ispaq['startday'] = ispaq['start'].str[0:10]
                 ispaq = ispaq.set_index(['startday'])
@@ -644,6 +647,7 @@ def create_template_objects(
             for unique_date_utc in unique_date_list:
                 day_stats_list.append(ispaq)
 
+        Logger.info('Start parallel template creation.')
         res_out = Parallel(n_jobs=cores)(
             delayed(_create_template_objects)(
                 events_files=event_file_batch.copy(),
@@ -685,6 +689,7 @@ def create_template_objects(
             events_files = catalog
         else:
             NotImplementedError(not_cat_or_sfiles_msg)
+        Logger.info('Start serial template creation.')
         (tribe, wavnames) = _create_template_objects(
             events_files=events_files, catalog=catalog,
             selected_stations=selected_stations,

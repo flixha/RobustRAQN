@@ -512,6 +512,7 @@ def find_array_picks_baz_appvel(
             # If there is no origin (e.g., for newly picked events),
             # then don't try to compute BAZ or app-vel
             can_calculate_baz_appvel = True
+            # TODO: select the origin with the most complete information
             origin = event.preferred_origin()
             if origin is None:
                 try: 
@@ -555,7 +556,7 @@ def find_array_picks_baz_appvel(
                                     source_depth_in_km=origin.depth / 1000,
                                     distance_in_degree=arrival.distance,
                                     phase_list=[arrival.phase])
-                            except ValueError as e:
+                            except (TypeError, ValueError) as e:
                                 Logger.exception(
                                     'Taupy failed when computing phase %s for '
                                     'array %s: ', phase_hint, seisarray_prefix)

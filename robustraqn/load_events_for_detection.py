@@ -146,7 +146,7 @@ def load_event_stream(
     # Stop event processing if there are no waveform files
     wavfilenames = []
     if isinstance(sfile, str) and len(sfile) > 0:
-        select, wavname = read_nordic(event_file, return_wavnames=True,
+        select, wavname = read_nordic(sfile, return_wavnames=True,
                                       unused_kwargs=unused_kwargs, **kwargs)
         wavfilenames = wavname[0]
 

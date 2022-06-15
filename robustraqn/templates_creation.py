@@ -625,7 +625,7 @@ def create_template_objects(
                 cat_df['events'] = catalog.events
                 cat_df['day'] = cat_df.time.astype(str).str[0:10]
                 event_groups = cat_df.groupby('day')
-                event_batches = [
+                event_file_batches = [
                     event_groups.get_group(unique_date_utc).events
                     for unique_date_utc in unique_date_list]
                 
@@ -637,13 +637,12 @@ def create_template_objects(
                 #         event.preferred_origin().time.day))[0:10]]
                 #                  for uniq_date in unique_date_list]
             else:
-                event_batches = [[event] for event in catalog]
+                event_file_batches = [[event] for event in catalog]
                 unique_date_list = list([
                     str(UTCDateTime(event.preferred_origin().time.year,
                                     event.preferred_origin().time.month,
                                     event.preferred_origin().time.day))[0:10]
                     for event in catalog])
-            event_file_batches = event_batches
         else:
             NotImplementedError(not_cat_or_sfiles_msg)
 

@@ -585,18 +585,18 @@ def create_template_objects(
         if sfiles:
             Logger.info('Preparing file batches from provided filenames')
             if len(sfiles) > cores and clients:
-                unique_dates = sorted(
-                    set([sfile[-6:] + os.path.split(sfile)[-1][0:2]
-                        for sfile in sfiles]))
                 sfiles_df = pd.DataFrame(sfiles, columns =['sfiles'])
                 sfiles_df['day'] = (sfiles_df.sfiles.str[-6:] + pd.DataFrame(
                     sfiles_df['sfiles'].apply(os.path.split).tolist(),
                     index=sfiles_df.index).iloc[:, -1].str[0:2])
-                unique_date_list = list(set(sfiles_df['day']))
+                unique_date_list = sorted(list(set(sfiles_df['day'])))
                 sfile_groups = sfiles_df.groupby('day')
                 event_file_batches = [
                     list(sfile_groups.get_group(unique_date_utc)['sfiles'])
                     for unique_date_utc in unique_date_list]
+                # unique_dates = sorted(
+                #     set([sfile[-6:] + os.path.split(sfile)[-1][0:2]
+                #         for sfile in sfiles]))
                 # for unique_date in unique_dates:
                 #     sfile_batch = []
                 #     for sfile in sfiles:

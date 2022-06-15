@@ -136,7 +136,7 @@ SOFTWARE.
             #                             f'_agc(agc_window_sec={agc_window_sec}, '
             #                             f'method=\'{agc_method}\')')
         except IndexError:
-            Logger.error('Could not compute AGC scaling for %s', tr)
+            Logger.error('Could not compute AGC scaling for %s', self)
 
     elif agc_method == 'walker':
         half_win_samp = int(self.stats.sampling_rate * agc_window_sec / 2)

@@ -175,5 +175,14 @@ SOFTWARE.
     return self
 
 
+# TODO: maybe monkey patch these functions onto Trace ?
+# def balance_noise(self, inv, balance_power_coefficient=2,
+# def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
+# def load_events_for_detection.py:def _init_processing_per_channel(
+# def load_events_for_detection.py:def _init_processing_per_channel_wRotation(
+
+
+
+
 Trace.automatic_gain_control = automatic_gain_control
 Trace.agc = automatic_gain_control

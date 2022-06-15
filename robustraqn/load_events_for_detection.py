@@ -127,27 +127,29 @@ def read_seisan_database(database_path, cores=1, nordic_format='UKN',
             attach_all_resource_ids(event)
     # attach_all_resource_ids(cat)
     # validate_catalog(cat)
-    
+    cat = Catalog(sorted(cat, key=lambda x: x.preferred_origin().time))
 
     return cat
 
 
 def load_event_stream(
-        event, sfile, seisan_wav_path, selected_stations, clients=[],
-        st=Stream(), min_samp_rate=np.nan, pre_event_time=30,
+        event, sfile='', seisan_wav_path=None, selected_stations=[],
+        clients=[], st=Stream(), min_samp_rate=np.nan, pre_event_time=30,
         allowed_band_codes="ESBHNMCFDX", forbidden_instrument_codes="NGAL",
         allowed_component_codes="ZNE0123ABCXYRTH", channel_priorities="HBSEN*",
         template_length=300, search_only_month_folders=True, bulk_rejected=[],
-        wav_suffixes=['', '.gz'], unused_kwargs=True, **kwargs):
+        wav_suffixes=['', '.gz'], unused_kwargs=True, cores=1, **kwargs):
     """
     Load the waveforms for an event file (here: Nordic file) while performing
     some checks for duplicates, incompleteness, etc.
     """
     origin = event.preferred_origin() or event.origins[0]
     # Stop event processing if there are no waveform files
-    select, wavname = read_nordic(sfile, return_wavnames=True,
-                                  unused_kwargs=unused_kwargs, **kwargs)
-    wavfilenames = wavname[0]
+    wavfilenames = []
+    if isinstance(sfile, str) and len(sfile) > 0:
+        select, wavname = read_nordic(event_file, return_wavnames=True,
+                                      unused_kwargs=unused_kwargs, **kwargs)
+        wavfilenames = wavname[0]
 
     # # Read extra wavefile names from comments
     # if search_only_month_folders:
@@ -180,81 +182,96 @@ def load_event_stream(
 
     if not wavfilenames:
         Logger.warning('Event %s: no waveform file links in sfile', sfile)
-    for wav_file in wavfilenames:
-        # Check that there are proper mseed/SEISAN7.0 waveform files
-        if (wav_file[0:3] == 'ARC' or wav_file[0:4] == 'WAVE' or
-                wav_file[0:6] == 'ACTION' or wav_file[0:6] == 'OLDACT'):
-            continue
+    # If a path is provided, read waveform files from filenames. If waveform
+    # filepaths are absolute, then set seisan_wav_path to ''
+    if seisan_wav_path is not None:
+        for wav_file in wavfilenames:
+            # Check that there are proper mseed/SEISAN7.0 waveform files
+            if (wav_file[0:3] == 'ARC' or wav_file[0:4] == 'WAVE' or
+                    wav_file[0:6] == 'ACTION' or wav_file[0:6] == 'OLDACT'):
+                continue
 
-        # Check if the wav-file is in the main folder or Seisan year-month
-        # subfolders
-        wav_file_found = False
-        for wav_suffix in wav_suffixes:
-            full_wav_file = os.path.join(
-                seisan_wav_path, wav_file + wav_suffix)
-            if not os.path.isfile(full_wav_file):
+            # Check if the wav-file is in the main folder or Seisan year-month
+            # subfolders
+            wav_file_found = False
+            for wav_suffix in wav_suffixes:
                 full_wav_file = os.path.join(
-                    seisan_wav_path, str(origin.time.year),
-                    "{:02d}".format(origin.time.month), wav_file + wav_suffix)
-                # Check for station's subdirectory just above WAV-path
-                # check e.g. file 2005-07-09-1833-27S.BER___003 in folder
-                # BER__/2005/07
+                    seisan_wav_path, wav_file + wav_suffix)
                 if not os.path.isfile(full_wav_file):
-                    if len(wav_file.split('.')) > 1:
-                        full_wav_file = os.path.join(
-                            os.path.dirname(seisan_wav_path),
-                            wav_file.split('.')[1][0:5], str(origin.time.year),
-                            "{:02d}".format(origin.time.month),
-                            wav_file + wav_suffix)
-                    if os.path.isfile(full_wav_file):
+                    full_wav_file = os.path.join(
+                        seisan_wav_path, str(origin.time.year),
+                        "{:02d}".format(origin.time.month),
+                        wav_file + wav_suffix)
+                    # Check for station's subdirectory just above WAV-path
+                    # check e.g. file 2005-07-09-1833-27S.BER___003 in folder
+                    # BER__/2005/07
+                    if not os.path.isfile(full_wav_file):
+                        if len(wav_file.split('.')) > 1:
+                            full_wav_file = os.path.join(
+                                os.path.dirname(seisan_wav_path),
+                                wav_file.split('.')[1][0:5],
+                                str(origin.time.year),
+                                "{:02d}".format(origin.time.month),
+                                wav_file + wav_suffix)
+                        if os.path.isfile(full_wav_file):
+                            wav_file_found = True
+                            break
+                    else:
                         wav_file_found = True
                         break
                 else:
                     wav_file_found = True
                     break
+            if not wav_file_found:
+                Logger.warning('Could not find waveform file %s', wav_file)
+                continue
             else:
-                wav_file_found = True
-                break
-        if not wav_file_found:
-            Logger.warning('Could not find waveform file %s', wav_file)
-            continue
-        else:
-            Logger.info('Found wav-file %s', full_wav_file)
+                Logger.info('Found wav-file %s', full_wav_file)
 
-        try:
-            st += obspyread(full_wav_file)
-        except FileNotFoundError as e:
-            Logger.warning('Waveform file %s does not exist', full_wav_file)
-            Logger.warning(e)
-        except PermissionError as e:
-            Logger.warning('Could not read waveform file %s', full_wav_file)
-            Logger.warning(e)
-        except (TypeError, ValueError, AssertionError, SEGYTraceReadingError,
-                InternalMSEEDError, NotImplementedError) as e:
-            Logger.warning('Could not read waveform file %s', full_wav_file)
-            Logger.warning(e)
-            Path(os.path.join(os.getcwd(), 'TMP')).mkdir(
-                parents=True, exist_ok=True)
-            wav_file_name = os.path.normpath(wav_file).split(os.path.sep)[-1]
-            new_wav_file_name = os.path.join('TMP', wav_file_name + '.mseed')
-            # If Obspy cannot read file, try to convert it with Seisan's
-            # wavetool:
-            Logger.info('Trying to use wavetool to convert %s:', wav_file)
-            subprocess.run(
-                ["/home/felix/Software/SEISANrick/PRO/linux64/wavetool " +
-                 " -wav_in_file {}".format(full_wav_file) +
-                 " -wav_out_file {}".format(new_wav_file_name) +
-                 " -format MSEED"], shell=True, env=MY_ENV)
             try:
-                st += obspyread(new_wav_file_name)
-            except FileNotFoundError:
-                Logger.error('Could not read converted file %s, skipping.',
-                             new_wav_file_name)
-    Logger.info('Event %s (sfile %s): read %s traces from event-based waveform'
-                ' files', event.short_str(), sfile, str(len(st)))
+                st += obspyread(full_wav_file)
+            except FileNotFoundError as e:
+                Logger.warning(
+                    'Waveform file %s does not exist', full_wav_file)
+                Logger.warning(e)
+            except PermissionError as e:
+                Logger.warning(
+                    'Could not read waveform file %s', full_wav_file)
+                Logger.warning(e)
+            except (TypeError, ValueError, AssertionError,
+                    SEGYTraceReadingError, InternalMSEEDError,
+                    NotImplementedError) as e:
+                Logger.warning(
+                    'Could not read waveform file %s', full_wav_file)
+                Logger.warning(e)
+                Path(os.path.join(os.getcwd(), 'TMP')).mkdir(
+                    parents=True, exist_ok=True)
+                wav_file_name = os.path.normpath(
+                    wav_file).split(os.path.sep)[-1]
+                new_wav_file_name = os.path.join(
+                    'TMP', wav_file_name + '.mseed')
+                # If Obspy cannot read file, try to convert it with Seisan's
+                # wavetool:
+                Logger.info('Trying to use wavetool to convert %s:', wav_file)
+                subprocess.run(
+                    ["/home/felix/Software/SEISANrick/PRO/linux64/wavetool " +
+                    " -wav_in_file {}".format(full_wav_file) +
+                    " -wav_out_file {}".format(new_wav_file_name) +
+                    " -format MSEED"], shell=True, env=MY_ENV)
+                try:
+                    st += obspyread(new_wav_file_name)
+                except FileNotFoundError:
+                    Logger.error('Could not read converted file %s, skipping.',
+                                 new_wav_file_name)
+        Logger.info(
+            'Event %s (sfile %s): read %s traces from event-based waveform'
+            ' files', event.short_str(), sfile, str(len(st)))
 
     # Request waveforms from client
-    latest_pick = max([p.time for p in event.picks])
+    try:
+        latest_pick = max([p.time for p in event.picks])
+    except ValueError:
+        latest_pick = origin.time + 2 * template_length
     t1 = origin.time - pre_event_time
     t2 = (latest_pick + template_length + 10) or (
         origin.time + template_length * 2)
@@ -265,7 +282,7 @@ def load_event_stream(
         client = get_parallel_waveform_client(client)
         Logger.info('Requesting waveforms from client %s', client)
         add_st = client.get_waveforms_bulk_parallel(
-            bulk_request, parallel=False, cores=1)
+            bulk_request, parallel=False, cores=cores)
         Logger.info('Received %s traces from the client.', len(add_st))
         st += add_st
     if len(st) == 0:
@@ -440,11 +457,6 @@ def load_event_stream(
                 str(n_tr_after), str(n_tr_before))
 
     return st
-
-
-# def prepare_detection_stream(st, parallel=False, cores=None,
-#                              ispaq=pd.DataFrame(), try_despike=False,
-#                              downsampled_max_rate=None):
 
 
 def prepare_detection_stream(

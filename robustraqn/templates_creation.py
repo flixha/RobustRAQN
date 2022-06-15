@@ -21,7 +21,7 @@ from obspy.geodetics.base import gps2dist_azimuth
 from obspy.geodetics import kilometers2degrees, degrees2kilometers
 from obspy.core.stream import Stream
 # from obspy.core.util.base import TypeError
-# from obspy.core.event import Event
+from obspy.core.event import Event
 from obspy.io.nordic.core import read_nordic
 from obspy.core.inventory.inventory import Inventory
 
@@ -174,8 +174,9 @@ def check_template_event_errors_ok(
 
 
 def _create_template_objects(
-        sfiles, selected_stations, template_length, lowcut, highcut, min_snr,
-        prepick, samp_rate, seisan_wav_path, inv=Inventory(), clients=[],
+        events_files=[], selected_stations=[], template_length=60,
+        lowcut=2.5, highcut=9.9, min_snr=5.0, prepick=0.5, samp_rate=20,
+        seisan_wav_path=None, inv=Inventory(), clients=[],
         remove_response=False, noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
         apply_agc=False, agc_window_sec=5,
@@ -191,9 +192,19 @@ def _create_template_objects(
         parallel=False, cores=1, unused_kwargs=True, *args, **kwargs):
     """
     """
-    Logger.info('Start work on %s sfiles to create templates...',
-                int(len(sfiles)))
-    sfiles.sort(key=lambda x: x[-6:])
+    if isinstance(events_files[0], str):
+        input_type = 'sfiles'
+        events_files.sort(key=lambda x: x[-6:])
+    elif isinstance(events_files[0], Event):
+        input_type = 'events'
+        events_files = Catalog(sorted(events_files,
+                                      key=lambda x: x.preferred_origin().time))
+    else:
+        NotImplementedError(
+            'event_files has to be a filename-string or an obspy event')
+
+    Logger.info('Start work on %s sfiles / events to create templates...',
+                len(events_files))
     tribe = Tribe()
     template_names = []
     catalogForTemplates = Catalog()
@@ -201,16 +212,26 @@ def _create_template_objects(
     bulk_rejected = []
 
     day_st = Stream()
-    if clients and len(sfiles) > 1:
-        day_starttime = UTCDateTime(
-            sfiles[0][-6:] + os.path.split(sfiles[0])[-1][0:2])
+    if clients and len(events_files) > 1:
+        Logger.info('Requesting waveform data for one day of candidate '
+                    'template events')
+        if input_type == 'sfiles':
+            # The earliest event time of the day
+            day_starttime = UTCDateTime(
+                events_files[0][-6:] + os.path.split(events_files[0])[-1][0:2])
+            # The latest event time of the day
+            checktime = UTCDateTime(events_files[-1][-6:] +
+                                    os.path.split(events_files[-1])[-1][0:2])
+        else:
+            orig_t = events_files[0].preferred_origin().time
+            day_starttime = UTCDateTime(orig_t.year, orig_t.month, orig_t.day)
+            orig_t = events_files[-1].preferred_origin().time
+            checktime = UTCDateTime(orig_t.year, orig_t.month, orig_t.day)
         # Request the whole day plus/minus a bit more
         starttime = day_starttime - 30 * 60
         endtime = starttime + 24.5 * 60 * 60
         # Check against time of the last sfile / event in batch - it should be
         # fully covered in the 25-hour stream
-        checktime = UTCDateTime(
-            sfiles[-1][-6:] + os.path.split(sfiles[-1])[-1][0:2])
         if (checktime - day_starttime) < 60 * 60 * 24.5:
             if ispaq is not None:
                 bulk_request, bulk_rejected, day_stats = (
@@ -229,25 +250,37 @@ def _create_template_objects(
                     bulk_request, parallel=parallel, cores=cores)
                 Logger.info('Received %s traces from the client.', len(add_st))
                 day_st += add_st
-        clients = []
-        if len(day_st) == 0:
-            Logger.warning('Did not find any waveforms for date %s.',
-                            str(day_starttime))
+            clients = []  # Set empty so not to request archive data again
+            if len(day_st) == 0:
+                Logger.warning('Did not find any waveforms for date %s.',
+                                str(day_starttime))
 
     wavnames = []
     # Loop over all S-files that each contain one event
-    for j, sfile in enumerate(sfiles):
-        Logger.info('Working on S-file: ' + sfile)
-        select, wavname = read_nordic(sfile, return_wavnames=True,
-                                      unused_kwargs=unused_kwargs, **kwargs)
+    for j, event_file in enumerate(events_files):
+        if input_type == 'sfiles':
+            Logger.info('Working on S-file: ' + event_file)
+            select, wavname = read_nordic(
+                event_file, return_wavnames=True, unused_kwargs=unused_kwargs,
+                **kwargs)
+            # add wavefile-name to output
+            wavnames.append(wavname[0])
+            event = select[0]
+            event_str = event_file
+            sfile = event_file
+        else:
+            event_str = event_file.short_str()
+            Logger.info('Working on event: ' + event_str)
+            sfile = ''
+            event = event_file
         relevant_stations = get_all_relevant_stations(
             selected_stations, sta_translation_file=sta_translation_file)
-        event = select[0]
         # TODO: maybe I should select the "best" origin somewhere (e.g.,
         # smallest errors, largest number of stations etc)
         origin = event.preferred_origin()
 
-        if not check_template_event_errors_ok(origin, file=sfile, **kwargs):
+        if not check_template_event_errors_ok(origin, file=event_str,
+                                              **kwargs):
             continue
 
         # Add picks at array stations if requested
@@ -271,7 +304,7 @@ def _create_template_objects(
         tmp_catalog = filter_picks(Catalog([event]), stations=relevant_stations)
         if not tmp_catalog:
             Logger.info('Rejected template: no event for %s after filtering',
-                        sfile)
+                        event_str)
             continue
         event = tmp_catalog[0]
         if not event.picks:
@@ -404,8 +437,6 @@ def _create_template_objects(
                 templ_filename = os.path.join(templ_path, templ_name + '.mseed')
                 t.write(templ_filename, format="MSEED")
             tribe += t
-            # add wavefile-name to output
-            wavnames.append(wavname[0])
 
             # make a nice plot
             sfile_path, sfile_name = os.path.split(sfile)
@@ -468,8 +499,9 @@ def reset_preferred_magnitude(tribe, mag_preference_priority=[('ML', 'BER')]):
 
 
 def create_template_objects(
-        sfiles, selected_stations, template_length, lowcut, highcut, min_snr,
-        prepick, samp_rate, seisan_wav_path, clients=[], inv=Inventory(),
+        sfiles=[], catalog=None, selected_stations=[], template_length=60,
+        lowcut=2.5, highcut=9.9, min_snr=5.0, prepick=0.5, samp_rate=20,
+        seisan_wav_path=None, clients=[], inv=Inventory(),
         remove_response=False, noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
         apply_agc=False, agc_window_sec=5,
@@ -490,8 +522,10 @@ def create_template_objects(
     for sta in selected_stations:
         new_inv += inv.select(station=sta)
     stations_df = get_updated_stations_df(inv)
+    not_cat_or_sfiles_msg = ('Provide either sfiles with filepathsto events, '
+                             'or provide catalog with events')
 
-    if parallel and len(sfiles) > 1:
+    if parallel and (len(sfiles) > 1 or len(catalog) > 1):
         if cores is None:
             cores = min(len(sfiles), cpu_count())
         # Check if I can allow multithreading in each of the parallelized
@@ -539,26 +573,52 @@ def create_template_objects(
         # Run in batches to save time on reading from archive only once per day
         day_stats_list = []
         unique_date_list = []
-        sfile_batches = []
-        if len(sfiles) > cores and clients:
-            unique_dates = sorted(
-                set([sfile[-6:] + os.path.split(sfile)[-1][0:2]
-                     for sfile in sfiles]))
-            for unique_date in unique_dates:
-                sfile_batch = []
-                for sfile in sfiles:
-                    check_date = sfile[-6:] + os.path.split(sfile)[-1][0:2]
-                    if (check_date == unique_date):
-                        sfile_batch.append(sfile)
-                unique_date_utc = str(UTCDateTime(unique_date))[0:10]
-                unique_date_list.append(unique_date_utc)
-                if sfile_batch:
-                    sfile_batches.append(sfile_batch)
+        event_file_batches = []
+        if sfiles:
+            if len(sfiles) > cores and clients:
+                unique_dates = sorted(
+                    set([sfile[-6:] + os.path.split(sfile)[-1][0:2]
+                        for sfile in sfiles]))
+                for unique_date in unique_dates:
+                    sfile_batch = []
+                    for sfile in sfiles:
+                        check_date = sfile[-6:] + os.path.split(sfile)[-1][0:2]
+                        if (check_date == unique_date):
+                            sfile_batch.append(sfile)
+                    unique_date_utc = str(UTCDateTime(unique_date))[0:10]
+                    unique_date_list.append(unique_date_utc)
+                    if sfile_batch:
+                        sfile_batches.append(sfile_batch)
+            else:
+                sfile_batches = [[sfile] for sfile in sfiles]
+                unique_date_list = [
+                    str(UTCDateTime(sfile[-6:] + os.path.split(sfile)[-1][0:2]))
+                    for sfile in sfiles]
+            event_file_batches = sfile_batches
+        elif catalog:
+            if len(catalog) > cores and clients:
+                unique_date_list = sorted(list(set([
+                    str(UTCDateTime(event.preferred_origin().time.year,
+                                    event.preferred_origin().time.month,
+                                    event.preferred_origin().time.day))[0:10]
+                    for event in catalog])))
+                event_batches = [[
+                    event for event in catalog
+                    if uniq_date == str(UTCDateTime(
+                        event.preferred_origin().time.year,
+                        event.preferred_origin().time.month,
+                        event.preferred_origin().time.day))[0:10]]
+                                 for uniq_date in unique_date_list]
+            else:
+                event_batches = [[event] for event in catalog]
+                unique_date_list = list([
+                    str(UTCDateTime(event.preferred_origin().time.year,
+                                    event.preferred_origin().time.month,
+                                    event.preferred_origin().time.day))[0:10]
+                    for event in catalog])
+            event_file_batches = event_batches
         else:
-            sfile_batches = [[sfile] for sfile in sfiles]
-            unique_date_list = [
-                str(UTCDateTime(sfile[-6:] + os.path.split(sfile)[-1][0:2]))
-                for sfile in sfiles]
+            NotImplementedError(not_cat_or_sfiles_msg)
 
         # Split ispaq-stats into batches if they exist
         if ispaq is not None:
@@ -581,13 +641,17 @@ def create_template_objects(
         # Just create extra references to same ispaq-stats dataframe (should
         # not consume extra memory with references only).
         if not day_stats_list:
-            for sfile_batch in sfile_batches:
+            for unique_date_utc in unique_date_list:
                 day_stats_list.append(ispaq)
 
         res_out = Parallel(n_jobs=cores)(
             delayed(_create_template_objects)(
-                sfile_batch, selected_stations, template_length, lowcut, highcut,
-                min_snr, prepick, samp_rate, seisan_wav_path, clients=clients,
+                events_files=event_file_batch.copy(),
+                selected_stations=selected_stations,
+                template_length=template_length,
+                lowcut=lowcut, highcut=highcut, min_snr=min_snr,
+                prepick=prepick, samp_rate=samp_rate,
+                seisan_wav_path=seisan_wav_path, clients=clients,
                 inv=new_inv.select(time=UTCDateTime(unique_date_list[nbatch])),
                 remove_response=remove_response,
                 noise_balancing=noise_balancing,
@@ -595,7 +659,7 @@ def create_template_objects(
                 apply_agc=apply_agc, agc_window_sec=agc_window_sec,
                 ground_motion_input=ground_motion_input,
                 write_out=write_out, templ_path=templ_path, prefix=prefix,
-                min_n_traces=min_n_traces, make_pretty_plot=make_pretty_plot, 
+                min_n_traces=min_n_traces, make_pretty_plot=make_pretty_plot,
                 check_template_strict=check_template_strict,
                 allow_channel_duplication=allow_channel_duplication,
                 normalize_NSLC=normalize_NSLC, add_array_picks=add_array_picks,
@@ -608,17 +672,26 @@ def create_template_objects(
                 horizontal_chans=horizontal_chans,
                 parallel=thread_parallel, cores=n_threads,
                 *args, **kwargs)
-            for nbatch, sfile_batch in enumerate(sfile_batches))
+            for nbatch, event_file_batch in enumerate(event_file_batches))
 
         tribes = [r[0] for r in res_out if r is not None and len(r[0]) > 0]
         wavnames = [r[1][0] for r in res_out
-                    if r is not None and len(r[0]) > 0]
+                    if r is not None and len(r[1]) > 0]
         tribe = Tribe(templates=[tri[0] for tri in tribes if len(tri) > 0])
     else:
+        if sfiles:
+            events_files = sfiles
+        elif catalog:
+            events_files = catalog
+        else:
+            NotImplementedError(not_cat_or_sfiles_msg)
         (tribe, wavnames) = _create_template_objects(
-            sfiles, selected_stations, template_length, lowcut, highcut,
-            min_snr, prepick, samp_rate, seisan_wav_path, inv=new_inv,
-            clients=clients,
+            events_files=events_files, catalog=catalog,
+            selected_stations=selected_stations,
+            template_length=template_length,
+            lowcut=lowcut, highcut=highcut, min_snr=min_snr,
+            prepick=prepick, samp_rate=samp_rate,
+            seisan_wav_path=seisan_wav_path, clients=clients, inv=new_inv,
             remove_response=remove_response, noise_balancing=noise_balancing,
             balance_power_coefficient=balance_power_coefficient,
             ground_motion_input=ground_motion_input,

@@ -370,8 +370,14 @@ def _create_template_objects(
                 wavef, inv,
                 balance_power_coefficient=balance_power_coefficient,
                 ground_motion_input=ground_motion_input)
-            wavef = wavef.detrend('linear').taper(
-                0.15, type='hann', max_length=30, side='both')
+            for tr in wavef:
+                try:
+                    tr = tr.detrend('linear').taper(
+                        0.15, type='hann', max_length=30, side='both')
+                except ValueError as e:
+                    Logger.error('Could not detrend trace %s:', tr)
+                    Logger(e)
+                    continue
 
         # TODO: copy picks for horizontal channels to the other horizontal
         #       channel so that picks can once again be lag-calc-picked on both

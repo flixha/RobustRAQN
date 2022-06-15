@@ -42,7 +42,6 @@ from eqcorrscan.utils.catalog_utils import filter_picks
 
 from obsplus.events.validate import attach_all_resource_ids
 from obsplus.stations.pd import stations_to_df
-from rtm.waveform import _agc
 
 # import obustraqn.spectral_tools
 from robustraqn.obspy.core.stream import Stream

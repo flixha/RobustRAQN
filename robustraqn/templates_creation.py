@@ -388,6 +388,11 @@ def _create_template_objects(
             event=event, stream=wavef, normalize_NSLC=normalize_NSLC, inv=inv,
             sta_translation_file=sta_translation_file,
             vertical_chans=vertical_chans, horizontal_chans=horizontal_chans)
+        
+        # Extra checks for sampling rate and length of trace
+        for tr in wavef.copy():
+            if tr.stats.sampling_rate < 0.99 * samp_rate or tr.stats.npts == 0:
+                wavef.remove(tr)
 
         wavef = pre_processing.shortproc(
             st=wavef, lowcut=lowcut, highcut=highcut, filt_order=4,

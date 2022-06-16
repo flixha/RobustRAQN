@@ -342,7 +342,7 @@ def load_event_stream(
                 continue
         # channels whose sampling rate is lower than the one chosen for the
         # templates
-        if tr.stats.sampling_rate < min_samp_rate:
+        if tr.stats.sampling_rate < 0.99 * min_samp_rate:
             st = st.remove(tr)
             continue
 

@@ -281,9 +281,13 @@ def load_event_stream(
     for client in clients:
         client = get_parallel_waveform_client(client)
         Logger.info('Requesting waveforms from client %s', client)
+        outtic = default_timer()
         add_st = client.get_waveforms_bulk_parallel(
             bulk_request, parallel=False, cores=cores)
-        Logger.info('Received %s traces from the client.', len(add_st))
+        outtoc = default_timer()
+        Logger.info(
+            'Received %s traces from client for one event / file, which took:'
+            ' {0:.4f}s'.format(outtoc - outtic), len(add_st))
         st += add_st
     if len(st) == 0:
         Logger.warning('Did not find any waveforms for sfile %s', sfile)

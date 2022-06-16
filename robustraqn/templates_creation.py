@@ -14,6 +14,7 @@ from re import A
 from joblib import Parallel, delayed, parallel_backend
 import pandas as pd
 from itertools import groupby
+from timeit import default_timer
 
 # from obspy import read_events, read_inventory
 from obspy.core.event import Catalog
@@ -250,10 +251,14 @@ def _create_template_objects(
                                 for s in selected_stations]
             for client in clients:
                 Logger.info('Requesting waveforms from client %s', client)
+                outtic = default_timer()
                 client = get_parallel_waveform_client(client)
                 add_st = client.get_waveforms_bulk_parallel(
                     bulk_request, parallel=parallel, cores=cores)
-                Logger.info('Received %s traces from the client.', len(add_st))
+                outtoc = default_timer()
+                Logger.info(
+                    'Received %s traces from client for whole day, which took:'
+                    ' {0:.4f}s'.format(outtoc - outtic), str(len(st)))
                 day_st += add_st
             clients = []  # Set empty so not to request archive data again
             if len(day_st) == 0:

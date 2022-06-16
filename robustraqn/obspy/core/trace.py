@@ -190,7 +190,11 @@ SOFTWARE.
 # def load_events_for_detection.py:def _init_processing_per_channel(
 # def load_events_for_detection.py:def _init_processing_per_channel_wRotation(
 
-
+# TODO: why does this file fail?    IndexError for scale..
+# from obspy import read
+# from robustraqn.obspy.core import Stream, Trace
+# st = read('/data/seismo-wav/NNSN_/1988/07/88070213.1349J88')
+# st.agc(agc_window_sec=10)
 
 
 Trace.automatic_gain_control = automatic_gain_control

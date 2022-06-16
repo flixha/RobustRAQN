@@ -610,9 +610,13 @@ def create_template_objects(
             Logger.info('Preparing file batches from provided filenames')
             if len(sfiles) > cores and clients:
                 sfiles_df = pd.DataFrame(sfiles, columns =['sfiles'])
-                sfiles_df['day'] = (sfiles_df.sfiles.str[-6:] + pd.DataFrame(
-                    sfiles_df['sfiles'].apply(os.path.split).tolist(),
-                    index=sfiles_df.index).iloc[:, -1].str[0:2])
+                # Create day-column with efficient pandas functinos
+                sfiles_df['day'] = (
+                    sfiles_df.sfiles.str[-6:-2] + '-' +
+                    sfiles_df.sfiles.str[-2:] + '-' +
+                    pd.DataFrame(
+                        sfiles_df['sfiles'].apply(os.path.split).tolist(),
+                        index=sfiles_df.index).iloc[:, -1].str[0:2])
                 unique_date_list = sorted(list(set(sfiles_df['day'])))
                 sfile_groups = sfiles_df.groupby('day')
                 event_file_batches = [
@@ -633,8 +637,8 @@ def create_template_objects(
                 #         event_file_batches.append(sfile_batch)
             else:
                 event_file_batches = [[sfile] for sfile in sfiles]
-                unique_date_list = [
-                    str(UTCDateTime(sfile[-6:] + os.path.split(sfile)[-1][0:2]))
+                unique_date_list = [str(UTCDateTime(
+                    sfile[-6:] + os.path.split(sfile)[-1][0:2]))[0:10]
                     for sfile in sfiles]
         elif catalog:
             Logger.info('Preparing event batches from provided catalog')

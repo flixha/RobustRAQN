@@ -378,7 +378,7 @@ def _create_template_objects(
                         0.15, type='hann', max_length=30, side='both')
                 except ValueError as e:
                     Logger.error('Could not detrend trace %s:', tr)
-                    Logger(e)
+                    Logger.error(e)
                     continue
 
         # TODO: copy picks for horizontal channels to the other horizontal

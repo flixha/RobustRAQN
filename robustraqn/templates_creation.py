@@ -391,7 +391,14 @@ def _create_template_objects(
         
         # Extra checks for sampling rate and length of trace
         for tr in wavef.copy():
-            if tr.stats.sampling_rate < 0.99 * samp_rate or tr.stats.npts == 0:
+            if tr.stats.sampling_rate < 0.99 * samp_rate:
+                Logger.info(
+                    'Removed trace %s because its sample rate (%s) is too low',
+                    tr.stats.sampling_rate)
+                wavef.remove(tr)
+            elif tr.stats.npts < samp_rate:
+                Logger.info('Removed trace %s because it has less than %s '
+                            'samples.', str(tr.stats.npts))
                 wavef.remove(tr)
 
         wavef = pre_processing.shortproc(

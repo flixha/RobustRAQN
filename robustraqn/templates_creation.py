@@ -400,7 +400,7 @@ def _create_template_objects(
                     tr.stats.sampling_rate)
             elif (tr.stats.npts / factor) < samp_rate:
                 Logger.info('Removed trace %s because it has only %s samples.',
-                            str(tr.stats.npts))
+                            tr, str(tr.stats.npts))
             else:
                 st += tr
 

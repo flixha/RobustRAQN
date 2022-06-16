@@ -389,20 +389,23 @@ def _create_template_objects(
             sta_translation_file=sta_translation_file,
             vertical_chans=vertical_chans, horizontal_chans=horizontal_chans)
         
-        # Extra checks for sampling rate and length of trace
+        # Extra checks for sampling rate and length of trace - if a trace is
+        # very short, resample will fail.
+        st = Stream()
         for tr in wavef.copy():
+            factor = tr.stats.sampling_rate / float(samp_rate)
             if tr.stats.sampling_rate < 0.99 * samp_rate:
                 Logger.info(
                     'Removed trace %s because its sample rate (%s) is too low',
                     tr.stats.sampling_rate)
-                wavef.remove(tr)
-            elif tr.stats.npts < samp_rate:
-                Logger.info('Removed trace %s because it has less than %s '
-                            'samples.', str(tr.stats.npts))
-                wavef.remove(tr)
+            elif (tr.stats.npts / factor) < samp_rate:
+                Logger.info('Removed trace %s because it has only %s samples.',
+                            str(tr.stats.npts))
+            else:
+                st += tr
 
         wavef = pre_processing.shortproc(
-            st=wavef, lowcut=lowcut, highcut=highcut, filt_order=4,
+            st=st, lowcut=lowcut, highcut=highcut, filt_order=4,
             samp_rate=samp_rate, parallel=False, num_cores=1)
         # data_envelope = obspy.signal.filter.envelope(st_filt[0].data)
 

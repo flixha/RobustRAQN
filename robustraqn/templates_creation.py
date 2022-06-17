@@ -258,7 +258,7 @@ def _create_template_objects(
                 outtoc = default_timer()
                 Logger.info(
                     'Received %s traces from client for whole day, which took:'
-                    ' {0:.4f}s'.format(outtoc - outtic), str(len(st)))
+                    ' {0:.4f}s'.format(outtoc - outtic), str(len(add_st)))
                 day_st += add_st
             clients = []  # Set empty so not to request archive data again
             if len(day_st) == 0:

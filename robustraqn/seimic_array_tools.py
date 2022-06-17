@@ -68,18 +68,22 @@ LARGE_APERTURE_SEISARRAY_PREFIXES = [
     '@(NSS|SA35)',
     # Nordland
     '@(ROEST|N2RO|N2VA)',
+    '@(LOF|N2SV|N2VI)',
     '@(VAGH|KONS|STOK|LEIR|RAUS|MOR8|FLOS|STOK1|STOK2|NBB13|NBB14|NBB15)',
     '@(GILDE|NBB05|NBB30|MELSS|NBB17|N1304)',  # South 2 of NOrdland
     '@(FAUS|N2TV|NBB08|N2ST)',                 # North 2 of Nordland
     '@(VBYGD|STEI|N2LO|N2DI|N2HS|N2IH)',       # Northern part of Nordland
     '@(KUA|RATU|NIKU|KOVU|KIR|KURU)',
-    '@(SALU|SA15|N7010)',
+    '@(SALU|SA15|SA15A|N7010)',
     '@(DUNU|SA16|N7017)',
+    '@(NIKU|KOVU|RATU|KUA|KIR|SA13)',
     '@(KTK|HEF|LP71|LP81)',
     '@(VADS|SA05|SA05A|SA03)',
     '@(HAMF|SA04|SA07)',
+    '@(KIF|SA12|N2VI)',
     '@(TRO|JETT)',
-    '@(KEV|SA10|ARCES|AR[ABCDE][0-9])']             # ARCES / Kevo
+    '@(KEV|SA10|ARCES|AR[ABCDE][0-9])',
+    '@(SOFL|FAR|IF0[1-9]|IF10|IF07)']             # ARCES / Kevo
 
 # List of beam reference points ("stations") for seismic arrays where the array
 # beam reference point has a name that is not the same as any of the stations.

@@ -2441,7 +2441,7 @@ def print_error_plots(st, path='ErrorPlots', time_str=''):
     current_day_str = str(mid_time)[0:10]
     try:
         if not os.path.isdir(path):
-            os.path.mkdir(path)
+            os.mkdir(path)
         for trace in st:
             png_name = time_str + '_' + trace.stats.station +\
                 '_' + trace.stats.channel + '.png'

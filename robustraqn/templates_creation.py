@@ -71,8 +71,8 @@ def listdir_fullpath(d):
 def _shorten_tribe_streams(
         tribe, tribe_len_pct=0.2, max_tribe_len=None,
         min_n_traces=0, write_out=False, make_pretty_plot=False,
-        prefix='short', noise_balancing=False,
-        write_individual_templates=False):
+        prefix='short', noise_balancing=False, apply_agc=False,
+        write_individual_templates=False, check_len_strict=True):
     """
     Create shorter templates from a tribe of longer templates
     """
@@ -89,8 +89,8 @@ def _shorten_tribe_streams(
             tr.trim(starttime=tr.stats.starttime,
                     endtime=tr.stats.starttime + new_templ_len)
         if len(templ.st) >= min_n_traces:
-            templ_name = str(
-                templ.event.preferred_origin().time)[0:22] + '_' + 'templ'
+            orig = templ.event.preferred_origin() or templ.event.origins[0]
+            templ_name = str(orig.time)[0:22] + '_' + 'templ'
             templ_name = templ_name.lower().replace('-', '_')\
                 .replace(':', '_').replace('.', '_').replace('/', '')
             # make a nice plot
@@ -103,9 +103,20 @@ def _shorten_tribe_streams(
                     size=(25, 50), save=True, savefile=image_name)
             Logger.info("Made shortened template %s", templ_name)
             Logger.info(templ)
+    # Check that all traces are same length
+    if check_len_strict:
+        stempl_lengths = list(set(
+            [tr.stats.npts for templ in short_tribe for tr in templ.st]))
+        # assert len(stempl_lengths) == 1, "Template traces differ in length"
+        if not len(stempl_lengths) == 1:
+            Logger.error("short tribe has traces of unequal length (%s)",
+                         str(stempl_lengths))
+            raise AssertionError()
     label = ''
     if noise_balancing:
         label = label + 'balNoise_'
+    if apply_agc:
+        label = label + 'agc_'
     if write_out:
         short_tribe.write('TemplateObjects/' + prefix + 'Templates_min'
                     + str(min_n_traces) + 'tr_' + label + str(len(short_tribe)))
@@ -705,7 +716,11 @@ def create_template_objects(
                 day_stats_list.append(ispaq)
 
         Logger.info('Start parallel template creation.')
-        res_out = Parallel(n_jobs=cores)(
+        # With multiprocessing as backend, this parallel loop seems to be more
+        # resistant to running out of memory; hence can run with more cores
+        # simultaneously. However, if we are scartching memory, then more cores
+        # will not have any speedup (but it's still more stable with multiproc)
+        res_out = Parallel(n_jobs=cores, backend='multiprocessing')(
             delayed(_create_template_objects)(
                 events_files=event_file_batch.copy(),
                 selected_stations=selected_stations,

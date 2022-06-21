@@ -109,9 +109,8 @@ def _shorten_tribe_streams(
             [tr.stats.npts for templ in short_tribe for tr in templ.st]))
         # assert len(stempl_lengths) == 1, "Template traces differ in length"
         if not len(stempl_lengths) == 1:
-            Logger.error("short tribe has traces of unequal length (%s)",
-                         str(stempl_lengths))
-            raise AssertionError()
+            raise AssertionError("short tribe has traces of unequal length " +
+                                 str(stempl_lengths))
     label = ''
     if noise_balancing:
         label = label + 'balNoise_'

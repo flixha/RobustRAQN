@@ -39,6 +39,7 @@ from eqcorrscan.utils.despike import median_filter
 from eqcorrscan.utils.mag_calc import _max_p2t
 from eqcorrscan.utils.plotting import detection_multiplot
 from eqcorrscan.utils.catalog_utils import filter_picks
+from eqcorrscan.utils.pre_processing import dayproc, shortproc
 
 from obsplus.events.validate import attach_all_resource_ids
 from obsplus.stations.pd import stations_to_df
@@ -126,7 +127,8 @@ def read_seisan_database(database_path, cores=1, nordic_format='UKN',
             attach_all_resource_ids(event)
     # attach_all_resource_ids(cat)
     # validate_catalog(cat)
-    cat = Catalog(sorted(cat, key=lambda x: x.preferred_origin().time))
+    cat = Catalog(sorted(cat, key=lambda x: (
+        x.preferred_origin() or x.origins[0]).time))
 
     return cat
 
@@ -1160,7 +1162,7 @@ def prepare_picks(
 
     event = new_event
     # Select a subset of picks based on user choice
-    origin = event.preferred_origin()
+    origin = event.preferred_origin() or event.origins[0]
     pick_calculation = kwargs.get('pick_calculation')
     if pick_calculation is not None:
         Logger.info('Picks will be calculated for %s', str(pick_calculation))
@@ -1199,6 +1201,52 @@ def prepare_picks(
                         new_event.picks.append(pick)
     event = new_event
     return event
+
+def try_apply_agc(st, tribe, agc_window_sec=5, pre_processed=False,
+                  starttime=None, cores=None, parallel=False, **kwargs):
+    """
+    Wrapper to apply agc to a tribe.
+    """
+    lowcuts = list(set([tp.lowcut for tp in tribe]))
+    highcuts = list(set([tp.highcut for tp in tribe]))
+    filt_orders = list(set([tp.filt_order for tp in tribe]))
+    samp_rates = list(set([tp.samp_rate for tp in tribe]))
+    if (len(lowcuts) == 1 and len(highcuts) == 1 and
+            len(filt_orders) == 1 and len(samp_rates) == 1):
+        Logger.info(
+            'All templates have the same trace-processing parameters. '
+            'Preprocessing data once for AGC application.')
+        st = shortproc(
+            st, lowcut=lowcuts[0], highcut=highcuts[0],
+            filt_order=filt_orders[0], samp_rate=samp_rates[0],
+            starttime=starttime, parallel=parallel, num_cores=cores,
+            ignore_length=False, seisan_chan_names=False, fill_gaps=True,
+            ignore_bad_data=False, fft_threads=1)
+        # TODO: fix error eqcorrscan.core.match_filter.matched_filter:315
+        # _group_process() ERROR Data must be process_length or longer, not computing
+        # when applying agc
+        pre_processed = True
+        Logger.info('Applying AGC to preprocessed stream.')
+        outtic = default_timer()
+        if parallel:
+            # This parallel exection cannot use Loky backend because Loky
+            # reimports Trace and Stream without the monkey-patch for agc.
+            # TODO: figure out how to monkey-patch such that Loky works.
+            # with parallel_backend('multiprocessing', n_jobs=cores):
+            with parallel_backend('threading', n_jobs=cores):
+                traces = Parallel(n_jobs=cores, prefer='threads')(
+                    delayed(tr.agc)(agc_window_sec=agc_window_sec, **kwargs)
+                    for tr in st)
+            st = Stream(traces)
+        else:
+            st = st.agc(agc_window_sec=agc_window_sec, **kwargs)
+        outtoc = default_timer()
+        Logger.info('Applying AGC took: {0:.4f}s'.format(outtoc - outtic))
+    else:
+        msg = ('Templates do not have the same trace-processing ' +
+                'parameters, cannot apply AGC.')
+        raise NotImplementedError(msg)
+    return st, pre_processed
 
 
 def init_processing(day_st, starttime, endtime, remove_response=False,

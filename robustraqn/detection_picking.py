@@ -33,7 +33,8 @@ from robustraqn.quality_metrics import (
     get_parallel_waveform_client)
 from robustraqn.load_events_for_detection import (
     prepare_detection_stream, init_processing, init_processing_wRotation,
-    get_all_relevant_stations, normalize_NSLC_codes, reevaluate_detections)
+    get_all_relevant_stations, normalize_NSLC_codes, reevaluate_detections,
+    try_apply_agc)
 from robustraqn.event_detection import prepare_day_overlap
 from robustraqn.spectral_tools import (
     Noise_model, get_updated_inventory_with_noise_models)
@@ -158,6 +159,7 @@ def pick_events_for_day(
         only_request_detection_stations=True, array_lag_calc=False,
         relevant_stations=[], sta_translation_file='', let_days_overlap=True,
         noise_balancing=False, remove_response=False, inv=Inventory(),
+        apply_agc=False, agc_window_sec=5,
         parallel=False, cores=None, io_cores=1,
         check_array_misdetections=False, trig_int=12, minimum_sample_rate=20,
         time_difference_threshold=8, detect_value_allowed_error=60,
@@ -272,6 +274,13 @@ def pick_events_for_day(
         std_network_code="NS", std_location_code="00",
         std_channel_prefix="BH")
 
+    pre_processed = False
+    if apply_agc and agc_window_sec:
+        day_st, pre_processed = try_apply_agc(
+            day_st, tribe, agc_window_sec=agc_window_sec, starttime=None,
+            pre_processed=pre_processed, cores=cores, parallel=parallel,
+            **kwargs)
+
     # Update parties for picking
     dayparty = prepare_and_update_party(dayparty, tribe, day_st)
 
@@ -297,6 +306,7 @@ def pick_events_for_day(
                 overlap='calculate', plotDir='ReDetectionPlots',
                 plot=False, fill_gaps=True, ignore_bad_data=True,
                 daylong=daylong, ignore_length=True, min_chans=min_det_chans,
+                pre_processed=pre_processed,
                 concurrency='multiprocess', parallel_process=parallel,
                 cores=cores, xcorr_func='time_domain',
                 group_size=n_templates_per_run, process_cores=cores,
@@ -317,8 +327,7 @@ def pick_events_for_day(
                 detection_file_name + '.csv', format='csv', overwrite=True)
 
     # Check if I can do pre-processing just once:
-    if array_lac_calc:
-        pre_processed = False
+    if array_lac_calc and not pre_processed:
         lowcuts = list(set([tp.lowcut for tp in tribe]))
         highcuts = list(set([tp.highcut for tp in tribe]))
         filt_orders = list(set([tp.filt_order for tp in tribe]))

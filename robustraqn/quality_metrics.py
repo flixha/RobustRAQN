@@ -1071,4 +1071,5 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
         ispaq = ispaq.set_index(['startday'])
     if 'short_target' not in ispaq.columns:
         ispaq['short_target'] = ispaq['target'].str[3:-2]
+    Logger.info('Successfully read in %s quality metrics values.', len(ispaq))
     return ispaq

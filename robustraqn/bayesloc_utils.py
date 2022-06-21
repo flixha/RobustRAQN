@@ -212,7 +212,7 @@ def _select_best_origin(
     Select the best origin (considering how much information it has available)
     and append it to priors
     """
-    orig = event.preferred_origin()
+    orig = event.preferred_origin() or event.origins[0]
     # Select the best origin - it should have lat/lon, and the smaller the
     # the error / RMS the better (?)
     if orig.latitude is None or orig.longitude is None:
@@ -374,8 +374,9 @@ def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
     # remove arrivals to avoid error in conversion to dataframe
     for ev in cat:
         try:
-            ev.preferred_origin().arrivals = []
-        except AttributeError:
+            orig = ev.preferred_origin() or ev.origins[0]
+            orig.arrivals = []
+        except (AttributeError, KeyError):
             pass
     cat_df = events_to_df(cat)
     cat_df['events'] = cat.events
@@ -415,9 +416,10 @@ def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
 
     # put back arrivals
     for event, event_backup in zip(cat, cat_backup):
+        backup_orig = (
+            event_backup.preferred_origin() or event_backup.origins[0])
         try:
-            event.preferred_origin().arrivals = event_backup.preferred_origin(
-                ).arrivals
+            orig.arrivals = backup_orig.arrivals
         except AttributeError:
             pass
 
@@ -451,7 +453,7 @@ def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
             cat.append(new_event)
     else:
         for event in cat:
-            bayes_orig = event.preferred_origin().copy()
+            bayes_orig = (event.preferred_origin() or event.origins[0]).copy()
             lower_dtime = (bayes_orig.time - s_diff)._get_datetime()
             upper_dtime = (bayes_orig.time + s_diff)._get_datetime()
 
@@ -490,7 +492,8 @@ def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
                         'bayesloc_event_id': {
                             'value': row.ev_id,
                             'namespace': 'Bayesloc'}}
-                    event.origins.append(bayes_orig)
+                    # event.origins.append(bayes_orig)
+                    event.origins = [bayes_orig] + event.origins
                     event.preferred_origin_id = bayes_orig.resource_id
     return cat, bayes_df
 
@@ -657,7 +660,8 @@ def update_cat_from_bayesloc(cat, bayesloc_stats_out_file, custom_epoch=None,
     #     attach_all_resource_ids(event)
     # remove arrivals to avoid error in conversion to dataframe
     for ev in cat:
-        ev.preferred_origin().arrivals = []
+        orig = ev.preferred_origin() or ev.origins[0]
+        orig.arrivals = []
     cat_df = events_to_df(cat)
     cat_df['events'] = cat.events
 
@@ -698,14 +702,16 @@ def update_cat_from_bayesloc(cat, bayesloc_stats_out_file, custom_epoch=None,
 
     # put back arrivals
     for event, event_backup in zip(cat, cat_backup):
-        event.preferred_origin().arrivals = event_backup.preferred_origin(
-            ).arrivals
+        orig = event.preferred_origin() or event.origins[0]
+        backup_orig = (
+            event_backup.preferred_origin() or event_backup.origins[0])
+        orig.arrivals = backup_orig.arrivals
 
     # Code to sort in the new locations from BAYESLOC / Seisan into catalog
     # TODO: can this be done in a parallel loop to speed it up? - maybe not
     #       because of object-id references.
     for event in cat:
-        bayes_orig = event.preferred_origin().copy()
+        bayes_orig = (event.preferred_origin() or event.origins[0]).copy()
         lower_dtime = (bayes_orig.time - s_diff)._get_datetime()
         upper_dtime = (bayes_orig.time + s_diff)._get_datetime()
 
@@ -738,7 +744,8 @@ def update_cat_from_bayesloc(cat, bayesloc_stats_out_file, custom_epoch=None,
             # new_orig_list.append(bayes_orig)
             # new_orig_list.append(event.origins)
             # event.origins = new_orig_list
-            event.origins.append(bayes_orig)
+            # Put bayesloc origin at first spot in list
+            event.origins = [bayes_orig] + event.origins
             event.preferred_origin_id = bayes_orig.resource_id
             # TODO indicate that this solution is from Bayesloc
             # TODO: load phase probabilities, take the one that is most likely

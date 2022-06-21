@@ -166,12 +166,14 @@ def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
 
     # put back arrivals
     for event, event_backup in zip(cat, cat_backup):
-        event.preferred_origin().arrivals = event_backup.preferred_origin(
-            ).arrivals
+        event_orig = event.preferred_origin() or event.origins[0]
+        backup_orig = (
+            event_backup.preferred_origin() or event_backup.origins[0])
+        event_orig.arrivals = backup_orig.arrivals
 
     # Code to sort in the new locations from growclust into catalog
     for event in cat:
-        cat_orig = event.preferred_origin().copy()
+        cat_orig = (event.preferred_origin() or event.origins[0]).copy()
         lower_dtime = (cat_orig.time - max_diff_seconds)._get_datetime()
         upper_dtime = (cat_orig.time + max_diff_seconds)._get_datetime()
 

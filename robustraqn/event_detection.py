@@ -68,7 +68,7 @@ from robustraqn.quality_metrics import (
 from robustraqn.load_events_for_detection import (
     prepare_detection_stream, init_processing, init_processing_wRotation,
     print_error_plots, get_all_relevant_stations, reevaluate_detections,
-    multiplot_detection)
+    multiplot_detection, try_apply_agc)
 from robustraqn.spectral_tools import (Noise_model,
                                        get_updated_inventory_with_noise_models)
 from robustraqn.templates_creation import create_template_objects
@@ -174,6 +174,7 @@ def run_day_detection(
     """
     Function to run reading, initial processing, detection etc. on one day.
     """
+    Logger.info('Starting detection run for day %s', str(date)[0:10])
     # Keep user's data safe
     tribe = tribe.copy()
     short_tribe = short_tribe.copy()
@@ -332,45 +333,10 @@ def run_day_detection(
 
     pre_processed = False
     if apply_agc and agc_window_sec:
-        lowcuts = list(set([tp.lowcut for tp in tribe]))
-        highcuts = list(set([tp.highcut for tp in tribe]))
-        filt_orders = list(set([tp.filt_order for tp in tribe]))
-        samp_rates = list(set([tp.samp_rate for tp in tribe]))
-        if (len(lowcuts) == 1 and len(highcuts) == 1 and
-                len(filt_orders) == 1 and len(samp_rates) == 1):
-            Logger.info(
-                'All templates have the same trace-processing parameters. '
-                'Preprocessing data once for AGC application.')
-            day_st = shortproc(
-                day_st, lowcut=lowcuts[0], highcut=highcuts[0],
-                filt_order=filt_orders[0], samp_rate=samp_rates[0],
-                starttime=starttime, parallel=parallel, num_cores=cores,
-                ignore_length=False, seisan_chan_names=False, fill_gaps=True,
-                ignore_bad_data=False, fft_threads=1)
-            # TODO: fix error eqcorrscan.core.match_filter.matched_filter:315
-            # _group_process() ERROR Data must be process_length or longer, not computing
-            # when applying agc
-            pre_processed = True
-            Logger.info('Applying AGC to preprocessed stream.')
-            outtic = default_timer()
-            if parallel:
-                # This parallel exection cannot use Loky backend because Loky
-                # reimports Trace and Stream without the monkey-patch for agc.
-                # TODO: figure out how to monkey-patch such that Loky works.
-                # with parallel_backend('multiprocessing', n_jobs=cores):
-                with parallel_backend('threading', n_jobs=cores):
-                    traces = Parallel(n_jobs=cores, prefer='threads')(
-                        delayed(tr.agc)(agc_window_sec=agc_window_sec, **kwargs)
-                        for tr in day_st)
-                day_st = Stream(traces)
-            else:
-                day_st = day_st.agc(agc_window_sec=agc_window_sec, **kwargs)
-            outtoc = default_timer()
-            Logger.info('Applying AGC took: {0:.4f}s'.format(outtoc - outtic))
-        else:
-            msg = ('Templates do not have the same trace-processing ' +
-                   'parameters, cannot apply AGC.')
-            raise NotImplementedError(msg)
+        day_st, pre_processed = try_apply_agc(
+            day_st, tribe, agc_window_sec=agc_window_sec,
+            pre_processed=pre_processed, starttime=None,
+            cores=cores, parallel=parallel, **kwargs)
 
     # Start the detection algorithm on all traces that are available.
     detections = []

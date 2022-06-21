@@ -5,13 +5,15 @@
 
 **Here is a list of some of the features:**
 - performs checks of data quality based on IRIS Mustang data quality metrics (see [ispaq](https://github.com/iris-edu/ispaq) if you'd like to compute quality metrics for your own datasets)
-- reads in mseed data from a Seiscomp Data Structure in parallel
 - takes care of changes in the station setups (e.g., changes in instrument response) and network/station/location/channel codes
 - takes care of mismatches, e.g. for the names of network, channel and location codes between seismic data and metadata in the most sensible way
-- corrects the sampling rate of traces that differ slightly
+- corrects the sampling rate of traces that differ slightly from nominal sampling rate
+- reads in data in parallel (for now, focus on mseed data from a Seiscomp Data Structure)
 - sets sensitive, adjustable thresholds to let users obtain even the smallest detections
 - sets tested, adjustable limits for detections and picked events that sort out a lot of common misdetections in template matching (e.g., minimum number of stations, sites, P- / S-picks)
 - includes all traces from a seismic array for which a pick or beam information is available into the templates, the matched-filter detection, and the lag-calc picking
+- optionally sets station-specific filters derived from noise data
+- optionally applies automatic gain control to reduce the prominence of spurious detections
 
 **In addition, there are tools to:**
 - read and write input/output files for the location programs Growclust and Bayesloc
@@ -20,7 +22,9 @@
 
 **Here is what's still missing (but planned):**
 - read IRIS Mustang metrics directly from SQL database or from webservice
-- weighting of channels in detection
+- weight channels for detection identification
+- support alternative cross correlation metrics like C|C|
+
 
 # INSTALL:
 

@@ -68,9 +68,10 @@ def add_origins_to_detected_events(
         # Find hypocenter of template event
         # detection.template_name
         try:
-            template_orig = tribe[
-                detection.template_name].event.preferred_origin()
-        except AttributeError:
+            template_orig = (
+                tribe[detection.template_name].event.preferred_origin() or
+                tribe[detection.template_name].event.origins[0])
+        except (AttributeError, IndexError):
             Logger.error(
                 'Could not find template %s for related detection, did you '
                 'provide the correct tribe?', detection.template_name)
@@ -79,8 +80,9 @@ def add_origins_to_detected_events(
                 detection.template_name, template_names)
             if len(template_name_match) >= 1:
                 template_name_match = template_name_match[0]
-                template_orig = tribe[
-                    template_name_match].event.preferred_origin()
+                template_orig = (
+                    tribe[template_name_match].event.preferred_origin() or
+                    tribe[template_name_match].event.origins[0])
                 Logger.warning(
                     'Found template with name %s, using instead of %s',
                     template_name_match, detection.template_name)
@@ -268,7 +270,7 @@ def postprocess_picked_events(
         # to all corrected picks)
         event = add_origins_to_detected_events(
             Catalog([event]), party, tribe, overwrite_origins=True)[0]
-        if event.preferred_origin() is None:
+        if event.preferred_origin() is None and len(event.origins) == 0:
             Logger.warning('Aborting picking for detection with template %s',
                            detection.template_name)
             continue
@@ -331,7 +333,8 @@ def postprocess_picked_events(
 
     # Sort catalog so that it's in correct order for output
     export_catalog.events = sorted(
-        export_catalog.events, key=lambda d: d.preferred_origin().time)
+        export_catalog.events,
+        key=lambda d: (d.preferred_origin() or d.origins[0]).time)
     #                                        d.origins[0].time
     # Output
     if export_catalog.count() == 0:

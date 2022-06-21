@@ -213,8 +213,8 @@ def _create_template_objects(
         events_files.sort(key=lambda x: x[-6:])
     elif isinstance(events_files[0], Event):
         input_type = 'events'
-        events_files = Catalog(sorted(events_files,
-                                      key=lambda x: x.preferred_origin().time))
+        events_files = Catalog(sorted(events_files, key=lambda x: (
+            x.preferred_origin() or x.origins[0]).time))
     else:
         NotImplementedError(
             'event_files has to be a filename-string or an obspy event')
@@ -239,9 +239,13 @@ def _create_template_objects(
             checktime = UTCDateTime(events_files[-1][-6:] +
                                     os.path.split(events_files[-1])[-1][0:2])
         else:
-            orig_t = events_files[0].preferred_origin().time
+            # orig_t = events_files[0].preferred_origin().time
+            orig_t = (events_files[0].preferred_origin() or
+                      events_files[0].origins[0]).time
             day_starttime = UTCDateTime(orig_t.year, orig_t.month, orig_t.day)
-            orig_t = events_files[-1].preferred_origin().time
+            # orig_t = events_files[-1].preferred_origin().time
+            orig_t = (events_files[-1].preferred_origin() or
+                      events_files[-1].origins[0]).time
             checktime = UTCDateTime(orig_t.year, orig_t.month, orig_t.day)
         # Request the whole day plus/minus a bit more
         starttime = day_starttime - 30 * 60
@@ -301,7 +305,7 @@ def _create_template_objects(
             selected_stations, sta_translation_file=sta_translation_file)
         # TODO: maybe I should select the "best" origin somewhere (e.g.,
         # smallest errors, largest number of stations etc)
-        origin = event.preferred_origin()
+        origin = event.preferred_origin() or event.origins[0]
 
         if not check_template_event_errors_ok(origin, file=event_str,
                                               **kwargs):
@@ -449,7 +453,8 @@ def _create_template_objects(
                 max_perc_zeros=5)
 
         # templ_name = str(event.origins[0].time) + '_' + 'templ'
-        templ_name = str(event.preferred_origin().time)[0:22] + '_' + 'templ'
+        orig = event.preferred_origin() or event.origins[0]
+        templ_name = str(orig.time)[0:22] + '_' + 'templ'
         templ_name = templ_name.lower().replace('-', '_')\
             .replace(':', '_').replace('.', '_').replace('/', '')
         # templ_name = templ_name.lower().replace(':','_')
@@ -544,6 +549,22 @@ def reset_preferred_magnitude(tribe, mag_preference_priority=[('ML', 'BER')]):
     return tribe
 
 
+def _make_date_list(catalog, unique=True, sorted=True):
+    """
+    Make list of the unique days / dates for events in a catalog
+    """
+    date_list = []
+    for event in catalog:
+        orig = event.preferred_origin() or event.origins[0]
+        date_list.append(str(UTCDateTime(
+            orig.time.year, orig.time.month, orig.time.day))[0:10])
+    if unique:
+        date_list = list(set(date_list))
+    if sorted:
+        date_list = sorted(date_list)
+    return date_list
+
+
 def create_template_objects(
         sfiles=[], catalog=None, selected_stations=[], template_length=60,
         lowcut=2.5, highcut=9.9, min_snr=5.0, prepick=0.5, samp_rate=20,
@@ -560,7 +581,7 @@ def create_template_objects(
         vertical_chans=['Z', 'H'],
         wavetool_path='/home/felix/Software/SEISANrick/PRO/linux64/wavetool',
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
-        parallel=False, cores=1, *args, **kwargs):
+        parallel=False, cores=1, max_events_per_file=200, *args, **kwargs):
     """
       Wrapper for create-template-function
     """
@@ -572,7 +593,8 @@ def create_template_objects(
     not_cat_or_sfiles_msg = ('Provide either sfiles with filepathsto events, '
                              'or provide catalog with events')
 
-    if parallel and (len(sfiles) > 1 or len(catalog) > 1):
+    if parallel and ((sfiles and len(sfiles) > 1) or
+                     (catalog and len(catalog) > 1)):
         if cores is None:
             cores = min(len(sfiles), cpu_count())
         # Check if I can allow multithreading in each of the parallelized
@@ -658,11 +680,13 @@ def create_template_objects(
         elif catalog:
             Logger.info('Preparing event batches from provided catalog')
             if len(catalog) > cores and clients:
-                unique_date_list = sorted(list(set([
-                    str(UTCDateTime(event.preferred_origin().time.year,
-                                    event.preferred_origin().time.month,
-                                    event.preferred_origin().time.day))[0:10]
-                    for event in catalog])))
+                # unique_date_list = sorted(list(set([ 
+                #     str(UTCDateTime(event.preferred_origin().time.year,
+                #                     event.preferred_origin().time.month,
+                #                     event.preferred_origin().time.day))[0:10]
+                #     for event in catalog])))
+                unique_date_list = _make_date_list(catalog, unique=True,
+                                                   sorted=True)
                 # TODO: speed up event batch creation
                 cat_df = events_to_df(catalog)
                 cat_df['events'] = catalog.events
@@ -681,11 +705,13 @@ def create_template_objects(
                 #                  for uniq_date in unique_date_list]
             else:
                 event_file_batches = [[event] for event in catalog]
-                unique_date_list = list([
-                    str(UTCDateTime(event.preferred_origin().time.year,
-                                    event.preferred_origin().time.month,
-                                    event.preferred_origin().time.day))[0:10]
-                    for event in catalog])
+                unique_date_list = _make_date_list(catalog, unique=False,
+                                                   sorted=False)
+                # unique_date_list = list([
+                #     str(UTCDateTime(event.preferred_origin().time.year,
+                #                     event.preferred_origin().time.month,
+                #                     event.preferred_origin().time.day))[0:10]
+                #     for event in catalog])
         else:
             NotImplementedError(not_cat_or_sfiles_msg)
 
@@ -763,7 +789,7 @@ def create_template_objects(
             NotImplementedError(not_cat_or_sfiles_msg)
         Logger.info('Start serial template creation.')
         (tribe, wavnames) = _create_template_objects(
-            events_files=events_files, catalog=catalog,
+            events_files=events_files,
             selected_stations=selected_stations,
             template_length=template_length,
             lowcut=lowcut, highcut=highcut, min_snr=min_snr,
@@ -794,7 +820,8 @@ def create_template_objects(
         label = label + 'agc_'
     if write_out:
         tribe.write('TemplateObjects/' + prefix + 'Templates_min'
-                    + str(min_n_traces) + 'tr_' + label + str(len(tribe)))
+                    + str(min_n_traces) + 'tr_' + label + str(len(tribe)),
+                    max_events_per_file=max_events_per_file, cores=cores)
                     #max_events_per_file=10)
         for templ in tribe:
             templ.write(os.path.join(

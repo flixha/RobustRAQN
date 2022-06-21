@@ -517,7 +517,7 @@ def find_array_picks_baz_appvel(
             # then don't try to compute BAZ or app-vel
             can_calculate_baz_appvel = True
             # TODO: select the origin with the most complete information
-            origin = event.preferred_origin()
+            origin = event.preferred_origin() or event.origins[0]
             if origin is None:
                 try: 
                     origin = event.origins[0]
@@ -759,7 +759,7 @@ def add_array_station_picks(
             seisarray_prefixes=seisarray_prefixes, taup_mod=taup_mod))
     # Try to find the best origin - the preferred one if it has lon/lat, else
     # check further
-    origin = event.preferred_origin()
+    origin = event.preferred_origin() or event.origins[0]
     if origin is None or origin.latitude is None or origin.longitude is None:
         for orig in event.origins:
             if (orig is not None and orig.latitude is not None and

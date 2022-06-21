@@ -372,11 +372,11 @@ def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
     # for event in cat:
     #     attach_all_resource_ids(event)
     # remove arrivals to avoid error in conversion to dataframe
-    orig = event.preferred_origin() or  event.origins[0]
     for ev in cat:
         try:
+            orig = ev.preferred_origin() or ev.origins[0]
             orig.arrivals = []
-        except AttributeError:
+        except (AttributeError, KeyError):
             pass
     cat_df = events_to_df(cat)
     cat_df['events'] = cat.events
@@ -492,7 +492,8 @@ def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
                         'bayesloc_event_id': {
                             'value': row.ev_id,
                             'namespace': 'Bayesloc'}}
-                    event.origins.append(bayes_orig)
+                    # event.origins.append(bayes_orig)
+                    event.origins = [bayes_orig] + event.origins
                     event.preferred_origin_id = bayes_orig.resource_id
     return cat, bayes_df
 

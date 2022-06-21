@@ -15,15 +15,19 @@
 - optionally sets station-specific filters derived from noise data
 - optionally applies automatic gain control to reduce the prominence of spurious detections
 
-**In addition, there are tools to:**
+**In addition, there is extra support for:**
 - read and write input/output files for the location programs Growclust and Bayesloc
 - sample scripts to deploy a detection run on a SLURM cluster with a two-level parallelization across multiple nodes.
+- tested on a range of datasets to identify common challenges in template matching and handle many edge cases
 
 
 **Here is what's still missing (but planned):**
+- include automatic unit testing
 - read IRIS Mustang metrics directly from SQL database or from webservice
 - weight channels for detection identification
 - support alternative cross correlation metrics like C|C|
+- support running from configuration file
+- include detection benchmark sets
 
 
 # INSTALL:

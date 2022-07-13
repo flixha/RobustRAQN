@@ -116,8 +116,12 @@ def prepare_and_update_party(dayparty, tribe, day_st):
                     _time_diff = det_pick.time - templ_picks[0].time
                     time_diffs.append(_time_diff)
                 elif len(templ_picks) > 1:
-                    msg = ('Lag-calc does not support two picks on the ' +
-                            'same trace, check your picking-templates!')
+                    msg = ('Lag-calc does not support two picks on the same '
+                           'trace, check your picking-template {name}, trace '
+                           ' {trace}, phase {phase}!'.format(
+                               name=detection.template_name,
+                               trace=pick.waveform_id.id,
+                               phase=pick.phase_hint))
                     raise LagCalcError(msg)
             # for det_tr in family.template.st:
             #     pick_tr = pick_template.st.select(id=det_tr.id)

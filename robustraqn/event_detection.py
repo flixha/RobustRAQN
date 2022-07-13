@@ -209,7 +209,9 @@ def run_day_detection(
             noise_balancing, balance_power_coefficient, xcorr_func, arch,
             trig_int, threshold, re_eval_thresh_factor, min_chans, multiplot,
             check_array_misdetections, short_tribe, write_party,
-            detection_path, redetection_path])
+            detection_path, redetection_path, time_difference_threshold,
+            minimum_sample_rate, min_n_station_sites, apply_agc,
+            agc_window_sec])
         # Check hash against existing list
         try:
             day_hash_df = pd.read_csv(day_hash_file, names=["date", "hash"])

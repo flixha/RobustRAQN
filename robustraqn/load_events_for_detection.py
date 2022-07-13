@@ -693,8 +693,13 @@ def robust_rotate(stream, inventory, method="->ZNE"):
         stream = stream.rotate(method, inventory=inventory)
     except Exception as e:
         try:
+            st_id = ' '
+            st_time = ' '
+            if stream:
+                st_id = stream[0].id
+                st_time = str(stream[0].id.starttime)[0:19]
             Logger.warning('Cannot rotate traces for station %s on %s: %s',
-                           stream[0].id, str(stream[0].id.starttime)[0:19], e)
+                           st_id, st_time, e)
         except IndexError:
             Logger.warning('Cannot rotate traces', e)
     return stream

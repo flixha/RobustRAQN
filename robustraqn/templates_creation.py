@@ -587,8 +587,9 @@ def create_template_objects(
     """
     # Get only relevant inventory information to make Pool-startup quicker
     new_inv = Inventory()
-    for sta in selected_stations:
-        new_inv += inv.select(station=sta)
+    if inv is not None:
+        for sta in selected_stations:
+            new_inv += inv.select(station=sta)
     stations_df = get_updated_stations_df(inv)
     not_cat_or_sfiles_msg = ('Provide either sfiles with filepathsto events, '
                              'or provide catalog with events')

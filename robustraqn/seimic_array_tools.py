@@ -1299,6 +1299,8 @@ def get_updated_stations_df(inv):
     :returns: obsplus-stations dataframe with station information.
     :rtype: pandas.DataFrame
     """
+    if inv is None:
+        return pd.DataFrame()
     stations_df = stations_to_df(inv)
     # Add site names to stations_df (for info on array beams)
     site_names = []

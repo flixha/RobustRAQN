@@ -489,9 +489,9 @@ def check_duplicate_template_channels(
         tribe, all_vert=False, all_horiz=False, vertical_chans=['Z'],
         horizontal_chans=['E', 'N', '1', '2']):
     """
-    Check templates for duplicate channels (happens when there are  P- and
-        S-picks on the same channel). Then throw away the S-trace (the later
-        one) for now.
+    Check templates for duplicate channels (happens when there are P- and
+        S-picks on the same channel, or Pn/Pg and Sn/Sg). Then throw away the
+        later one for now.
     """
     Logger.info('Checking templates in %s for duplicate channels', tribe)
     for template in tribe:
@@ -523,6 +523,7 @@ def check_duplicate_template_channels(
 
         # Also throw away the later pick from the template's event
         new_pick_list = list()
+        pick_tr_id_list = list()
         uniq_pick_trace_ids = sorted(list(set(
             [pick.waveform_id.id for pick in template.event.picks])))
         for pick_tr_id in uniq_pick_trace_ids:
@@ -546,9 +547,15 @@ def check_duplicate_template_channels(
                 pick_times = [pick.time for pick in same_id_picks]
                 earliest_pick_time = min(pick_times)
                 for pick in same_id_picks:
+                    # Every trace can only have one pick for lag-calc. If there
+                    # are two picks at the same time on same trace (e.g.,
+                    # one manual and one for array), then just keep the first
+                    # one from the list.
                     if (pick.time == earliest_pick_time
-                            and pick not in new_pick_list):
+                            and pick not in new_pick_list
+                            and pick_tr_id not in pick_tr_id_list):
                         new_pick_list.append(pick)
+                        pick_tr_id_list.append(pick_tr_id)
         template.event.picks = new_pick_list
 
     # for template in tribe:

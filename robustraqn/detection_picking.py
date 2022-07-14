@@ -120,8 +120,8 @@ def prepare_and_update_party(dayparty, tribe, day_st):
                            'trace, check your picking-template {name}, trace '
                            ' {trace}, phase {phase}!'.format(
                                name=detection.template_name,
-                               trace=pick.waveform_id.id,
-                               phase=pick.phase_hint))
+                               trace=det_pick.waveform_id.id,
+                               phase=det_pick.phase_hint))
                     raise LagCalcError(msg)
             # for det_tr in family.template.st:
             #     pick_tr = pick_template.st.select(id=det_tr.id)

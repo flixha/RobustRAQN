@@ -517,7 +517,7 @@ def find_array_picks_baz_appvel(
             # then don't try to compute BAZ or app-vel
             can_calculate_baz_appvel = True
             # TODO: select the origin with the most complete information
-            origin = event.preferred_origin() or event.origins[0]
+            origin = event.preferred_origin()
             if origin is None:
                 try: 
                     origin = event.origins[0]

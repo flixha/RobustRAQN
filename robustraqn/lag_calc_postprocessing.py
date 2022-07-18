@@ -799,7 +799,9 @@ def extract_detections(detections, templates, archive, arc_type,
                 detection.detect_time.strftime('%Y/%m/%d %H:%M:%S'))
             t1 = UTCDateTime(detection.detect_time) - extract_len * 1 / 3
             t2 = UTCDateTime(detection.detect_time) + extract_len * 2 / 3
-            st = day_st.copy().trim(starttime=t1, endtime=t2)
+            # Slice instead of trim allows stream to first cut, then copied - 
+            # otherwise will run out of memory for multiple cuts.
+            st = day_st.slice(starttime=t1, endtime=t2).copy()
             if request_fdsn:
                 existing_stations = list(set([tr.stats.station for tr in st]))
                 other_stations = list(

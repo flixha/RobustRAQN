@@ -76,7 +76,8 @@ def prepare_and_update_party(dayparty, tribe, day_st):
             else:
                 Logger.warning(
                     'Did not find corresponding picking template for %s, '
-                    + 'using original detection template instead for %s')
+                    + 'using original detection template instead.',
+                    family.template.name)
                 continue
             Logger.warning(
                 'Found template with name %s, using instead of %s',
@@ -196,10 +197,11 @@ def pick_events_for_day(
         Logger.info('Read in party of %s families for %s from %s.',
                     str(len(dayparty)), current_day_str, party_file)
         # replace the old templates in the detection-families with those for
+        # dayparty = Party([f for f in dayparty if f.template.name == '2021_10_07t19_59_36_80_templ'])
         # picking (these contain more channels)
         # dayparty = replace_templates_for_picking(dayparty, tribe)
 
-    # Rethreshold if required
+    # Rethreshold if required  # 2021_10_07t19_59_36_80_templ
     if new_threshold is not None:
         dayparty = Party(dayparty).rethreshold(
             new_threshold=new_threshold, new_threshold_type='MAD',

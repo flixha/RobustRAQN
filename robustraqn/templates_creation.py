@@ -303,6 +303,10 @@ def _create_template_objects(
             event = event_file
         relevant_stations = get_all_relevant_stations(
             selected_stations, sta_translation_file=sta_translation_file)
+        # Test if there are any comments on the event that tell me to skip it:
+        for comment in event.comments:
+            if "blacklisted template" in comment.text:
+                continue
         # TODO: maybe I should select the "best" origin somewhere (e.g.,
         # smallest errors, largest number of stations etc)
         origin = event.preferred_origin() or event.origins[0]

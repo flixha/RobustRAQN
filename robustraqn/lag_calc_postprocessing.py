@@ -67,10 +67,12 @@ def add_origins_to_detected_events(
 
         # Find hypocenter of template event
         # detection.template_name
+        template_event = Event()
+        template_orig = Origin()
         try:
+            template_event = tribe[detection.template_name].event
             template_orig = (
-                tribe[detection.template_name].event.preferred_origin() or
-                tribe[detection.template_name].event.origins[0])
+                template_event.preferred_origin() or template_event.origins[0])
         except (AttributeError, IndexError):
             Logger.error(
                 'Could not find template %s for related detection, did you '
@@ -92,13 +94,28 @@ def add_origins_to_detected_events(
                 continue
         orig = Origin()
         if event.picks:
-            approx_time = min([p.time for p in event.picks])
+            # If possible, origin time should be set based on template origin:
+            if template_event.picks:
+                pick_times = [pick.time for pick in event.picks]
+                earliest_pick_time = min(pick_times)
+                earliest_pick_index = np.argmin(pick_times)
+                earliest_pick = event.picks[earliest_pick_index]
+                matching_template_pick = [
+                    pick for pick in template_event.picks
+                    if pick.phase_hint == earliest_pick.phase_hint and
+                    pick.waveform_id.id == earliest_pick.waveform_id.id]
+                shortest_traveltime = (
+                    matching_template_pick.time - template_orig.time)
+                approx_time = earliest_pick_time - shortest_traveltime
+            # Alternative: based on picks alone
+            else:
+                approx_time = min([p.time for p in event.picks])
         else:
             approx_time = detection.detect_time
         orig.time = approx_time
-        orig.longitude = origin_longitude or template_orig.longitude
-        orig.latitude = origin_latitude or template_orig.latitude
-        orig.depth = origin_depth or template_orig.depth
+        orig.longitude = template_orig.longitude or origin_longitude
+        orig.latitude = template_orig.latitude or origin_latitude
+        orig.depth = template_orig.depth or origin_depth
         # day_st.slice(dt, dt + 5)
         if overwrite_origins:
             event.origins = [orig]
@@ -797,6 +814,7 @@ def extract_detections(detections, templates, archive, arc_type,
             Logger.info(
                 'Cutting for detections at: ' +
                 detection.detect_time.strftime('%Y/%m/%d %H:%M:%S'))
+                # 2018/11/05 08:51:58
             t1 = UTCDateTime(detection.detect_time) - extract_len * 1 / 3
             t2 = UTCDateTime(detection.detect_time) + extract_len * 2 / 3
             # Slice instead of trim allows stream to first cut, then copied - 

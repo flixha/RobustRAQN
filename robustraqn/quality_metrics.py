@@ -297,7 +297,7 @@ def check_request_for_wildcards(stats, pattern_list, pattern_position):
     # Check for wildcards in station names
     full_pattern_list = list()
     for pattern in pattern_list:
-        if ('?' or '*') in pattern:
+        if '?' in pattern or '*' in pattern:
             # If there are wildcards like ? or * in pattern, replace with regex
             pattern = pattern.replace(
                 '.', '\.').replace('*', '.*').replace('?', '.')
@@ -315,7 +315,11 @@ def check_request_for_wildcards(stats, pattern_list, pattern_position):
             # pattern_position describes which part of the SLC-target should be
             # matched: 0: station, 1: location, 2: channel
             matching_patterns = list(set(matching_patterns))
-            full_pattern_list += matching_patterns
+            if len(matching_patterns) > 0:
+                for mpattern in matching_patterns:
+                    full_pattern_list.append(mpattern)
+        else:
+            full_pattern_list.append(pattern)
     if full_pattern_list:
         pattern_list = list(set(full_pattern_list))
     return pattern_list
@@ -323,7 +327,7 @@ def check_request_for_wildcards(stats, pattern_list, pattern_position):
 
 def create_bulk_request(
         inventory, starttime, endtime, stats=pd.DataFrame(), stations=['*'],
-        location_priority=['??'], band_priority=['B', 'H', 'S', 'E', 'N'],
+        location_priority=['*'], band_priority=['B', 'H', 'S', 'E', 'N'],
         instrument_priority=['H'], components=['Z', 'N', 'E', '1', '2'],
         minimum_sample_rate=20, parallel=False, cores=1, **kwargs):
     """

@@ -1019,7 +1019,10 @@ def prepare_picks(
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         sta_translation_file="station_code_translation.txt",
         vertical_chans=['Z'], horizontal_chans=['E', 'N', '1', '2'],
-        *args, **kwargs):
+        allowed_phase_types='PST',
+        allowed_phase_hints=['Pn', 'Pg', 'P', 'Sn', 'Sg', 'S', 'Lg', 'sP',
+                             'pP', 'Pb', 'PP', 'Sb', 'SS'],
+        forbidden_phase_hints=['pmax', 'PMZ', 'PFAKE'], *args, **kwargs):
     """
     Prepare the picks for being used in EQcorrscan. The following criteria are
     being considered:
@@ -1033,6 +1036,7 @@ def prepare_picks(
        alternative channel
      - put P-pick on the vertical-channel(s)
      - put S-picks on horizontal channels if available
+    TODO: only allow phases Pn, Pg, P, Sn, Sg, S, Lg, sP, pP, Pb, PP, Sb, SS?
 
     :type template: obspy.core.stream.Stream
     :param template: Template stream to plot
@@ -1076,6 +1080,17 @@ def prepare_picks(
         # Don't allow picks without phase_hint
         if len(pick.phase_hint) == 0:
             continue
+        # Manually sort out picks for phase-hints that are not really arrival
+        # picks, but that start with 'P' or 'S' (or 'p' or 's)
+        if pick.phase_hint in forbidden_phase_hints:
+            continue
+        # Skip picks that are not allowed or explicitly forbidden:
+        if (allowed_phase_types and
+                pick.phase_hint.upper()[0] not in allowed_phase_types):
+            continue
+        if allowed_phase_hints and pick.phase_hint not in allowed_phase_hints:
+            continue
+
         request_station = pick.waveform_id.station_code
         original_station_code = request_station
         if normalize_NSLC:
@@ -1102,68 +1117,67 @@ def prepare_picks(
             std_channel_prefix = matching_tr_id.split('.')[3][0:2]
         # Check wether pick is P or S-phase, and normalize network/station/
         # location and channel codes
-        if pick.phase_hint.upper()[0] in 'PS':
-            previous_chan_id = pick.waveform_id.channel_code
-            pick.waveform_id.network_code = std_network_code
-            pick.waveform_id.location_code = std_location_code
-            # Check station code for alternative code, change to the standard
-            if normalize_NSLC:
-                if pick.waveform_id.station_code in sta_fortransl_dict:
-                    pick.waveform_id.station_code = sta_fortransl_dict.get(
-                        pick.waveform_id.station_code)
-            # Check channel codes
-            # 1. If pick has no channel information, then put it a preferred
-            #    channel (Z>N>E>2>1) for now; otherwise just normalize channel-
-            #    prefix.
-            if len(pick.waveform_id.channel_code) == 0:
-                pick.waveform_id.channel_code = (
-                    std_channel_prefix + avail_comps[-1])
-            elif len(pick.waveform_id.channel_code) <= 2:
-                pick.waveform_id.channel_code = (
-                    std_channel_prefix + pick.waveform_id.channel_code[-1])
-            # 2. Check that channel is available - otherwise switch to suitable
-            #    other channel.
-            if pick.waveform_id.channel_code[-1] not in avail_comps:
-                pick.waveform_id.channel_code = (
-                    std_channel_prefix + avail_comps[-1])
-            # 3. If P-pick is not on vertical channel and there exists a 'Z'-
-            #    channel, then switch P-pick to Z.
-            # TODO: allow different/multiple vertical chans (e.g., Z and H)
-            if (pick.phase_hint.upper()[0] == 'P' and
-                    pick.waveform_id.channel_code[-1] not in vertical_chans):
-                for vertical_chan in vertical_chans:
-                    if vertical_chan in avail_comps:
-                        pick.waveform_id.channel_code = (
-                            std_channel_prefix + vertical_chan)
-                        break
-            # 4. If S-pick is on vertical channel and there exist horizontal
-            #    channels, then switch S_pick to the first horizontal.
-            elif (pick.phase_hint.upper()[0] == 'S' and
-                    pick.waveform_id.channel_code[-1] in vertical_chans):
-                horizontal_traces = stream.select(
-                    station=pick.waveform_id.station_code,
-                    channel='{0}[{1}]'.format(
-                        std_channel_prefix, ''.join(horizontal_chans)))
-                if horizontal_traces:
+        previous_chan_id = pick.waveform_id.channel_code
+        pick.waveform_id.network_code = std_network_code
+        pick.waveform_id.location_code = std_location_code
+        # Check station code for alternative code, change to the standard
+        if normalize_NSLC:
+            if pick.waveform_id.station_code in sta_fortransl_dict:
+                pick.waveform_id.station_code = sta_fortransl_dict.get(
+                    pick.waveform_id.station_code)
+        # Check channel codes
+        # 1. If pick has no channel information, then put it a preferred
+        #    channel (Z>N>E>2>1) for now; otherwise just normalize channel-
+        #    prefix.
+        if len(pick.waveform_id.channel_code) == 0:
+            pick.waveform_id.channel_code = (
+                std_channel_prefix + avail_comps[-1])
+        elif len(pick.waveform_id.channel_code) <= 2:
+            pick.waveform_id.channel_code = (
+                std_channel_prefix + pick.waveform_id.channel_code[-1])
+        # 2. Check that channel is available - otherwise switch to suitable
+        #    other channel.
+        if pick.waveform_id.channel_code[-1] not in avail_comps:
+            pick.waveform_id.channel_code = (
+                std_channel_prefix + avail_comps[-1])
+        # 3. If P-pick is not on vertical channel and there exists a 'Z'-
+        #    channel, then switch P-pick to Z.
+        # TODO: allow different/multiple vertical chans (e.g., Z and H)
+        if (pick.phase_hint.upper()[0] == 'P' and
+                pick.waveform_id.channel_code[-1] not in vertical_chans):
+            for vertical_chan in vertical_chans:
+                if vertical_chan in avail_comps:
                     pick.waveform_id.channel_code = (
-                        horizontal_traces[0].stats.channel)
-                # 4b. If S-pick is on vertical and there is no P-pick, then
-                # remove S-pick.
-                else:
-                    P_picks = [
-                        p for p in event.picks if len(p.phase_hint) > 0
-                        if p.phase_hint.upper()[0] == 'P' and
-                        p.waveform_id.station_code ==
-                        pick.waveform_id.station_code]
-                    if len(P_picks) == 0:
-                        continue
-            # If not fixed yet, make sure to always fix codes
-            if pick.waveform_id.channel_code == previous_chan_id:
+                        std_channel_prefix + vertical_chan)
+                    break
+        # 4. If S-pick is on vertical channel and there exist horizontal
+        #    channels, then switch S_pick to the first horizontal.
+        elif (pick.phase_hint.upper()[0] == 'S' and
+                pick.waveform_id.channel_code[-1] in vertical_chans):
+            horizontal_traces = stream.select(
+                station=pick.waveform_id.station_code,
+                channel='{0}[{1}]'.format(
+                    std_channel_prefix, ''.join(horizontal_chans)))
+            if horizontal_traces:
                 pick.waveform_id.channel_code = (
-                    std_channel_prefix + pick.waveform_id.channel_code[-1])
-            new_event.picks.append(pick)
-            # else:
-            #    new_event.picks.append(pick)
+                    horizontal_traces[0].stats.channel)
+            # 4b. If S-pick is on vertical and there is no P-pick, then
+            # remove S-pick.
+            else:
+                P_picks = [
+                    p for p in event.picks if len(p.phase_hint) > 0
+                    if p.phase_hint.upper()[0] == 'P' and
+                    p.waveform_id.station_code ==
+                    pick.waveform_id.station_code]
+                if len(P_picks) == 0:
+                    continue
+        # If not fixed yet, make sure to always fix codes
+        if pick.waveform_id.channel_code == previous_chan_id:
+            pick.waveform_id.channel_code = (
+                std_channel_prefix + pick.waveform_id.channel_code[-1])
+        new_event.picks.append(pick)
+        # else:
+        #    new_event.picks.append(pick)
 
     event = new_event
     # Select a subset of picks based on user choice
@@ -1911,8 +1925,13 @@ def check_normalize_sampling_rate(
                             'Correcting sampling rate (%s Hz) of %s on %s with'
                             ' interpolation.', tr.stats.sampling_rate, tr.id,
                             str(tr.stats.starttime))
+                        # TODO: can this be done quicker with resample?
                         tr.interpolate(sampling_rate=def_channel_sample_rate,
                                        method=interpolation_method, a=25)
+                        # tr.resample(sampling_rate=def_channel_sample_rate,
+                        #             window='hanning', no_filter=True,
+                        #             strict_length=False
+
                         # Make sure data have the same datatype as before
                         if tr.data.dtype is not raw_datatype:
                             tr.data = tr.data.astype(raw_datatype)

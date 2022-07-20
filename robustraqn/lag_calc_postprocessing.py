@@ -377,9 +377,9 @@ def postprocess_picked_events(
             parallel=parallel, cores=cores)
 
     # Create Seisan-style Sfiles for the whole day
-    # catalogFile = os.path.join(sfile_path, + str(orig.time.year)\
+    # sfile_path = os.path.join(sfile_path, + str(orig.time.year)\
     #   + str(orig.time.month).zfill(2) + str(orig.time.day).zfill(2) + ".out")
-    # write_select(export_catalog, catalogFile, userid=operator, evtype='L',
+    # write_select(export_catalog, sfile_path, userid=operator, evtype='L',
     #              wavefiles=wavefiles, high_accuracy=False)
     # Create Seisan-style Sfiles for each event
     # e.g.: 01-0024-07L.S202001
@@ -393,12 +393,12 @@ def postprocess_picked_events(
                 sfile_name = orig_time.strftime(
                     '%d-%H%M-%S' + evtype + '.S%Y%m')
                 sfile_path = os.path.join(sfile_path, sfile_name)
-                filename_exists = os.path.exists(catalogFile)
+                filename_exists = os.path.exists(sfile_path)
                 orig_time = orig_time + 1
             _write_nordic(event, sfile_path, userid=operator, evtype=evtype,
                           wavefiles=wavefiles[j], high_accuracy=high_accuracy,
                           nordic_format='NEW')
-    # export_catalog.write(catalogFile, format="NORDIC", userid=operator,
+    # export_catalog.write(sfile_path, format="NORDIC", userid=operator,
     #                     evtype="L")
 
     return export_catalog

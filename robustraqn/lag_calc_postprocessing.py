@@ -93,6 +93,7 @@ def add_origins_to_detected_events(
                                + '%s', detection.template_name)
                 continue
         orig = Origin()
+        approx_time = None
         if event.picks:
             # If possible, origin time should be set based on template origin:
             if template_event.picks:
@@ -104,13 +105,14 @@ def add_origins_to_detected_events(
                     pick for pick in template_event.picks
                     if pick.phase_hint == earliest_pick.phase_hint and
                     pick.waveform_id.id == earliest_pick.waveform_id.id]
-                shortest_traveltime = (
-                    matching_template_pick.time - template_orig.time)
-                approx_time = earliest_pick_time - shortest_traveltime
+                if matching_template_pick:
+                    shortest_traveltime = (
+                        matching_template_pick[0].time - template_orig.time)
+                    approx_time = earliest_pick_time - shortest_traveltime
             # Alternative: based on picks alone
-            else:
+            if not approx_time:
                 approx_time = min([p.time for p in event.picks])
-        else:
+        if not approx_time:
             approx_time = detection.detect_time
         orig.time = approx_time
         orig.longitude = template_orig.longitude or origin_longitude

@@ -36,8 +36,6 @@ import logging
 Logger = logging.getLogger(__name__)
 
 
-
-# TODO: write function to just add origins to template
 def add_origins_to_detected_events(
         catalog, party, tribe, overwrite_origins=False,
         origin_latitude=None, origin_longitude=None, origin_depth=None):
@@ -104,7 +102,8 @@ def add_origins_to_detected_events(
                 matching_template_pick = [
                     pick for pick in template_event.picks
                     if pick.phase_hint == earliest_pick.phase_hint and
-                    pick.waveform_id.id == earliest_pick.waveform_id.id]
+                    pick.waveform_id.station_code == earliest_pick.waveform_id.station_code and
+                    pick.waveform_id.channel_code[-1] == earliest_pick.waveform_id.channel_code[-1]]
                 if matching_template_pick:
                     shortest_traveltime = (
                         matching_template_pick[0].time - template_orig.time)
@@ -135,7 +134,8 @@ def postprocess_picked_events(
         min_picks_on_detection_stations=6, write_waveforms=False,
         archives=list(), request_fdsn=False, template_path=None,
         origin_longitude=None, origin_latitude=None, origin_depth=None,
-        parallel=False, cores=1):
+        evtype='L', high_accuracy=False, do_not_rename_refracted_phases=True,
+        parallel=False, cores=1, **kwargs):
     """
     :type picked_catalog: :class:`obspy.core.Catalog`
     :param picked_catalog: Catalog of events picked, e.g., with lag_calc.
@@ -246,7 +246,13 @@ def postprocess_picked_events(
             matching_picks = sorted(matching_picks, key=lambda p: p.time)
             if matching_picks:
                 if len(matching_picks[0].phase_hint) > 1:
-                    pick.phase_hint = matching_picks[0].phase_hint
+                    # option to allow first arriving P/S remain as P/S instead
+                    # of Pn/Sn; otherwise some location programs may struggle.
+                    if (do_not_rename_refracted_phases and
+                            matching_picks[0].phase_hint == 'Pn'):
+                        pass
+                    else:
+                        pick.phase_hint = matching_picks[0].phase_hint
 
             # pick.time = pick.time + 0.2
             if pick.phase_hint[0] == 'P':
@@ -384,12 +390,13 @@ def postprocess_picked_events(
             filename_exists = True
             orig_time = event.origins[0].time
             while filename_exists:
-                sfile_name = orig_time.strftime('%d-%H%M-%SL.S%Y%m')
-                catalogFile = os.path.join(sfile_path, sfile_name)
+                sfile_name = orig_time.strftime(
+                    '%d-%H%M-%S' + evtype + '.S%Y%m')
+                sfile_path = os.path.join(sfile_path, sfile_name)
                 filename_exists = os.path.exists(catalogFile)
                 orig_time = orig_time + 1
-            _write_nordic(event, catalogFile, userid=operator, evtype='L',
-                          wavefiles=wavefiles[j], high_accuracy=False,
+            _write_nordic(event, sfile_path, userid=operator, evtype=evtype,
+                          wavefiles=wavefiles[j], high_accuracy=high_accuracy,
                           nordic_format='NEW')
     # export_catalog.write(catalogFile, format="NORDIC", userid=operator,
     #                     evtype="L")
@@ -405,9 +412,6 @@ def extract_stream_for_picked_events(
     Extracts a stream object with all channels from the SDS-archive.
     Allows the input of multiple archives as a list
     """
-    # TODO: write functionality to use the whole day's waveforms to cut it
-    #       into smaller pieces for the events - avoid multiple requests to
-    #       SDS archive.  - no, I already have that. But why so slow?
     detection_list = list()
     for event in catalog:
         for family in party:
@@ -475,8 +479,10 @@ def extract_stream_for_picked_events(
         # 2019-12-15-0323-41S.NNSN__008
         utc_str = str(stream[0].stats.starttime)
         utc_str = utc_str.lower().replace(':', '-').replace('t', '-')
-        waveform_filename = wav_out_dir + '/' + utc_str[0:13] + utc_str[14:19]\
-            + 'M.EQCS__' + str(len(stream)).zfill(3)
+        # Define waveform filename based on starttime of stream
+        w_name = (utc_str[0:13] + utc_str[14:19] +
+                  'M.EQCS__' + str(len(stream)).zfill(3))
+        waveform_filename = os.path.join(wav_out_dir, w_name)
         wavefiles.append(waveform_filename)
         stream.write(waveform_filename, format='MSEED')
 
@@ -817,8 +823,8 @@ def extract_detections(detections, templates, archive, arc_type,
                 'Cutting for detections at: ' +
                 detection.detect_time.strftime('%Y/%m/%d %H:%M:%S'))
                 # 2018/11/05 08:51:58
-            t1 = UTCDateTime(detection.detect_time) - extract_len * 1 / 3
-            t2 = UTCDateTime(detection.detect_time) + extract_len * 2 / 3
+            t1 = UTCDateTime(detection.detect_time) - extract_len * 0.2
+            t2 = UTCDateTime(detection.detect_time) + extract_len * 0.8
             # Slice instead of trim allows stream to first cut, then copied - 
             # otherwise will run out of memory for multiple cuts.
             st = day_st.slice(starttime=t1, endtime=t2).copy()

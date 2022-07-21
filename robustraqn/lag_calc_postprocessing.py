@@ -80,9 +80,9 @@ def add_origins_to_detected_events(
                 detection.template_name, template_names)
             if len(template_name_match) >= 1:
                 template_name_match = template_name_match[0]
-                template_orig = (
-                    tribe[template_name_match].event.preferred_origin() or
-                    tribe[template_name_match].event.origins[0])
+                template_event = tribe[template_name_match].event
+                template_orig = (template_event.preferred_origin() or
+                                 template_event.origins[0])
                 Logger.warning(
                     'Found template with name %s, using instead of %s',
                     template_name_match, detection.template_name)
@@ -392,10 +392,10 @@ def postprocess_picked_events(
             while filename_exists:
                 sfile_name = orig_time.strftime(
                     '%d-%H%M-%S' + evtype + '.S%Y%m')
-                sfile_path = os.path.join(sfile_path, sfile_name)
-                filename_exists = os.path.exists(sfile_path)
+                sfile_out = os.path.join(sfile_path, sfile_name)
+                filename_exists = os.path.exists(sfile_out)
                 orig_time = orig_time + 1
-            _write_nordic(event, sfile_path, userid=operator, evtype=evtype,
+            _write_nordic(event, sfile_out, userid=operator, evtype=evtype,
                           wavefiles=wavefiles[j], high_accuracy=high_accuracy,
                           nordic_format='NEW')
     # export_catalog.write(sfile_path, format="NORDIC", userid=operator,

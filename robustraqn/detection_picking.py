@@ -198,6 +198,16 @@ def pick_events_for_day(
                     str(len(dayparty)), current_day_str, party_file)
         # replace the old templates in the detection-families with those for
         # dayparty = Party([f for f in dayparty if f.template.name == '2021_10_07t19_59_36_80_templ'])
+        # dayparty = Party([f for f in dayparty if f.template.name == '2018_02_23t21_15_51_38_templ'])
+        # dayparty[0].detections = [dayparty[0].detections[3]]
+        # dayparty = Party([f for f in dayparty if f.template.name == '2004_10_14t10_17_46_70_templ'])
+        # 2004_10_14t10_17_46_70_templ_20190501_181532100000
+        # dayparty = Party([f for f in dayparty if f.template.name == '2019_06_04t13_41_43_80_templ'])
+        dayparty = Party([f for f in dayparty if f.template.name == '2005_02_26t15_41_57_20_templ'])
+        # dayparty[0].detections = [dayparty[0].detections[0]]
+
+        # 2019_10_15t02_43_11_50_templ_20190802_072130169538
+
         # picking (these contain more channels)
         # dayparty = replace_templates_for_picking(dayparty, tribe)
 
@@ -388,7 +398,7 @@ def pick_events_for_day(
         extract_len=extract_len, write_waveforms=True, archives=archives,
         request_fdsn=request_fdsn, template_path=template_path,
         min_pick_stations=8, min_picks_on_detection_stations=3,
-        parallel=parallel, cores=io_cores)
+        parallel=parallel, cores=io_cores, **kwargs)
 
     return export_catalog
 

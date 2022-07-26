@@ -1109,7 +1109,7 @@ def array_lac_calc(
         # array_party = Party()
         # for family in party:
         #     for detection in family:
-        #         for station, chan in detection.chans:                
+        #         for station, chan in detection.chans:
         for seisarray_prefix in array_st_dict.keys():
             array_party = Party(
                 [family.copy() for family in party

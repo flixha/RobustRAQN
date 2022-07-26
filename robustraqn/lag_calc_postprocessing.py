@@ -99,14 +99,32 @@ def add_origins_to_detected_events(
                 earliest_pick_time = min(pick_times)
                 earliest_pick_index = np.argmin(pick_times)
                 earliest_pick = event.picks[earliest_pick_index]
-                matching_template_pick = [
+                ep_sta = earliest_pick.waveform_id.station_code
+                ep_component = earliest_pick.waveform_id.channel_code[-1]
+                matching_template_pick = None
+                matching_template_pick_list = [
                     pick for pick in template_event.picks
                     if pick.phase_hint == earliest_pick.phase_hint and
-                    pick.waveform_id.station_code == earliest_pick.waveform_id.station_code and
-                    pick.waveform_id.channel_code[-1] == earliest_pick.waveform_id.channel_code[-1]]
+                    pick.waveform_id.station_code == ep_sta and
+                    pick.waveform_id.channel_code[-1] == ep_component]
+                # Sometimes there is no initial match when phase hints are not
+                # strictly the same, when do_not_rename_refracted_phases=True.
+                # Then relax comparison:
+                if not matching_template_pick_list:
+                    matching_template_pick_list = [
+                        pick for pick in template_event.picks
+                        if pick.phase_hint[0] == earliest_pick.phase_hint[0]
+                        and pick.waveform_id.station_code == ep_sta]
+                    mpick_times = [pick.time
+                                   for pick in matching_template_pick_list]
+                    earliest_mpick_index = np.argmin(mpick_times)
+                    matching_template_pick = matching_template_pick_list[
+                        earliest_mpick_index]
+                else:  # Select only match in list
+                    matching_template_pick = matching_template_pick_list[0]
                 if matching_template_pick:
                     shortest_traveltime = (
-                        matching_template_pick[0].time - template_orig.time)
+                        matching_template_pick.time - template_orig.time)
                     approx_time = earliest_pick_time - shortest_traveltime
             # Alternative: based on picks alone
             if not approx_time:

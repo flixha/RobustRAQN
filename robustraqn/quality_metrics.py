@@ -1069,6 +1069,7 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
             Logger.error('No data quality metrics available for years %s - %s',
                         startyear, endyear)
             return ispaq
+
     # Set an extra "startday"-column to use as index
     if 'startday' not in ispaq.columns:
         ispaq['startday'] = ispaq['start'].str[0:10]

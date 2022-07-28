@@ -258,11 +258,10 @@ def run_day_detection(
             Logger.info('Requesting waveforms from client %s', client)
             # client = get_parallel_waveform_client(client)
             # day_st += client.get_waveforms_bulk_parallel(
-            #    bulk_request, parallel=parallel, cores=io_cores)
+            #     bulk_request, parallel=parallel, cores=io_cores)
             # Or with joblib:
             day_st += client.get_waveforms_bulk(
-               bulk_request, parallel=parallel, cores=io_cores)
-            
+                bulk_request, parallel=parallel, cores=io_cores)
 
         Logger.info('Successfully read in %s traces for bulk request of %s'
                     ' NSLC-objects for %s - %s.', len(day_st), len(bulk_request),

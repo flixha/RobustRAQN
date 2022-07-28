@@ -928,7 +928,9 @@ def get_updated_inventory_with_noise_models(
                 and check_existing):
             Logger.info('Not updating noise models because an updated '
                         + 'inventory with noise models exists already.')
-            inv = pickle.load(open(outfile, "rb"))
+            inv_p_file = open(outfile, "rb")
+            inv = pickle.load(inv_p_file)
+            inv_p_file.close()
             return inv
 
     inv = read_inventory(os.path.expanduser(inv_file))

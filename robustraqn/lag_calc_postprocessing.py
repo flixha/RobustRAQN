@@ -28,6 +28,7 @@ from eqcorrscan.core.match_filter.party import Party
 # from eqcorrscan.utils.despike import median_filter
 # from obspy import read_nordic
 # import obspy
+from robustraqn.obspy.clients.filesystem.sds import Client
 
 from robustraqn.quality_metrics import (get_waveforms_bulk, read_ispaq_stats)
 from robustraqn.seimic_array_tools import get_station_sites
@@ -837,8 +838,10 @@ def extract_detections(detections, templates, archive, arc_type,
         endtime = starttime + 24.5 * 60 * 60
         bulk = [('*', sta, '*', '*', starttime, endtime)
                 for sta in all_stations]
-        day_st = get_waveforms_bulk(
-                client, bulk, parallel=parallel, cores=cores)
+        # day_st = get_waveforms_bulk(
+        #         client, bulk, parallel=parallel, cores=cores)
+        day_st = client.get_waveforms_bulk(
+            bulk, parallel=parallel, cores=cores)
         for detection in day_detections:
             Logger.info(
                 'Cutting for detections at: ' +

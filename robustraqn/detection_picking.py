@@ -19,7 +19,8 @@ import difflib
 from obspy.core.event import Catalog, Event, Origin
 from obspy.core.utcdatetime import UTCDateTime
 from obspy import read_inventory, Inventory, Stream
-from obspy.clients.filesystem.sds import Client
+# from obspy.clients.filesystem.sds import Client
+from robustraqn.obspy.clients.filesystem.sds import Client
 
 from eqcorrscan.core.match_filter import (Tribe, Party)
 from eqcorrscan.core.lag_calc import LagCalcError
@@ -256,8 +257,10 @@ def pick_events_for_day(
     day_st = Stream()
     for client in clients:
         Logger.info('Requesting waveforms from client %s', client)
-        client = get_parallel_waveform_client(client)
-        day_st += client.get_waveforms_bulk_parallel(
+        # client = get_parallel_waveform_client(client)
+        # day_st += client.get_waveforms_bulk_parallel(
+        #     bulk_request, parallel=parallel, cores=io_cores)
+        day_st += client.get_waveforms_bulk(
             bulk_request, parallel=parallel, cores=io_cores)
     Logger.info(
         'Successfully read in waveforms for bulk request of %s NSLC-'

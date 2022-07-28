@@ -55,6 +55,7 @@ from robustraqn.seimic_array_tools import (
     extract_array_picks, add_array_station_picks, get_station_sites,
     LARGE_APERTURE_SEISARRAY_PREFIXES, get_updated_stations_df)
 from robustraqn.bayesloc_utils import update_cat_from_bayesloc
+from robustraqn.obspy.clients.filesystem.sds import Client
 
 import logging
 Logger = logging.getLogger(__name__)
@@ -267,7 +268,9 @@ def _create_template_objects(
                 Logger.info('Requesting waveforms from client %s', client)
                 outtic = default_timer()
                 client = get_parallel_waveform_client(client)
-                add_st = client.get_waveforms_bulk_parallel(
+                # add_st = client.get_waveforms_bulk_parallel(
+                #     bulk_request, parallel=parallel, cores=cores)
+                add_st = client.get_waveforms_bulk(
                     bulk_request, parallel=parallel, cores=cores)
                 outtoc = default_timer()
                 Logger.info(

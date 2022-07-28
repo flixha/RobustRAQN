@@ -49,6 +49,7 @@ from robustraqn.obspy.core.stream import Stream
 from robustraqn.spectral_tools import st_balance_noise, Noise_model
 from robustraqn.quality_metrics import get_parallel_waveform_client
 from robustraqn.seimic_array_tools import get_station_sites
+from robustraqn.obspy.clients.filesystem.sds import Client
 from timeit import default_timer
 import logging
 Logger = logging.getLogger(__name__)
@@ -284,7 +285,9 @@ def load_event_stream(
         client = get_parallel_waveform_client(client)
         Logger.info('Requesting waveforms from client %s', client)
         outtic = default_timer()
-        add_st = client.get_waveforms_bulk_parallel(
+        # add_st = client.get_waveforms_bulk_parallel(
+        #     bulk_request, parallel=False, cores=cores)
+        add_st = client.get_waveforms_bulk(
             bulk_request, parallel=False, cores=cores)
         outtoc = default_timer()
         Logger.info(

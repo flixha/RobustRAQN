@@ -119,6 +119,7 @@ def _get_waveforms_bulk_parallel_naive(self, bulk, parallel=True,
         """
         # signal.signal(signal.SIGSEGV, sigsegv_handler)
 
+        outtic = default_timer()
         st = Stream()
         if parallel:
             if cores is None:
@@ -152,6 +153,9 @@ def _get_waveforms_bulk_parallel_naive(self, bulk, parallel=True,
                 except Exception as e:
                     document_client_read_error(e)
                     continue
+        outtoc = default_timer()
+        Logger.info('Bulk-reading of waveforms took: {0:.4f}s'.format(
+            outtoc - outtic))
         return st
 
 

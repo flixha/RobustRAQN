@@ -41,8 +41,9 @@ from obspy import read_inventory
 from obspy.core.inventory.inventory import Inventory
 #from obspy import read as obspyread
 from obspy import UTCDateTime
-#from obspy.io.mseed import InternalMSEEDError
-from obspy.clients.filesystem.sds import Client
+# from obspy.io.mseed import InternalMSEEDError
+# from obspy.clients.filesystem.sds import Client
+from robustraqn.obspy.clients.filesystem.sds import Client
 
 from robustraqn.processify import processify
 from robustraqn.fancy_processify import fancy_processify
@@ -63,8 +64,8 @@ from eqcorrscan.utils.pre_processing import dayproc, shortproc
 # reload(load_events_for_detection)
 from robustraqn.obspy.core import Stream, Trace
 from robustraqn.quality_metrics import (
-    create_bulk_request, get_waveforms_bulk, read_ispaq_stats,
-    get_parallel_waveform_client)
+    create_bulk_request, get_waveforms_bulk, read_ispaq_stats)
+    #get_parallel_waveform_client)
 from robustraqn.load_events_for_detection import (
     prepare_detection_stream, init_processing, init_processing_wRotation,
     print_error_plots, get_all_relevant_stations, reevaluate_detections,
@@ -255,9 +256,13 @@ def run_day_detection(
             # day_st += get_waveforms_bulk(client, bulk_request, parallel=parallel,
             #                              cores=io_cores)
             Logger.info('Requesting waveforms from client %s', client)
-            client = get_parallel_waveform_client(client)
-            day_st += client.get_waveforms_bulk_parallel(
-                bulk_request, parallel=parallel, cores=io_cores)
+            # client = get_parallel_waveform_client(client)
+            # day_st += client.get_waveforms_bulk_parallel(
+            #    bulk_request, parallel=parallel, cores=io_cores)
+            # Or with joblib:
+            day_st += client.get_waveforms_bulk(
+               bulk_request, parallel=parallel, cores=io_cores)
+            
 
         Logger.info('Successfully read in %s traces for bulk request of %s'
                     ' NSLC-objects for %s - %s.', len(day_st), len(bulk_request),

@@ -8,7 +8,6 @@ for local data; beware of overloading servers with requests).
     Felix Halpaap 2021
 """
 
-from audioop import add
 import os
 import glob
 import re

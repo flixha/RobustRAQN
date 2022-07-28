@@ -1926,11 +1926,11 @@ def check_normalize_sampling_rate(
                             ' interpolation.', tr.stats.sampling_rate, tr.id,
                             str(tr.stats.starttime))
                         # TODO: can this be done quicker with resample?
-                        tr.interpolate(sampling_rate=def_channel_sample_rate,
-                                       method=interpolation_method, a=25)
-                        # tr.resample(sampling_rate=def_channel_sample_rate,
-                        #             window='hanning', no_filter=True,
-                        #             strict_length=False
+                        # tr.interpolate(sampling_rate=def_channel_sample_rate,
+                        #               method=interpolation_method, a=25)
+                        tr.resample(sampling_rate=def_channel_sample_rate,
+                                    window='hanning', no_filter=True,
+                                    strict_length=False)
 
                         # Make sure data have the same datatype as before
                         if tr.data.dtype is not raw_datatype:
@@ -2414,6 +2414,7 @@ def load_station_translation_dict(file="station_code_translation.txt",
         station_forw_translation_dict[alternative_sta_code] = standard_sta_code
     station_backw_translation_dict = {y: x for x, y in
                                       station_forw_translation_dict.items()}
+    f.close()
     return station_forw_translation_dict, station_backw_translation_dict
 
 
@@ -2432,6 +2433,7 @@ def load_forbidden_chan_file(file="forbidden_chans.txt", **kwargs):
         return forbidden_chans
     for line in f.readlines():
         forbidden_chans.append(line.strip())
+    f.close()
 
     return forbidden_chans
 

@@ -117,9 +117,12 @@ def add_origins_to_detected_events(
                         and pick.waveform_id.station_code == ep_sta]
                     mpick_times = [pick.time
                                    for pick in matching_template_pick_list]
-                    earliest_mpick_index = np.argmin(mpick_times)
-                    matching_template_pick = matching_template_pick_list[
-                        earliest_mpick_index]
+                    if mpick_times:
+                        earliest_mpick_index = np.argmin(mpick_times)
+                        matching_template_pick = matching_template_pick_list[
+                            earliest_mpick_index]
+                    else:
+                        matching_template_pick = None
                 else:  # Select only match in list
                     matching_template_pick = matching_template_pick_list[0]
                 if matching_template_pick:
@@ -152,7 +155,7 @@ def postprocess_picked_events(
         min_picks_on_detection_stations=6, write_waveforms=False,
         archives=list(), request_fdsn=False, template_path=None,
         origin_longitude=None, origin_latitude=None, origin_depth=None,
-        evtype='L', high_accuracy=False, do_not_rename_refracted_phases=True,
+        evtype='L', high_accuracy=False, do_not_rename_refracted_phases=False,
         parallel=False, cores=1, **kwargs):
     """
     :type picked_catalog: :class:`obspy.core.Catalog`

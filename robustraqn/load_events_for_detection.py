@@ -2583,7 +2583,8 @@ def reevaluate_detections(
         concurrency=None, arch='precise', group_size=1, full_peaks=False,
         save_progress=False, process_cores=None, spike_test=False, min_chans=4,
         time_difference_threshold=3, detect_value_allowed_error=60,
-        return_party_with_short_templates=False, min_n_station_sites=4):
+        return_party_with_short_templates=False, min_n_station_sites=4,
+        **kwargs):
     """
     This function takes a set of detections and reruns the match-filter
     detection with a set of templates that are shortened to XX length. Only if

@@ -263,9 +263,10 @@ def run_day_detection(
             day_st += client.get_waveforms_bulk(
                 bulk_request, parallel=parallel, cores=io_cores)
 
-        Logger.info('Successfully read in %s traces for bulk request of %s'
-                    ' NSLC-objects for %s - %s.', len(day_st), len(bulk_request),
-                    str(starttime)[0:19], str(endtime)[0:19])
+        Logger.info(
+            'Successfully read in %s traces for bulk request of %s NSLC-'
+            'objects for %s - %s.', len(day_st), len(bulk_request),
+            str(starttime)[0:19], str(endtime)[0:19])
         day_st = prepare_detection_stream(
             day_st, tribe, parallel=parallel, cores=cores, try_despike=False,
             ispaq=day_stats)
@@ -387,10 +388,11 @@ def run_day_detection(
 
     # check that detection occurred on request day, not during overlap time
     if let_days_overlap:
-        families = [Family(template=family.template,
-                           detections=[
-                               detection for detection in family
-                               if detection.detect_time >= starttime])
+        families = [Family(
+            template=family.template, detections=[
+                detection for detection in family
+                if detection.detect_time >= starttime and
+                detection.detect_time <= endtime])
                     for family in party]
         party = Party(
             families=[family for family in families if len(family) > 0])

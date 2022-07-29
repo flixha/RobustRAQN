@@ -378,9 +378,10 @@ def pick_events_for_day(
     #    Logger.error("LagCalc Error on " + str(year) +
     #           str(month).zfill(2) + str(day).zfill(2))
     picks_per_event = [len([pk for pk in ev.picks]) for ev in picked_catalog]
+    min_picks_per_event = min(picks_per_event) or 0
+    max_picks_per_event = max(picks_per_event) or 0
     Logger.info('Got %s events with at least %s and at most %s picks',
-                str(len(picked_catalog)), str(min(picks_per_event)),
-                str(max(picks_per_event)))
+                len(picked_catalog), min_picks_per_event, max_picks_per_event)
 
     picked_catalog = add_origins_to_detected_events(
         picked_catalog, dayparty, tribe=tribe)

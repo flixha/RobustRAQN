@@ -51,7 +51,7 @@ from robustraqn.spectral_tools import (
     st_balance_noise, Noise_model, get_updated_inventory_with_noise_models)
 from robustraqn.quality_metrics import (
     create_bulk_request, get_parallel_waveform_client)
-from robustraqn.seimic_array_tools import (
+from robustraqn.seismic_array_tools import (
     extract_array_picks, add_array_station_picks, get_station_sites,
     LARGE_APERTURE_SEISARRAY_PREFIXES, get_updated_stations_df)
 from robustraqn.bayesloc_utils import update_cat_from_bayesloc

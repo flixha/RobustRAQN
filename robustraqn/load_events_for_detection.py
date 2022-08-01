@@ -48,7 +48,7 @@ from obsplus.stations.pd import stations_to_df
 from robustraqn.obspy.core.stream import Stream
 from robustraqn.spectral_tools import st_balance_noise, Noise_model
 from robustraqn.quality_metrics import get_parallel_waveform_client
-from robustraqn.seimic_array_tools import get_station_sites
+from robustraqn.seismic_array_tools import get_station_sites
 from robustraqn.obspy.clients.filesystem.sds import Client
 from timeit import default_timer
 import logging

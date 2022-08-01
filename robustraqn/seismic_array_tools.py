@@ -1,7 +1,6 @@
 
 # %%
 import os
-from collections import defaultdict
 from obspy import read_inventory
 # import wcmatch
 from wcmatch import fnmatch 

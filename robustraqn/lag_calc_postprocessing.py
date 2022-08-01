@@ -31,7 +31,7 @@ from eqcorrscan.core.match_filter.party import Party
 from robustraqn.obspy.clients.filesystem.sds import Client
 
 from robustraqn.quality_metrics import (get_waveforms_bulk, read_ispaq_stats)
-from robustraqn.seimic_array_tools import get_station_sites
+from robustraqn.seismic_array_tools import get_station_sites
 
 import logging
 Logger = logging.getLogger(__name__)

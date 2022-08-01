@@ -42,7 +42,7 @@ from robustraqn.spectral_tools import (
 from robustraqn.lag_calc_postprocessing import (
     check_duplicate_template_channels, postprocess_picked_events,
     add_origins_to_detected_events)
-from robustraqn.seimic_array_tools import array_lac_calc
+from robustraqn.seismic_array_tools import array_lac_calc
 from robustraqn.processify import processify
 from robustraqn.fancy_processify import fancy_processify
 

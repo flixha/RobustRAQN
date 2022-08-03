@@ -15,6 +15,7 @@ from joblib import Parallel, delayed, parallel_backend
 import pandas as pd
 from itertools import groupby
 from timeit import default_timer
+import numpy as np
 
 # from obspy import read_events, read_inventory
 from obspy.core.event import Catalog
@@ -26,6 +27,7 @@ from obspy.core.stream import Stream
 from obspy.core.event import Event
 from obspy.io.nordic.core import read_nordic
 from obspy.core.inventory.inventory import Inventory
+from obspy.core.util.attribdict import AttribDict
 
 from obsplus import events_to_df
 from obsplus.stations.pd import stations_to_df
@@ -290,7 +292,7 @@ def _create_template_objects(
             select, wavname = read_nordic(
                 event_file, return_wavnames=True, unused_kwargs=unused_kwargs,
                 **kwargs)
-            if bayesloc_event_solutions:
+            if bayesloc_event_solutions is not None:
                 Logger.info('Updating catalog from bayesloc solutions')
                 select = update_cat_from_bayesloc(
                     select, bayesloc_event_solutions, **kwargs)
@@ -379,6 +381,12 @@ def _create_template_objects(
                             ' trace %s', event.short_str(), tr.id)
         wavef = wavef.detrend(type='simple')
 
+        # TODO: Set tr.stats.extra.day_noise_level based on ispaq metrics
+        for tr in wavef:
+            if not hasattr(tr.stats, 'extra'):
+                tr.stats.extra = AttribDict()
+            tr.stats.extra.update({'day_noise_level': 1})
+
         # standardize all codes for network, station, location, channel
         if normalize_NSLC:
             wavef = normalize_NSLC_codes(
@@ -440,9 +448,9 @@ def _create_template_objects(
         ### TODO : this is where a lot of calculated picks are thrown out
         templateSt = template_gen._template_gen(
             picks=event.picks, st=wavef, length=template_length, swin='all',
-            prepick=prepick, all_vert=True, all_horiz=True, plot=False,
+            prepick=prepick, all_vert=True, all_horiz=True,
             delayed=True, min_snr=min_snr, horizontal_chans=horizontal_chans,
-            vertical_chans=vertical_chans)
+            vertical_chans=vertical_chans, **kwargs)
         # quality-control template
         if len(templateSt) == 0:
             Logger.info('Rejected template: event %s (sfile %s): no traces '
@@ -458,6 +466,24 @@ def _create_template_objects(
                 templateSt, template_length, remove_nan_strict=True,
                 allow_channel_duplication=allow_channel_duplication,
                 max_perc_zeros=5)
+
+        # Reduce weights for the individual stations in an array:
+        # Set station_weight_factor according to number of array stations
+        if add_array_picks:
+            unique_stations = list(set([tr.stats.station
+                                        for tr in templateSt]))
+            station_sites = get_station_sites(unique_stations)
+            # Get a list of the sites for each array
+            n_station_sites_list = [station_sites.count(site)
+                                    for site in station_sites]
+            for tr in templateSt:
+                for u_sta, n_station_sites in zip(unique_stations,
+                                                  n_station_sites_list):
+                    if tr.stats.station == u_sta:
+                        # Try a reduction factor of 1 / sqrt(n_sites)
+                        sfact = 1 / np.sqrt(n_station_sites)
+                        tr.stats.extra.station_weight_factor = sfact
+                        tr.stats.extra.weight = (tr.stats.extra.weight * sfact)
 
         # templ_name = str(event.origins[0].time) + '_' + 'templ'
         orig = event.preferred_origin() or event.origins[0]

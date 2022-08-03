@@ -58,6 +58,7 @@ from eqcorrscan.utils.plotting import detection_multiplot
 # from eqcorrscan.utils.despike import median_filter
 # from eqcorrscan.core.match_filter import _spike_test
 from eqcorrscan.utils.pre_processing import dayproc, shortproc
+from eqcorrscan.core.template_gen import _rms
 
 # import quality_metrics, spectral_tools, load_events_for_detection
 # reload(quality_metrics)
@@ -169,7 +170,7 @@ def run_day_detection(
         min_n_station_sites=4, short_tribe=Tribe(), write_party=False,
         detection_path='Detections', redetection_path=None,
         return_stream=False, dump_stream_to_disk=False, day_hash_file=None,
-        sta_translation_file=os.path.expanduser(
+        use_weights=False, sta_translation_file=os.path.expanduser(
             "~/Documents2/ArrayWork/Inventory/station_code_translation.txt"),
         **kwargs):
     """
@@ -212,7 +213,7 @@ def run_day_detection(
             check_array_misdetections, short_tribe, write_party,
             detection_path, redetection_path, time_difference_threshold,
             minimum_sample_rate, min_n_station_sites, apply_agc,
-            agc_window_sec])
+            agc_window_sec, use_weights])
         # Check hash against existing list
         try:
             day_hash_df = pd.read_csv(day_hash_file, names=["date", "hash"])
@@ -314,22 +315,28 @@ def run_day_detection(
 
     # Figure out weights to take difference in template trace SNR and channel
     # noise into account:
-    determine_snr_weights = False
-    if determine_snr_weights:
-        n_templates = len(tribe)
-        unique_trace_ids = sorted(set(
-            [tr.id for templ in tribe for tr in templ.st]))
-        n_traces = len(unique_trace_ids)
-        # need a 2D-array for templates x traces
-        weights = np.zeros(n_templates, n_traces)
+    if use_weights:
         for templ in tribe:
             for tr in templ.st:
                 # Get trace snr from ispaq-stats  - need to calc noise-amp in
                 # relevant frequenc band
-                # if day_stats:
-                #     day_stats[tr.id]
+                if day_stats is not None:
+                    # day_stats[tr.id]
+                    # TODO get noise level in a smarter way
+                    det_day_noise_level = 1
+                try:
+                    station_weight_factor = (
+                        tr.stats.extra.station_weight_factor)
+                except AttributeError as e:
+                    Logger.warning(e)
+                    station_weight_factor = 1
                 # look up noise on this day /trace
-                weight = trace_snr * trace_noise_level
+                # weight = trace_snr * trace_noise_level
+                tr.stats.extra.weight = (
+                    tr.stats.extra.rms_snr ** (1/3) *
+                    station_weight_factor *
+                    np.sqrt(
+                        tr.stats.extra.day_noise_level / det_day_noise_level))
 
     # tmp adjust process_lenght parameters
     daylong = True
@@ -364,7 +371,7 @@ def run_day_detection(
             # parallel_process=False, #concurrency=None,
             group_size=n_templates_per_run, full_peaks=False,
             save_progress=False, process_cores=cores, spike_test=False,
-            **kwargs)
+            use_weights=use_weights, **kwargs)
         # xcorr_func='fftw', concurrency=None, cores=1,
         # xcorr_func=None, concurrency=None, cores=1,
         # xcorr_func=None, concurrency='multiprocess', cores=cores,

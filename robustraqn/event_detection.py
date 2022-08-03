@@ -333,7 +333,10 @@ def run_day_detection(
                 # look up noise on this day /trace
                 # weight = trace_snr * trace_noise_level
                 tr.stats.extra.weight = (
-                    tr.stats.extra.rms_snr ** (1/3) *
+                    # TODO: usecube root??? - difference may be very small,
+                    #       but should be tested on Snorre events
+                    # tr.stats.extra.rms_snr ** (1/3) *
+                    np.sqrt(tr.stats.extra.rms_snr) *
                     station_weight_factor *
                     np.sqrt(
                         tr.stats.extra.day_noise_level / det_day_noise_level))

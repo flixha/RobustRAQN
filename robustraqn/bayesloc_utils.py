@@ -699,8 +699,8 @@ def update_cat_from_bayesloc(cat, bayesloc_stats_out_files, custom_epoch=None,
                         bt.tm_min, bt.tm_sec + (et - int(et)))
             for bt, et in zip(bayes_times, bayes_df.time_mean.values)]
         bayes_df['utctime'] = bayes_utctimes
-        bayes_df['datetime'] = [butc._get_datetime() 
-                                or butc in bayes_utctimes]
+        bayes_df['datetime'] = [butc._get_datetime()
+                                for butc in bayes_utctimes]
 
         # cat_SgLoc = read_seisan_database('Sfiles_MAD10_Saga_02_Sg')
         # cat_Sgloc_df = events_to_df(cat_SgLoc)

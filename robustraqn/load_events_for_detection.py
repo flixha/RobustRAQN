@@ -692,19 +692,21 @@ def robust_rotate(stream, inventory, method="->ZNE"):
     """
     Rotation with error catching for parallel execution.
     """
+    if len(stream) > 0:
+        return stream
     try:
         stream = stream.rotate(method, inventory=inventory)
     except Exception as e:
         try:
             st_id = ' '
             st_time = ' '
-            if stream:
+            if len(stream) > 0:
                 st_id = stream[0].id
-                st_time = str(stream[0].id.starttime)[0:19]
+                st_time = str(stream[0].stats.starttime)[0:19]
             Logger.warning('Cannot rotate traces for station %s on %s: %s',
                            st_id, st_time, e)
-        except IndexError:
-            Logger.warning('Cannot rotate traces', e)
+        except IndexError as e2:
+            Logger.warning('Cannot rotate traces: %s --- %s', e, e2)
     return stream
 
 

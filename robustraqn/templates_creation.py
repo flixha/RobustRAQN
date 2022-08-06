@@ -292,7 +292,7 @@ def _create_template_objects(
             select, wavname = read_nordic(
                 event_file, return_wavnames=True, unused_kwargs=unused_kwargs,
                 **kwargs)
-            if bayesloc_event_solutions is not None:
+            if bayesloc_event_solutions:
                 Logger.info('Updating catalog from bayesloc solutions')
                 select = update_cat_from_bayesloc(
                     select, bayesloc_event_solutions, **kwargs)
@@ -853,9 +853,13 @@ def create_template_objects(
     if apply_agc:
         label = label + 'agc_'
     if write_out:
-        tribe.write('TemplateObjects/' + prefix + 'Templates_min'
-                    + str(min_n_traces) + 'tr_' + label + str(len(tribe)),
-                    max_events_per_file=max_events_per_file, cores=cores)
+        tribe_file_name = (
+            'TemplateObjects/' + prefix + 'Templates_min' + str(min_n_traces) +
+            'tr_' + label + str(len(tribe)))
+        Logger.info('Created %s templates, writing to tribe %s...',
+                    len(tribe), tribe_file_name)
+        tribe.write(tribe_file_name, max_events_per_file=max_events_per_file,
+                    cores=cores)
                     #max_events_per_file=10)
         for templ in tribe:
             templ.write(os.path.join(

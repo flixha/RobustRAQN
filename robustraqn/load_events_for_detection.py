@@ -2452,8 +2452,8 @@ def check_template(st, template_length, remove_nan_strict=True,
     t_lengths = [len(tr.data) for tr in st]
     t_length_max = max(t_lengths)
     if any([t_item == t_length_max for t_item in t_lengths]):
-        Logger.info('Template stream: ' + str(st[0].stats.starttime)[0:10]
-                    + ' has traces with unequal lengths.')
+        Logger.info('Template stream: %s has traces with unequal lengths.',
+                    st[0].stats.starttime)
     # Check each trace
     k = 0
     channelIDs = list()
@@ -2486,8 +2486,9 @@ def check_template(st, template_length, remove_nan_strict=True,
         if tr.stats.npts < template_length*tr.stats.sampling_rate and tr in st:
             st.remove(tr)
             Logger.info(
-                'Trace %s is too short (%s s), removing from template.',
-                tr.id, str(tr.stats.npts / tr.stats.sampling_rate))
+                'Trace %s %s is too short (%s s), removing from template.',
+                tr.id, tr.stats.starttime, 
+                str(tr.stats.npts / tr.stats.sampling_rate))
         # Check that the trace has no NaNs
         if remove_nan_strict and any(np.isnan(tr.data)) and tr in st:
             st.remove(tr)

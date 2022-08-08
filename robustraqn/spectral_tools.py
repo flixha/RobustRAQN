@@ -79,7 +79,7 @@ def balance_noise(self, inv, balance_power_coefficient=2,
 
     try:
         sta_inv = inv.select(station=self.stats.station)
-        if len(sta_inv) == 0 and sta_translation_file not None:
+        if len(sta_inv) == 0 and sta_translation_file is not None:
             sta_fortransl_dict, sta_backtrans_dict = (
                 load_station_translation_dict(file=sta_translation_file)
             if self.stats.station in sta_backtrans_dict:

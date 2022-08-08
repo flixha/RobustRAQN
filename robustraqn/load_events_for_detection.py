@@ -46,7 +46,7 @@ from obsplus.stations.pd import stations_to_df
 
 # import obustraqn.spectral_tools
 from robustraqn.obspy.core.stream import Stream
-from robustraqn.spectral_tools import st_balance_noise, Noise_model
+import robustraqn.spectral_tools  # absolute import to avoid circular import
 from robustraqn.quality_metrics import get_parallel_waveform_client
 from robustraqn.seismic_array_tools import get_station_sites
 from robustraqn.obspy.clients.filesystem.sds import Client
@@ -1620,7 +1620,7 @@ def _init_processing_per_channel(
         # Need to do some prefiltering to avoid phase-shift effects when very
         # low frequencies are boosted
         st = st.filter('highpass', freq=0.1, zerophase=True)  # detrend()
-        st = st_balance_noise(
+        st = robustraqn.spectral_tools.st_balance_noise(
             st, inv, balance_power_coefficient=balance_power_coefficient,
             sta_translation_file=sta_translation_file)
         st = st.detrend(type='linear').taper(
@@ -1707,7 +1707,7 @@ def _init_processing_per_channel_wRotation(
         #     bound_method = st_balance_noise.__get__(st)
         #     st.balance_noise = bound_method
         st = st.filter('highpass', freq=0.1, zerophase=True).detrend()
-        st = st_balance_noise(
+        st = robustraqn.spectral_tools.st_balance_noise(
             st, inv, balance_power_coefficient=balance_power_coefficient,
             sta_translation_file=sta_translation_file)
         st = st.taper(0.005, type='hann', max_length=None, side='both')

@@ -39,7 +39,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s")
 from robustraqn.seismic_array_tools import SEISARRAY_PREFIXES
-from robustraqn.load_events_for_detection import load_station_translation_dict
+import robustraqn.load_events_for_detection
 
 
 def balance_noise(self, inv, balance_power_coefficient=2,
@@ -82,7 +82,8 @@ def balance_noise(self, inv, balance_power_coefficient=2,
         sta_inv = inv.select(station=self.stats.station)
         if len(sta_inv) == 0 and sta_translation_file is not None:
             sta_fortransl_dict, sta_backtrans_dict = (
-                load_station_translation_dict(file=sta_translation_file))
+                robustraqn.load_events_for_detection.\
+                    load_station_translation_dict(file=sta_translation_file))
             if self.stats.station in sta_backtrans_dict:
                 sta_inv = inv.select(station=sta_backtrans_dict.get(
                     self.stats.station))

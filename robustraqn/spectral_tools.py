@@ -42,7 +42,8 @@ from robustraqn.seismic_array_tools import SEISARRAY_PREFIXES
 
 
 def balance_noise(self, inv, balance_power_coefficient=2,
-                  water_level_above_5s_in_db=-150, ground_motion_input=[]):
+                  water_level_above_5s_in_db=-150, ground_motion_input=[],
+                  sta_translation_file=None):
     """
     Normalize the frequency content of the seismogram recorded at a station
     by the station's noise profile.
@@ -77,9 +78,17 @@ def balance_noise(self, inv, balance_power_coefficient=2,
     f = scipy_fft.rfftfreq(fast_len) * self.stats.sampling_rate
 
     try:
-        noise_model = inv.select(station=self.stats.station
-                                 ).networks[0].stations[0].noise_model.copy()
+        sta_inv = inv.select(station=self.stats.station)
+        if len(sta_inv) == 0 and sta_translation_file not None:
+            sta_fortransl_dict, sta_backtrans_dict = (
+                load_station_translation_dict(file=sta_translation_file)
+            if self.stats.station in sta_backtrans_dict:
+                sta_inv = inv.select(station=sta_backtrans_dict.get(
+                    self.stats.station))
+        if len(sta_inv) > 0:
+            sta_inv = sta_inv.networks[0].station[0]
 
+        noise_model = sta_inv.noise_model.copy()
         for j, freq in enumerate(noise_model.frequencies):
             if 1/freq > 5:
                 if noise_model.decibels[j] < water_level_above_5s_in_db:
@@ -93,9 +102,10 @@ def balance_noise(self, inv, balance_power_coefficient=2,
         # Logger.warning('Cannot balance trace by noise PDF, there is no noise'
         #                ' model available for %s', str(self))
         Logger.exception(e)
-        Logger.warning('Cannot balance trace by noise PDF, there is no noise '
-                       'model available for %s %s. Using dummy bandpass filter '
-                       '3-50 Hz', self.id, str(self.stats.starttime))
+        Logger.warning(
+            'Cannot balance trace by noise PDF, there is no noise model '
+            'available for %s %s. Using dummy bandpass filter 3-50 Hz',
+            self.id, str(self.stats.starttime))
         f_filter = np.array([1, 3, 50, 100])
         amp_filter = np.array([10e5, 1, 1, 10e5])
         # return self
@@ -164,7 +174,7 @@ def balance_noise(self, inv, balance_power_coefficient=2,
 
 def st_balance_noise(
         self, inv, balance_power_coefficient=2, ground_motion_input=[],
-        water_level_above_5s_in_db=-150):
+        water_level_above_5s_in_db=-150, sta_translation_file=None):
     """
     Normalize the frequency content of a stream by the mean / mode / median
     noise PDF at that station site.
@@ -182,7 +192,8 @@ def st_balance_noise(
         tr = balance_noise(
             tr, inv, balance_power_coefficient=balance_power_coefficient,
             ground_motion_input=ground_motion_input,
-            water_level_above_5s_in_db=water_level_above_5s_in_db)
+            water_level_above_5s_in_db=water_level_above_5s_in_db,
+            sta_translation_file=sta_translation_file)
 
     return self
 

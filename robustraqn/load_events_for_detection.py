@@ -1575,7 +1575,7 @@ def _init_processing_per_channel(
         skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
         detrend_type='simple', taper_fraction=0.005, pre_filt=None,
         downsampled_max_rate=None, noise_balancing=False,
-        balance_power_coefficient=2, **kwargs):
+        balance_power_coefficient=2, sta_translation_file='', **kwargs):
     """
     Inner loop over which the initial processing can be parallelized
     """
@@ -1621,7 +1621,8 @@ def _init_processing_per_channel(
         # low frequencies are boosted
         st = st.filter('highpass', freq=0.1, zerophase=True)  # detrend()
         st = st_balance_noise(
-            st, inv, balance_power_coefficient=balance_power_coefficient)
+            st, inv, balance_power_coefficient=balance_power_coefficient,
+            sta_translation_file=sta_translation_file)
         st = st.detrend(type='linear').taper(
             0.005, type='hann', max_length=None, side='both')
 
@@ -1707,7 +1708,8 @@ def _init_processing_per_channel_wRotation(
         #     st.balance_noise = bound_method
         st = st.filter('highpass', freq=0.1, zerophase=True).detrend()
         st = st_balance_noise(
-            st, inv, balance_power_coefficient=balance_power_coefficient)
+            st, inv, balance_power_coefficient=balance_power_coefficient,
+            sta_translation_file=sta_translation_file)
         st = st.taper(0.005, type='hann', max_length=None, side='both')
 
     # TODO: agc needs to be moved to after filtering

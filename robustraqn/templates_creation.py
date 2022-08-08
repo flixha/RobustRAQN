@@ -405,7 +405,8 @@ def _create_template_objects(
             wavef = st_balance_noise(
                 wavef, inv,
                 balance_power_coefficient=balance_power_coefficient,
-                ground_motion_input=ground_motion_input)
+                ground_motion_input=ground_motion_input,
+                sta_translation_file=sta_translation_file)
             for tr in wavef:
                 try:
                     tr = tr.detrend('linear').taper(

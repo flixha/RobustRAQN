@@ -177,9 +177,9 @@ def run_day_detection(
     Function to run reading, initial processing, detection etc. on one day.
     """
     Logger.info('Starting detection run for day %s', str(date)[0:10])
-    # Keep user's data safe
-    tribe = tribe.copy()
-    short_tribe = short_tribe.copy()
+    # Keep user's data safe - Probably not needed; so try to avoid to save time
+    # tribe = tribe.copy()
+    # short_tribe = short_tribe.copy()
     # Set the path to the folders with continuous data:
     # archive_path2 = '/data/seismo-wav/EIDA/archive'
     # client2 = Client(archive_path2)
@@ -206,6 +206,8 @@ def run_day_detection(
     if day_hash_file is not None:
         # Check if this date has already been processed with the same settings
         # i.e., current date and a settings-based hash exist already in file
+        Logger.info('Checking if a run with the same parameters has been '
+                    'performed before...')
         settings_hash = get_multi_obj_hash(
             [tribe.templates, selected_stations, remove_response, inv, ispaq,
             noise_balancing, balance_power_coefficient, xcorr_func, arch,

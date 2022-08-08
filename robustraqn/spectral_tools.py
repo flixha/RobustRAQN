@@ -39,6 +39,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s")
 from robustraqn.seismic_array_tools import SEISARRAY_PREFIXES
+from robustraqn.load_events_for_detection import load_station_translation_dict
 
 
 def balance_noise(self, inv, balance_power_coefficient=2,

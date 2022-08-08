@@ -86,7 +86,7 @@ def balance_noise(self, inv, balance_power_coefficient=2,
                 sta_inv = inv.select(station=sta_backtrans_dict.get(
                     self.stats.station))
         if len(sta_inv) > 0:
-            sta_inv = sta_inv.networks[0].station[0]
+            sta_inv = sta_inv.networks[0].stations[0]
 
         noise_model = sta_inv.noise_model.copy()
         for j, freq in enumerate(noise_model.frequencies):

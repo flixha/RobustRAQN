@@ -1239,7 +1239,9 @@ def try_apply_agc(st, tribe, agc_window_sec=5, pre_processed=False,
             len(filt_orders) == 1 and len(samp_rates) == 1):
         Logger.info(
             'All templates have the same trace-processing parameters. '
-            'Preprocessing data once for AGC application.')
+            'Preprocessing data once for AGC application.'
+            'length: %s samples, lowcut: %s Hz, highcut: %s Hz, samp_rate: %s',
+            tribe[0].st[0].stats.npts, lowcuts[0], highcuts[0], samp_rates[0])
         st = shortproc(
             st, lowcut=lowcuts[0], highcut=highcuts[0],
             filt_order=filt_orders[0], samp_rate=samp_rates[0],

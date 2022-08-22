@@ -1473,7 +1473,7 @@ if __name__ == "__main__":
 
 
 # %%
-    picked_catalog = array_lac_calc(
+    picked_catalog = array_lag_calc(
         day_st, export_catalog, party, tribe, stations_df, min_cc=0.4,
         pre_processed=False, shift_len=0.8, min_cc_from_mean_cc_factor=0.6,
         horizontal_chans=['E', 'N', '1', '2'], vertical_chans=['Z'],

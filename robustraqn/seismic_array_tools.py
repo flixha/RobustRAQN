@@ -993,7 +993,7 @@ def array_lac_calc(
         horizontal_chans=['E', 'N', '1', '2'], vertical_chans=['Z'],
         interpolate=False, plot=False, overlap='calculate',
         parallel=False, cores=None, daylong=True, ignore_bad_data=True,
-        ignore_length=True, **kwargs):
+        ignore_length=True, ignore_cccsum_comparison=False, **kwargs):
     """
     Obtain a cross-correlation pick for seismic arrays. This function should be
     invoked after `EQcorrscan.core.lag_calc` has computed picks for individual
@@ -1134,7 +1134,9 @@ def array_lac_calc(
                 plot=plot, overlap=overlap, daylong=daylong,
                 parallel=parallel, cores=cores, process_cores=1,
                 ignore_bad_data=ignore_bad_data,
-                ignore_length=ignore_length, **kwargs)
+                ignore_length=ignore_length,
+                ignore_cccsum_comparison=ignore_cccsum_comparison,
+                **kwargs)
 
             Logger.info('Got new array picks for %s events.',
                         str(len(array_catalog)))

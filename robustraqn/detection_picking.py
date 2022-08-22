@@ -173,8 +173,8 @@ def pick_events_for_day(
         threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
         archives=[], request_fdsn=False, min_det_chans=1, shift_len=0.8,
         min_cc=0.4, min_cc_from_mean_cc_factor=0.6, extract_len=240,
-        write_party=False, all_vert=True, all_horiz=True, 
-        vertical_chans=['Z', 'H'],
+        write_party=False, ignore_cccsum_comparison=True,
+        all_vert=True, all_horiz=True, vertical_chans=['Z', 'H'],
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
         sfile_path='Sfiles', operator='EQC', **kwargs):
     """
@@ -371,7 +371,8 @@ def pick_events_for_day(
         min_cc=min_cc, min_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
         all_vert=all_vert, all_horiz=all_horiz,
         horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
-        parallel=parallel, cores=cores, daylong=daylong, **kwargs)
+        parallel=parallel, cores=cores, daylong=daylong,
+        ignore_cccsum_comparison=ignore_cccsum_comparison, **kwargs)
     # try:
     # except LagCalcError:
     #    pass
@@ -393,7 +394,8 @@ def pick_events_for_day(
             min_cc_from_mean_cc_factor=min(min_cc_from_mean_cc_factor, 0.999),
             all_vert=all_vert, all_horiz=all_horiz,
             horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
-            parallel=parallel, cores=cores, daylong=daylong, **kwargs)
+            parallel=parallel, cores=cores, daylong=daylong,
+            ignore_cccsum_comparison=ignore_cccsum_comparison, **kwargs)
 
     export_catalog = postprocess_picked_events(
         picked_catalog, dayparty, tribe, original_stats_stream,

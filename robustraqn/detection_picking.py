@@ -162,7 +162,7 @@ def prepare_and_update_party(dayparty, tribe, day_st):
 def pick_events_for_day(
         date, det_folder, template_path, ispaq, clients, tribe, dayparty=None,
         short_tribe=Tribe(), det_tribe=Tribe(), stations_df=None,
-        only_request_detection_stations=True, array_lag_calc=False,
+        only_request_detection_stations=True, apply_array_lag_calc=False,
         relevant_stations=[], sta_translation_file='', let_days_overlap=True,
         noise_balancing=False, remove_response=False, inv=Inventory(),
         apply_agc=False, agc_window_sec=5,
@@ -348,7 +348,7 @@ def pick_events_for_day(
                 detection_file_name + '.csv', format='csv', overwrite=True)
 
     # Check if I can do pre-processing just once:
-    if array_lac_calc and not pre_processed:
+    if apply_array_lag_calc and not pre_processed:
         lowcuts = list(set([tp.lowcut for tp in tribe]))
         highcuts = list(set([tp.highcut for tp in tribe]))
         filt_orders = list(set([tp.filt_order for tp in tribe]))

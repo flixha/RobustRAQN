@@ -42,7 +42,7 @@ from robustraqn.spectral_tools import (
 from robustraqn.lag_calc_postprocessing import (
     check_duplicate_template_channels, postprocess_picked_events,
     add_origins_to_detected_events)
-from robustraqn.seismic_array_tools import array_lac_calc
+from robustraqn.seismic_array_tools import array_lag_calc
 from robustraqn.processify import processify
 from robustraqn.fancy_processify import fancy_processify
 
@@ -162,7 +162,7 @@ def prepare_and_update_party(dayparty, tribe, day_st):
 def pick_events_for_day(
         date, det_folder, template_path, ispaq, clients, tribe, dayparty=None,
         short_tribe=Tribe(), det_tribe=Tribe(), stations_df=None,
-        only_request_detection_stations=True, array_lag_calc=False,
+        only_request_detection_stations=True, apply_array_lag_calc=False,
         relevant_stations=[], sta_translation_file='', let_days_overlap=True,
         noise_balancing=False, remove_response=False, inv=Inventory(),
         apply_agc=False, agc_window_sec=5,
@@ -348,7 +348,7 @@ def pick_events_for_day(
                 detection_file_name + '.csv', format='csv', overwrite=True)
 
     # Check if I can do pre-processing just once:
-    if array_lac_calc and not pre_processed:
+    if apply_array_lag_calc and not pre_processed:
         lowcuts = list(set([tp.lowcut for tp in tribe]))
         highcuts = list(set([tp.highcut for tp in tribe]))
         filt_orders = list(set([tp.filt_order for tp in tribe]))
@@ -387,8 +387,8 @@ def pick_events_for_day(
     picked_catalog = add_origins_to_detected_events(
         picked_catalog, dayparty, tribe=tribe)
 
-    if array_lag_calc:
-        picked_catalog = array_lac_calc(
+    if apply_array_lag_calc:
+        picked_catalog = array_lag_calc(
             day_st, picked_catalog, dayparty, tribe, stations_df,
             min_cc=min_cc, pre_processed=pre_processed, shift_len=shift_len,
             min_cc_from_mean_cc_factor=min(min_cc_from_mean_cc_factor, 0.999),

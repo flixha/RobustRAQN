@@ -991,7 +991,8 @@ def array_lag_calc(
         min_cc=0.4, pre_processed=False, shift_len=0.8,
         min_cc_from_mean_cc_factor=0.6,
         horizontal_chans=['E', 'N', '1', '2'], vertical_chans=['Z'],
-        interpolate=False, plot=False, overlap='calculate',
+        interpolate=False, use_new_resamp_method=True,
+        plot=False, overlap='calculate',
         parallel=False, cores=None, daylong=True, ignore_bad_data=True,
         ignore_length=True, ignore_cccsum_comparison=False, **kwargs):
     """
@@ -1131,6 +1132,7 @@ def array_lag_calc(
                     min_cc_from_mean_cc_factor/cc_relax_factor),
                 horizontal_chans=horizontal_chans,
                 vertical_chans=vertical_chans, interpolate=interpolate,
+                use_new_resamp_method=use_new_resamp_method,
                 plot=plot, overlap=overlap, daylong=daylong,
                 parallel=parallel, cores=cores, process_cores=1,
                 ignore_bad_data=ignore_bad_data,

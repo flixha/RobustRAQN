@@ -856,8 +856,8 @@ def create_template_objects(
         label = label + 'balNoise_'
     if apply_agc:
         label = label + 'agc_'
-    if task_id:
-        label = label + 'id' + str(task_id) + '_'
+    if task_id is not None:
+        label = label + 'chunk_' + "{:02d}".format(task_id) + '_'
     if write_out:
         tribe_file_name = (
             'TemplateObjects/' + prefix + 'Templates_min' + str(min_n_traces) +

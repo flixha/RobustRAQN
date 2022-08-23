@@ -618,7 +618,8 @@ def create_template_objects(
         vertical_chans=['Z', 'H'],
         wavetool_path='/home/felix/Software/SEISANrick/PRO/linux64/wavetool',
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
-        parallel=False, cores=1, max_events_per_file=200, *args, **kwargs):
+        parallel=False, cores=1, max_events_per_file=200, task_id=None,
+        *args, **kwargs):
     """
       Wrapper for create-template-function
     """
@@ -856,6 +857,8 @@ def create_template_objects(
         label = label + 'balNoise_'
     if apply_agc:
         label = label + 'agc_'
+    if task_id:
+        label = label + 'id' + str(task_id) + '_'
     if write_out:
         tribe_file_name = (
             'TemplateObjects/' + prefix + 'Templates_min' + str(min_n_traces) +

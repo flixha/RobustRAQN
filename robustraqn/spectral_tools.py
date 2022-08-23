@@ -44,7 +44,7 @@ import robustraqn.load_events_for_detection
 
 def balance_noise(self, inv, balance_power_coefficient=2,
                   water_level_above_5s_in_db=-150, ground_motion_input=[],
-                  sta_translation_file=None):
+                  sta_translation_file=None, max_percentage=0.05, **kwargs):
     """
     Normalize the frequency content of the seismogram recorded at a station
     by the station's noise profile.
@@ -167,11 +167,12 @@ def balance_noise(self, inv, balance_power_coefficient=2,
     # Remove the extra points that were added for fast fft
     # Convert (back) to float32, there's no point with memory-heavy float64
     self.data = np.float32(self.data[0:orig_npts])
+    self.taper(max_percentage=max_percentage, **kwargs).detrend(**kwargs)
 
     return self
 
 
-# Would be nice to monkey-patch this method onto the Stream-class
+# TODO: Would be nice to monkey-patch this method onto the Stream-class
 # class Stream(obspy.core.stream.Stream):
 
 def st_balance_noise(

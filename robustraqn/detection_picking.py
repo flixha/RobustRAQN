@@ -178,7 +178,7 @@ def pick_events_for_day(
         write_party=False, ignore_cccsum_comparison=True,
         all_vert=True, all_horiz=True, vertical_chans=['Z', 'H'],
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
-        sfile_path='Sfiles', operator='EQC', **kwargs):
+        sfile_path='Sfiles', operator='EQC', day_hash_file=None, **kwargs):
     """
     Day-loop for picker
     """
@@ -389,6 +389,7 @@ def pick_events_for_day(
         min_cc=min_cc, min_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
         all_vert=all_vert, all_horiz=all_horiz,
         horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
+        interpolate=interpolate, use_new_resamp_method=use_new_resamp_method,
         parallel=parallel, cores=cores, daylong=daylong,
         ignore_cccsum_comparison=ignore_cccsum_comparison, **kwargs)
     # try:
@@ -413,6 +414,8 @@ def pick_events_for_day(
             all_vert=all_vert, all_horiz=all_horiz,
             horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
             parallel=parallel, cores=cores, daylong=daylong,
+            interpolate=interpolate,
+            use_new_resamp_method=use_new_resamp_method,
             ignore_cccsum_comparison=ignore_cccsum_comparison, **kwargs)
 
     export_catalog = postprocess_picked_events(

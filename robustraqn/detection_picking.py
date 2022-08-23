@@ -174,6 +174,7 @@ def pick_events_for_day(
         threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
         archives=[], request_fdsn=False, min_det_chans=1, shift_len=0.8,
         min_cc=0.4, min_cc_from_mean_cc_factor=0.6, extract_len=240,
+        interpolate=True, use_new_resamp_method=True,
         write_party=False, ignore_cccsum_comparison=True,
         all_vert=True, all_horiz=True, vertical_chans=['Z', 'H'],
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
@@ -225,6 +226,10 @@ def pick_events_for_day(
                     current_day_str)
         return
 
+    dayparty = Party(dayparty[82])  # DEBUG
+    Logger.info('Retaining only detections for template %s',
+                dayparty[0].template.name)
+    
     Logger.info('Starting to pick events with party of %s families for %s',
                 str(len(dayparty)), current_day_str)
     # Choose only stations that are relevant for any detection on that day.

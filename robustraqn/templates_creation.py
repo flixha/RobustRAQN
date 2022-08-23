@@ -411,8 +411,9 @@ def _create_template_objects(
                 sta_translation_file=sta_translation_file)
             for tr in wavef:
                 try:
-                    tr = tr.detrend('linear').taper(
-                        0.15, type='hann', max_length=30, side='both')
+                    tr = tr.taper(
+                        max_percentage=0.10, type='hann', max_length=15,
+                        side='both').detrend('linear')
                 except ValueError as e:
                     Logger.error('Could not detrend trace %s:', tr)
                     Logger.error(e)

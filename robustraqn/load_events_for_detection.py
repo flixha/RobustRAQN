@@ -1023,7 +1023,7 @@ def prepare_picks(
         event, stream, inv=Inventory(), normalize_NSLC=True,
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         sta_translation_file="station_code_translation.txt",
-        vertical_chans=['Z'], horizontal_chans=['E', 'N', '1', '2'],
+        vertical_chans=['Z', 'H'], horizontal_chans=['E', 'N', '1', '2', '3'],
         allowed_phase_types='PST',
         allowed_phase_hints=['Pn', 'Pg', 'P', 'Sn', 'Sg', 'S', 'Lg', 'sP',
                              'pP', 'Pb', 'PP', 'Sb', 'SS'],
@@ -1148,6 +1148,9 @@ def prepare_picks(
         # 3. If P-pick is not on vertical channel and there exists a 'Z'-
         #    channel, then switch P-pick to Z.
         # TODO: allow different/multiple vertical chans (e.g., Z and H)
+        # TODO: add option to avoid switching picks when data quality bad on
+        #       one channel - picks may have been set on other channel
+        #       deliberately
         if (pick.phase_hint.upper()[0] == 'P' and
                 pick.waveform_id.channel_code[-1] not in vertical_chans):
             for vertical_chan in vertical_chans:
@@ -1155,6 +1158,9 @@ def prepare_picks(
                     pick.waveform_id.channel_code = (
                         std_channel_prefix + vertical_chan)
                     break
+            # Event if no available vertical channel was found, change
+            # component to Z so that lag-calc does not pick wrong phase_hint
+            pick.waveform_id.channeø_code = std_channel_prefix + 'Z'
         # 4. If S-pick is on vertical channel and there exist horizontal
         #    channels, then switch S_pick to the first horizontal.
         elif (pick.phase_hint.upper()[0] == 'S' and

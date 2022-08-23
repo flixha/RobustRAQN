@@ -271,10 +271,12 @@ def pick_events_for_day(
         try_despike=False)
     # daily_plot(day_st, year, month, day, data_unit="counts",
     #            suffix='resp_removed')
+    nyquist_f = minimum_sample_rate / 2
     day_st = init_processing(
         day_st, starttime=starttime_req, endtime=endtime_req,
-        remove_response=remove_response, inv=inv, parallel=parallel,
-        cores=cores, **kwargs)
+        remove_response=remove_response, inv=inv,
+        pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],
+        parallel=parallel, cores=cores, **kwargs)
 
     daylong = True
     if let_days_overlap:

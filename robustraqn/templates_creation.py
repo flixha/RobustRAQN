@@ -362,8 +362,11 @@ def _create_template_objects(
             continue
 
         if remove_response:
+            nyquist_f = samp_rate / 2
             wavef = try_remove_responses(
-                wavef, inv, taper_fraction=0.15, pre_filt=[0.01, 0.05, 45, 50],
+                wavef, inv, taper_fraction=0.15,
+                pre_filt=pre_filt=[
+                    0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],
                 parallel=parallel, cores=cores, **kwargs)
             if origin.latitude is None or origin.longitude is None:
                 Logger.warning('Could not compute distances for event %s.',

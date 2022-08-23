@@ -226,9 +226,9 @@ def pick_events_for_day(
                     current_day_str)
         return
 
-    dayparty = Party(dayparty[82])  # DEBUG
-    Logger.info('Retaining only detections for template %s',
-                dayparty[0].template.name)
+    # dayparty = Party(dayparty[82])  # DEBUG
+    # Logger.info('Retaining only detections for template %s',
+    #             dayparty[0].template.name)
     
     Logger.info('Starting to pick events with party of %s families for %s',
                 str(len(dayparty)), current_day_str)
@@ -275,6 +275,7 @@ def pick_events_for_day(
     day_st = prepare_detection_stream(
         day_st, tribe, parallel=parallel, cores=cores,
         try_despike=False)
+    original_stats_stream = day_st.copy()
     # daily_plot(day_st, year, month, day, data_unit="counts",
     #            suffix='resp_removed')
     # day_st = init_processing(
@@ -303,7 +304,6 @@ def pick_events_for_day(
         tribe, short_tribe, day_st = prepare_day_overlap(
             tribe, short_tribe, day_st, starttime, endtime, overlap_length=0)
 
-    original_stats_stream = day_st.copy()
     # WHY NEEDED HERE????
     # day_st.merge(method=0, fill_value=0, interpolation_samples=0)
     # Normalize NSLC codes

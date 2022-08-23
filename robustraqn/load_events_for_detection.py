@@ -1160,7 +1160,7 @@ def prepare_picks(
                     break
             # Event if no available vertical channel was found, change
             # component to Z so that lag-calc does not pick wrong phase_hint
-            pick.waveform_id.channeø_code = std_channel_prefix + 'Z'
+            pick.waveform_id.channel_code = std_channel_prefix + 'Z'
         # 4. If S-pick is on vertical channel and there exist horizontal
         #    channels, then switch S_pick to the first horizontal.
         elif (pick.phase_hint.upper()[0] == 'S' and

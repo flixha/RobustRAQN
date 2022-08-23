@@ -421,7 +421,7 @@ def find_array_picks_baz_appvel(
         event for which array-picks are to be extracted into a dictionary.
     :type phase_hints: list or None
     :param phase_hints:
-        list of phase-hints for which array picks should be extraced. ´´None´´
+        list of phase-hints for which array picks should be extraced. 'None'
         means that the function returns information for all phase-hints for
         which picks exist at each array.
     :type seisarray_prefixes: list
@@ -437,13 +437,13 @@ def find_array_picks_baz_appvel(
     :type array_baz_dict: dict or None
     :param array_baz_dict:
         2-level dictionary of seismic-array-prefixes (keys), phase_hints (keys)
-        and backazimuths of the phase at the array (values). Leave as ´´None´´
+        and backazimuths of the phase at the array (values). Leave as 'None'
         to let function find available information in the event.
     :type array_app_vel_dict: dict or None
     :param array_app_vel_dict:
         2-level dictionary of seismic-array-prefixes (keys), phase_hints (keys)
         and apparent velocities (in km/s) of the phase at the array (values).
-        Leave as ´´None´´ to let function find available information in the
+        Leave as 'None' to let function find available information in the
         event.
     :type vel_mod: class:`obspy.taup.velocity_model.VelocityModel`
     :param vel_mod:
@@ -699,22 +699,22 @@ def add_array_station_picks(
     :type array_baz_dict: dict or None
     :param array_baz_dict:
         2-level dictionary of seismic-array-prefixes (keys), phase_hints (keys)
-        and backazimuths of the phase at the array (values). Leave as ´´None´´
+        and backazimuths of the phase at the array (values). Leave as 'None'
         to let function find available information in the event.
     :type array_app_vel_dict: dict or None
     :param array_app_vel_dict:
         2-level dictionary of seismic-array-prefixes (keys), phase_hints (keys)
         and apparent velocities (in km/s) of the phase at the array (values).
-        Leave as ´´None´´ to let function find available information in the
+        Leave as 'None' to let function find available information in the
         event.
     :type baz: float or None
     :param baz:
         backazimuth value that should be used for all computations. Leave as
-        ´´None´´ so as not to overwrite array/phase-specific values.
+        'None' so as not to overwrite array/phase-specific values.
     :type app_vel: float or None
     :param app_vel:
         apparent-velocity value (km/s) that should be used for all
-        computations. Leave as ´´None´´ so as not to overwrite array/phase-
+        computations. Leave as 'None' so as not to overwrite array/phase-
         specific values.
     :type seisarray_prefixes: list
     :param seisarray_prefixes:

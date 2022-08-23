@@ -1633,8 +1633,10 @@ def _init_processing_per_channel(
         st = robustraqn.spectral_tools.st_balance_noise(
             st, inv, balance_power_coefficient=balance_power_coefficient,
             sta_translation_file=sta_translation_file)
-        st = st.detrend(type='linear').taper(
-            0.005, type='hann', max_length=None, side='both')
+        st = st.taper(0.005, type='hann', max_length=None, side='both'
+                      ).detrend(type='linear')
+        # st = st.detrend(type='linear').taper(
+        #    0.005, type='hann', max_length=None, side='both')
 
     # Trim to full day and detrend again
     st = st.trim(starttime=starttime, endtime=endtime, pad=True,

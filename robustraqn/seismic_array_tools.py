@@ -985,7 +985,7 @@ def _check_picks_within_shiftlen(party, event, detection_id, shift_len):
     return event
 
 
-def array_lac_calc(
+def array_lag_calc(
         st, picked_cat, party, tribe, stations_df,
         seisarray_prefixes=SEISARRAY_PREFIXES,
         min_cc=0.4, pre_processed=False, shift_len=0.8,

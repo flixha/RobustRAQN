@@ -42,7 +42,7 @@ from robustraqn.spectral_tools import (
 from robustraqn.lag_calc_postprocessing import (
     check_duplicate_template_channels, postprocess_picked_events,
     add_origins_to_detected_events)
-from robustraqn.seismic_array_tools import array_lac_calc
+from robustraqn.seismic_array_tools import array_lag_calc
 from robustraqn.processify import processify
 from robustraqn.fancy_processify import fancy_processify
 
@@ -387,8 +387,8 @@ def pick_events_for_day(
     picked_catalog = add_origins_to_detected_events(
         picked_catalog, dayparty, tribe=tribe)
 
-    if array_lag_calc:
-        picked_catalog = array_lac_calc(
+    if apply_array_lag_calc:
+        picked_catalog = array_lag_calc(
             day_st, picked_catalog, dayparty, tribe, stations_df,
             min_cc=min_cc, pre_processed=pre_processed, shift_len=shift_len,
             min_cc_from_mean_cc_factor=min(min_cc_from_mean_cc_factor, 0.999),

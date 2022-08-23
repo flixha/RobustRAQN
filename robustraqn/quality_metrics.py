@@ -1008,7 +1008,7 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
     # file that contains all metrics from the databse (saves concat-time).
     load_all_files = True
     if (file_type == 'parquet' and
-            len(stations) * (endyear + 1 - startyear) > 1000):
+            len(stations) * (endyear + 1 - startyear) > 300):
         merged_metrics_file = glob.glob(os.path.join(os.path.split(
             os.path.expanduser(folder))[0], 'all_csv_metrics_merged.parquet'))
         merged_file_age_days = np.nan

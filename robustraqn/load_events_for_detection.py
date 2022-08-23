@@ -1282,7 +1282,7 @@ def try_apply_agc(st, tribe, agc_window_sec=5, pre_processed=False,
 
 
 def init_processing(day_st, starttime, endtime, remove_response=False,
-                    inv=Inventory(), min_segment_length_s=10,
+                    inv=Inventory(), pre_filt=None, min_segment_length_s=10,
                     max_sample_rate_diff=1,
                     skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
                     skip_interp_sample_rate_smaller=1e-7,
@@ -1315,7 +1315,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
                          id, str(starttime)[0:19], str(endtime)[0:19])
             st += _init_processing_per_channel(
                 day_st.select(id=id), starttime, endtime,
-                remove_response=remove_response,
+                remove_response=remove_response, pre_filt=pre_filt,
                 inv=inv.select(station=id.split('.')[1]),
                 min_segment_length_s=min_segment_length_s,
                 max_sample_rate_diff=max_sample_rate_diff,
@@ -1392,7 +1392,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
             streams = Parallel(n_jobs=cores)(
                 delayed(_init_processing_per_channel)
                 (day_st.select(id=id), starttime, endtime,
-                 remove_response=remove_response,
+                 remove_response=remove_response, pre_filt=pre_filt,
                  inv=inv.select(station=id.split('.')[1], starttime=starttime,
                                 endtime=endtime),
                  min_segment_length_s=min_segment_length_s,
@@ -1418,8 +1418,8 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
 
 
 def init_processing_wRotation(
-        day_st, starttime, endtime, remove_response=False, inv=Inventory(),
-        sta_translation_file='', parallel=False, cores=None,
+        day_st, starttime, endtime, remove_response=False, pre_filt=None,
+        inv=Inventory(), sta_translation_file='', parallel=False, cores=None,
         min_segment_length_s=10, max_sample_rate_diff=1,
         skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
         skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
@@ -1474,6 +1474,7 @@ def init_processing_wRotation(
             st += _init_processing_per_channel_wRotation(
                 day_st.select(network=nsl[0], station=nsl[1], location=nsl[2]),
                 starttime, endtime, remove_response=remove_response,
+                pre_filt=pre_filt,
                 inv=inv.select(station=nsl[1], starttime=starttime,
                                endtime=endtime),
                 min_segment_length_s=min_segment_length_s,
@@ -1551,6 +1552,7 @@ def init_processing_wRotation(
                     starttime, endtime, remove_response=remove_response,
                     inv=inv.select(
                         station=nsl[1], starttime=starttime, endtime=endtime),
+                    pre_filt=pre_filt,
                     sta_translation_file=sta_translation_file,
                     min_segment_length_s=min_segment_length_s,
                     max_sample_rate_diff=max_sample_rate_diff,
@@ -1577,8 +1579,8 @@ def init_processing_wRotation(
 
 
 def _init_processing_per_channel(
-        st, starttime, endtime, remove_response=False, inv=Inventory(),
-        min_segment_length_s=10, max_sample_rate_diff=1,
+        st, starttime, endtime, remove_response=False,
+        inv=Inventory(), min_segment_length_s=10, max_sample_rate_diff=1,
         skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
         skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
         detrend_type='simple', taper_fraction=0.005, pre_filt=None,
@@ -1655,8 +1657,8 @@ def _init_processing_per_channel(
 
 
 def _init_processing_per_channel_wRotation(
-        st, starttime, endtime, remove_response=False, inv=Inventory(),
-        sta_translation_file='', min_segment_length_s=10,
+        st, starttime, endtime, remove_response=False, pre_filt=None,
+        inv=Inventory(), sta_translation_file='', min_segment_length_s=10,
         max_sample_rate_diff=1,
         skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
         skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
@@ -1697,7 +1699,8 @@ def _init_processing_per_channel_wRotation(
     if remove_response:
         st = try_remove_responses(
             st, inv.select(starttime=starttime, endtime=endtime),
-            taper_fraction=0.005, parallel=parallel, cores=cores)
+            taper_fraction=0.005, pre_filt=pre_filt,
+            parallel=parallel, cores=cores)
     # Trim to full day and detrend again
     st.trim(starttime=starttime, endtime=endtime, pad=True,
             nearest_sample=True, fill_value=0)

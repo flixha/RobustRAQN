@@ -5,17 +5,11 @@ import getpass
 from multiprocessing import Pool, cpu_count
 from multiprocessing.pool import ThreadPool
 
-
 import numpy as np
 import difflib
 import pandas as pd
-# import numexpr as ne
 
-# from obspy import read_events, read_inventory
-# from obspy.core.event import Catalog
-# import obspy
 from obspy.core.stream import Stream
-# from obspy.core.util.base import TypeError
 from obspy.core.event import (Event, Catalog, Origin, Comment, CreationInfo,
                               WaveformStreamID)
 from obspy.io.nordic.core import read_nordic, write_select, _write_nordic
@@ -24,12 +18,8 @@ from obspy import UTCDateTime
 from obspy.clients.fdsn import RoutingClient
 from eqcorrscan.core.match_filter.tribe import Tribe
 from eqcorrscan.core.match_filter.party import Party
-# from eqcorrscan.utils.clustering import extract_detections
-# from eqcorrscan.utils.despike import median_filter
-# from obspy import read_nordic
-# import obspy
-from robustraqn.obspy.clients.filesystem.sds import Client
 
+from robustraqn.obspy.clients.filesystem.sds import Client
 from robustraqn.quality_metrics import (get_waveforms_bulk, read_ispaq_stats)
 from robustraqn.seismic_array_tools import get_station_sites
 
@@ -303,12 +293,12 @@ def postprocess_picked_events(
                 pick_chan_comp = '[' + pick_chan_comp + '1]'
             elif pick_chan_comp == 'E':
                 pick_chan_comp = '[' + pick_chan_comp + '2]'
-            reqChan = '??' + pick_chan_comp
-            reqStream = original_stats_stream.select(station=pick_station,
-                                                     channel=reqChan)
-            if len(reqStream) == 0:
+            req_chan = '??' + pick_chan_comp
+            req_stream = original_stats_stream.select(station=pick_station,
+                                                      channel=req_chan)
+            if len(req_stream) == 0:
                 continue
-            pick.waveform_id = WaveformStreamID(seed_string=reqStream[0].id)
+            pick.waveform_id = WaveformStreamID(seed_string=req_stream[0].id)
         if len(event.picks) == 0:
             continue
 

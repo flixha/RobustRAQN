@@ -164,8 +164,9 @@ def run_day_detection(
         n_templates_per_run=20, xcorr_func='fftw',
         concurrency=None, arch='precise', trig_int=0, threshold=10,
         threshold_type='MAD', re_eval_thresh_factor=0.6, min_chans=10,
-        minimum_sample_rate=20, time_difference_threshold=3,
-        detect_value_allowed_error=60,
+        decluster_metric='thresh_exc', hypocentral_separation=200,
+        absolute_values=True, minimum_sample_rate=20,
+        time_difference_threshold=3, detect_value_allowed_error=60,
         multiplot=False, day_st=Stream(), check_array_misdetections=False,
         min_n_station_sites=4, short_tribe=Tribe(), write_party=False,
         detection_path='Detections', redetection_path=None,
@@ -365,7 +366,7 @@ def run_day_detection(
                 current_day_str, str(cores))
     try:
         party = tribe.detect(
-            stream=day_st, threshold=threshold, trig_int=trig_int/4,
+            stream=day_st, threshold=threshold, trig_int=trig_int / 10,
             threshold_type=threshold_type, overlap='calculate', plot=False,
             plotDir='DetectionPlots', daylong=daylong,
             fill_gaps=True, ignore_bad_data=False, ignore_length=True, 
@@ -466,8 +467,9 @@ def run_day_detection(
                 else:
                     return [party, return_st]
             short_party = short_party.decluster(
-                trig_int=trig_int, timing='detect', metric='thresh_exc',
-                min_chans=min_chans, absolute_values=True)
+                trig_int=trig_int, timing='detect', metric=decluster_metric,
+                hypocentral_separation=hypocentral_separation,
+                min_chans=min_chans, absolute_values=absolute_values)
             # TODO: maybe the order should be:
             # check array-misdet - decluster party - compare short-party vs. party
             if write_party:
@@ -482,8 +484,9 @@ def run_day_detection(
     # very few channels - i.e., allowing higher CC than any detection made on
     # many channels
     party = party.decluster(trig_int=trig_int, timing='detect',
-                            metric='thresh_exc', min_chans=min_chans,
-                            absolute_values=True)
+                            metric=decluster_metric, min_chans=min_chans,
+                            hypocentral_separation=hypocentral_separation,
+                            absolute_values=absolute_values)
 
     if write_party:
         detection_file_name = os.path.join(detection_path,

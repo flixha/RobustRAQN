@@ -36,7 +36,8 @@ from robustraqn.load_events_for_detection import (
     prepare_detection_stream, init_processing, init_processing_wRotation,
     get_all_relevant_stations, normalize_NSLC_codes, reevaluate_detections,
     try_apply_agc)
-from robustraqn.event_detection import prepare_day_overlap
+from robustraqn.event_detection import (
+    prepare_day_overlap, get_multi_obj_hash, append_list_completed_days)
 from robustraqn.spectral_tools import (
     Noise_model, get_updated_inventory_with_noise_models)
 from robustraqn.lag_calc_postprocessing import (
@@ -184,6 +185,38 @@ def pick_events_for_day(
     """
 
     current_day_str = date.strftime('%Y-%m-%d')
+
+    if day_hash_file is not None:
+        # Check if this date has already been processed with the same settings
+        # i.e., current date and a settings-based hash exist already in file
+        Logger.info('Checking if a run with the same parameters has been '
+                    'performed before...')
+        settings_hash = get_multi_obj_hash(
+            [tribe.templates, relevant_stations, remove_response, inv, ispaq,
+            noise_balancing, balance_power_coefficient, xcorr_func, arch,
+            trig_int, new_threshold, threshold_type, min_det_chans,
+            minimum_sample_rate, archives, request_fdsn, shift_len, min_cc,
+            min_cc_from_mean_cc_factor, extract_len, all_vert, all_horiz,
+            check_array_misdetections, short_tribe, write_party,
+            vertical_chans, horizontal_chans, det_folder, template_path,
+            time_difference_threshold, minimum_sample_rate, apply_agc,
+            agc_window_sec, interpolate, use_new_resamp_method,
+            ignore_cccsum_comparison])
+        # Check hash against existing list
+        try:
+            day_hash_df = pd.read_csv(day_hash_file, names=["date", "hash"])
+            if ((day_hash_df['date'] == current_day_str) &
+                    (day_hash_df['hash'] == settings_hash)).any():
+                Logger.info(
+                    'Day %s already processed: Date and hash match entry in '
+                    'date-hash list, skipping this day.', current_day_str)
+                if not return_stream and dump_stream_to_disk:
+                    return
+                else:
+                    return [Party(), Stream()]
+        except FileNotFoundError:
+            pass
+
     # Read in party of detections and check whether to proceeed
     if dayparty is None:
         dayparty = Party()
@@ -224,6 +257,8 @@ def pick_events_for_day(
         Logger.info('No detections left after re-thresholding for %s '
                     + 'families on %s', str(len(dayparty)),
                     current_day_str)
+        append_list_completed_days(
+                file=day_hash_file, date=current_day_str, hash=settings_hash)
         return
 
     # dayparty = Party(dayparty[82])  # DEBUG
@@ -257,6 +292,8 @@ def pick_events_for_day(
         stations=required_stations, **kwargs)
     if not bulk_request:
         Logger.warning('No waveforms requested for %s', current_day_str)
+        append_list_completed_days(
+                file=day_hash_file, date=current_day_str, hash=settings_hash)
         return
 
     # Read in continuous data and prepare for processing
@@ -326,6 +363,8 @@ def pick_events_for_day(
     if not day_st.traces:
         Logger.warning('No data for detection on %s, continuing'
                        ' with next day.', current_day_str)
+        append_list_completed_days(
+                file=day_hash_file, date=current_day_str, hash=settings_hash)
         return
 
     # Check for erroneous detections of real signals (mostly caused by smaller
@@ -354,6 +393,8 @@ def pick_events_for_day(
                 return_party_with_short_templates=True, **kwargs)
         if not dayparty:
             Logger.warning('Party of families of detections is empty.')
+            append_list_completed_days(
+                file=day_hash_file, date=current_day_str, hash=settings_hash)
             return
         if write_party:
             if not os.path.exists('Re' + det_folder):
@@ -426,6 +467,9 @@ def pick_events_for_day(
         request_fdsn=request_fdsn, template_path=template_path,
         min_pick_stations=8, min_picks_on_detection_stations=3,
         parallel=parallel, cores=io_cores, **kwargs)
+
+    append_list_completed_days(
+        file=day_hash_file, date=current_day_str, hash=settings_hash)
 
     return export_catalog
 

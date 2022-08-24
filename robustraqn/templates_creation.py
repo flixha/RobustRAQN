@@ -818,7 +818,7 @@ def create_template_objects(
         tribes = [r[0] for r in res_out if r is not None and len(r[0]) > 0]
         wavnames = [r[1][0] for r in res_out
                     if r is not None and len(r[1]) > 0]
-        tribe = Tribe(templates=[tri[0] for tri in tribes if len(tri) > 0])
+        tribe = Tribe(templates=[templ for tri in tribes for templ in tri])
     else:
         if sfiles:
             events_files = sfiles

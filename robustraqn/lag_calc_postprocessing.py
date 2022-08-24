@@ -348,7 +348,17 @@ def postprocess_picked_events(
         # Add comment to event to save detection-id
         event.comments.append(Comment(
             text='EQC_detection_id: ' + detection.id,
-            creation_info=CreationInfo(agency='eqcorrscan',
+            creation_info=CreationInfo(agency='robustraqn',
+                                       author=getpass.getuser())))
+        # And threshold / exceedance stats
+        thresh_text = ('EQC_threshold: type: {0:12s}, in: {1:7.2f}, '
+                       + 'set: {2:7.2f}, exc: {3:7.2f}').format(
+                           detection.threshold_type, detection.threshold_input,
+                           detection.threshold,
+                           detection.detect_val / detection.threshold)
+        event.comments.append(Comment(
+            text=thresh_text,
+            creation_info=CreationInfo(agency='robustraqn',
                                        author=getpass.getuser())))
         event.event_type = family.template.event.event_type
         event.event_type_certainty = family.template.event.event_type_certainty

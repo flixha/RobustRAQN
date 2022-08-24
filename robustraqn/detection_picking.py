@@ -261,7 +261,7 @@ def pick_events_for_day(
                     + 'families on %s', str(len(dayparty)),
                     current_day_str)
         append_list_completed_days(
-                file=day_hash_file, date=current_day_str, hash=settings_hash)
+            file=day_hash_file, date=current_day_str, hash=settings_hash)
         return
 
     Logger.info('Starting to pick events with party of %s families for %s',

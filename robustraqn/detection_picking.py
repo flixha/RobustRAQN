@@ -210,10 +210,7 @@ def pick_events_for_day(
                 Logger.info(
                     'Day %s already processed: Date and hash match entry in '
                     'date-hash list, skipping this day.', current_day_str)
-                if not return_stream and dump_stream_to_disk:
-                    return
-                else:
-                    return [Party(), Stream()]
+                return
         except FileNotFoundError:
             pass
 
@@ -258,7 +255,7 @@ def pick_events_for_day(
                     + 'families on %s', str(len(dayparty)),
                     current_day_str)
         append_list_completed_days(
-                file=day_hash_file, date=current_day_str, hash=settings_hash)
+            file=day_hash_file, date=current_day_str, hash=settings_hash)
         return
 
     # dayparty = Party(dayparty[82])  # DEBUG

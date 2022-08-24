@@ -210,10 +210,7 @@ def pick_events_for_day(
                 Logger.info(
                     'Day %s already processed: Date and hash match entry in '
                     'date-hash list, skipping this day.', current_day_str)
-                if not return_stream and dump_stream_to_disk:
-                    return
-                else:
-                    return [Party(), Stream()]
+                return
         except FileNotFoundError:
             pass
 
@@ -247,6 +244,12 @@ def pick_events_for_day(
         # picking (these contain more channels)
         # dayparty = replace_templates_for_picking(dayparty, tribe)
 
+    # dayparty = Party(dayparty[65])  # DEBUG
+    # dayparty = Party([family for family in dayparty  # DEBUG
+    #                   if family.template.name.startswith('2018_05_07t18_46')])
+    # Logger.info('Retaining only detections for template %s',
+    #             dayparty[0].template.name)
+
     # Rethreshold if required  # 2021_10_07t19_59_36_80_templ
     if new_threshold is not None:
         dayparty = Party(dayparty).rethreshold(
@@ -261,10 +264,6 @@ def pick_events_for_day(
                 file=day_hash_file, date=current_day_str, hash=settings_hash)
         return
 
-    # dayparty = Party(dayparty[82])  # DEBUG
-    # Logger.info('Retaining only detections for template %s',
-    #             dayparty[0].template.name)
-    
     Logger.info('Starting to pick events with party of %s families for %s',
                 str(len(dayparty)), current_day_str)
     # Choose only stations that are relevant for any detection on that day.

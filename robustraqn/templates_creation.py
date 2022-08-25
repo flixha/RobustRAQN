@@ -198,7 +198,8 @@ def _create_template_objects(
         balance_power_coefficient=2, ground_motion_input=[],
         apply_agc=False, agc_window_sec=5,
         min_n_traces=8, min_n_station_sites=4, write_out=False,
-        templ_path='Templates/' , make_pretty_plot=False, prefix='',
+        write_individual_templates=False, templ_path='Templates/' ,
+        make_pretty_plot=False, prefix='',
         check_template_strict=True, allow_channel_duplication=True,
         normalize_NSLC=True, add_array_picks=False, stations_df=pd.DataFrame(),
         add_large_aperture_array_picks=False, ispaq=None,
@@ -208,7 +209,8 @@ def _create_template_objects(
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
         bayesloc_event_solutions=None,
         wavetool_path='/home/felix/Software/SEISANrick/PRO/linux64/wavetool',
-        parallel=False, cores=1, unused_kwargs=True, *args, **kwargs):
+        parallel=False, cores=1, thread_parallel=False, n_threads=1,
+        unused_kwargs=True, *args, **kwargs):
     """
     """
     if isinstance(events_files[0], str):
@@ -444,7 +446,8 @@ def _create_template_objects(
 
         wavef = pre_processing.shortproc(
             st=st, lowcut=lowcut, highcut=highcut, filt_order=4,
-            samp_rate=samp_rate, parallel=False, num_cores=1)
+            samp_rate=samp_rate, parallel=False, num_cores=1,
+            fft_threads=n_threads)
         # data_envelope = obspy.signal.filter.envelope(st_filt[0].data)
 
         # Make the templates from picks and waveforms
@@ -521,7 +524,7 @@ def _create_template_objects(
 
         if (len(t.st) >= min_n_traces and
                 n_station_sites >= min_n_station_sites):
-            if write_out:
+            if write_individual_templates:
                 templ_filename = os.path.join(templ_path, templ_name + '.mseed')
                 t.write(templ_filename, format="MSEED")
             tribe += t
@@ -609,8 +612,8 @@ def create_template_objects(
         remove_response=False, noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
         apply_agc=False, agc_window_sec=5,
-        min_n_traces=8, write_out=False, templ_path='Templates',
-        prefix='', make_pretty_plot=False,
+        min_n_traces=8, write_out=False, write_individual_templates=False,
+        templ_path='Templates', prefix='', make_pretty_plot=False,
         check_template_strict=True, allow_channel_duplication=True,
         normalize_NSLC=True, add_array_picks=False, ispaq=None,
         sta_translation_file="station_code_translation.txt",
@@ -618,7 +621,8 @@ def create_template_objects(
         vertical_chans=['Z', 'H'],
         wavetool_path='/home/felix/Software/SEISANrick/PRO/linux64/wavetool',
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
-        parallel=False, cores=1, max_events_per_file=200, task_id=None,
+        parallel=False, cores=1, thread_parallel=False, n_threads=1,
+        max_events_per_file=200, task_id=None,
         *args, **kwargs):
     """
       Wrapper for create-template-function
@@ -638,8 +642,8 @@ def create_template_objects(
             cores = min(len(sfiles), cpu_count())
         # Check if I can allow multithreading in each of the parallelized
         # subprocesses:
-        thread_parallel = False
-        n_threads = 1
+        # thread_parallel = False
+        # n_threads = 1
         # if cores > 2 * len(sfiles):
         #     thread_parallel = True
         #     n_threads = int(cores / len(sfiles))
@@ -811,7 +815,8 @@ def create_template_objects(
                 vertical_chans=vertical_chans,
                 horizontal_chans=horizontal_chans,
                 wavetool_path=wavetool_path,
-                parallel=thread_parallel, cores=n_threads,
+                parallel=parallel, cores=cores,
+                thread_parallel=thread_parallel, n_threads=n_threads,
                 *args, **kwargs)
             for nbatch, event_file_batch in enumerate(event_file_batches))
 
@@ -868,9 +873,10 @@ def create_template_objects(
         tribe.write(tribe_file_name, max_events_per_file=max_events_per_file,
                     cores=cores)
                     #max_events_per_file=10)
-        for templ in tribe:
-            templ.write(os.path.join(
-                templ_path, prefix + templ.name + '.mseed'), format="MSEED")
+        if write_individual_templates:
+            for templ in tribe:
+                templ.write(os.path.join(templ_path, prefix + templ.name +
+                                         '.mseed'), format="MSEED")
 
     return tribe, wavnames
 

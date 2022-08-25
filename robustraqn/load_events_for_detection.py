@@ -1232,8 +1232,10 @@ def prepare_picks(
     event = new_event
     return event
 
+
 def try_apply_agc(st, tribe, agc_window_sec=5, pre_processed=False,
-                  starttime=None, cores=None, parallel=False, **kwargs):
+                  starttime=None, cores=None, parallel=False,
+                  thread_parallel=False, n_threads=1, **kwargs):
     """
     Wrapper to apply agc to a tribe.
     """
@@ -1253,7 +1255,7 @@ def try_apply_agc(st, tribe, agc_window_sec=5, pre_processed=False,
             filt_order=filt_orders[0], samp_rate=samp_rates[0],
             starttime=starttime, parallel=parallel, num_cores=cores,
             ignore_length=False, seisan_chan_names=False, fill_gaps=True,
-            ignore_bad_data=False, fft_threads=1)
+            ignore_bad_data=False, fft_threads=n_threads)
         # TODO: fix error eqcorrscan.core.match_filter.matched_filter:315
         # _group_process() ERROR Data must be process_length or longer, not computing
         # when applying agc
@@ -1267,6 +1269,12 @@ def try_apply_agc(st, tribe, agc_window_sec=5, pre_processed=False,
             # with parallel_backend('multiprocessing', n_jobs=cores):
             with parallel_backend('threading', n_jobs=cores):
                 traces = Parallel(n_jobs=cores, prefer='threads')(
+                    delayed(tr.agc)(agc_window_sec=agc_window_sec, **kwargs)
+                    for tr in st)
+            st = Stream(traces)
+        elif thread_parallel:
+            with parallel_backend('threading', n_jobs=n_threads):
+                traces = Parallel(n_jobs=n_threads, prefer='threads')(
                     delayed(tr.agc)(agc_window_sec=agc_window_sec, **kwargs)
                     for tr in st)
             st = Stream(traces)
@@ -1492,8 +1500,9 @@ def init_processing_wRotation(
                 taper_fraction=taper_fraction,
                 noise_balancing=noise_balancing,
                 balance_power_coefficient=balance_power_coefficient, **kwargs)
+    elif thread_parallel and n_threads:
 
-    else:
+    # else:
         if cores is None:
             cores = min(len(day_st), cpu_count())
         # Check if I can allow multithreading in each of the parallelized
@@ -1544,7 +1553,7 @@ def init_processing_wRotation(
         #         for tr in trace_st:
         #             st.append(tr)
 
-        with threadpool_limits(limits=1, user_api='blas'):
+        with threadpool_limits(limits=n_threads, user_api='blas'):
             streams = Parallel(n_jobs=cores)(
                 delayed(_init_processing_per_channel_wRotation)
                 (day_st.select(
@@ -1960,9 +1969,10 @@ def check_normalize_sampling_rate(
     return new_st, True
 
 
-def try_remove_responses(stream, inventory, taper_fraction=0.05, pre_filt=None,
-                         parallel=False, cores=None, output='DISP',
-                         gain_traces=True, **kwargs):
+def try_remove_responses(
+        stream, inventory, taper_fraction=0.05, pre_filt=None,
+        parallel=False, cores=None, thread_parallel=False, n_threads=1,
+        output='DISP', gain_traces=True, **kwargs):
     """
     """
     if len(stream) == 0:
@@ -1970,13 +1980,13 @@ def try_remove_responses(stream, inventory, taper_fraction=0.05, pre_filt=None,
         return stream
 
     # remove response
-    if not parallel:
+    if not parallel and not thread_parallel:
         for tr in stream:
             tr = _try_remove_responses(
                 tr, inventory, taper_fraction=taper_fraction,
                 pre_filt=pre_filt, output=output, gain_traces=gain_traces)
     else:
-        if cores is None:
+        if cores is None and (n_threads is None or n_threads == 1):
             cores = min(len(stream), cpu_count())
 
         # If this function is called from a subprocess and asked for parallel
@@ -2004,7 +2014,7 @@ def try_remove_responses(stream, inventory, taper_fraction=0.05, pre_filt=None,
         # my_pool().join()
         # my_pool().terminate()
 
-        with threadpool_limits(limits=1, user_api='blas'):
+        with threadpool_limits(limits=n_threads, user_api='blas'):
             streams = Parallel(n_jobs=cores)(
                 delayed(_try_remove_responses)
                 (tr, inventory.select(station=tr.stats.station),

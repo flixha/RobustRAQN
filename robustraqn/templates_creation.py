@@ -209,7 +209,7 @@ def _create_template_objects(
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
         bayesloc_event_solutions=None,
         wavetool_path='/home/felix/Software/SEISANrick/PRO/linux64/wavetool',
-        parallel=False, cores=1, thread_parallel=False, n_threads=1,
+        parallel=False, cores=1, n_threads=1,
         unused_kwargs=True, *args, **kwargs):
     """
     """
@@ -368,7 +368,7 @@ def _create_template_objects(
             wavef = try_remove_responses(
                 wavef, inv, taper_fraction=0.15,
                 pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],
-                parallel=parallel, cores=cores, **kwargs)
+                parallel=parallel, cores=cores, n_threads=n_threads, **kwargs)
             if origin.latitude is None or origin.longitude is None:
                 Logger.warning('Could not compute distances for event %s.',
                                event.short_str())
@@ -621,7 +621,7 @@ def create_template_objects(
         vertical_chans=['Z', 'H'],
         wavetool_path='/home/felix/Software/SEISANrick/PRO/linux64/wavetool',
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
-        parallel=False, cores=1, thread_parallel=False, n_threads=1,
+        parallel=False, cores=1, n_threads=1,
         max_events_per_file=200, task_id=None,
         *args, **kwargs):
     """
@@ -815,8 +815,7 @@ def create_template_objects(
                 vertical_chans=vertical_chans,
                 horizontal_chans=horizontal_chans,
                 wavetool_path=wavetool_path,
-                parallel=parallel, cores=cores,
-                thread_parallel=thread_parallel, n_threads=n_threads,
+                parallel=False, cores=1, n_threads=n_threads,
                 *args, **kwargs)
             for nbatch, event_file_batch in enumerate(event_file_batches))
 

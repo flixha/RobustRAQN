@@ -665,7 +665,7 @@ def add_array_station_picks(
         array_app_vel_dict=None, baz=None, app_vel=None,
         seisarray_prefixes=SEISARRAY_PREFIXES, min_array_distance_factor=10,
         mod_file=os.path.join(os.path.dirname(__file__), 'models',
-                                  'NNSN1D_plusAK135'), **kwargs):
+                              'NNSN1D_plusAK135'), **kwargs):
     """
     Returns all picks at array stations from 
         # ARRAY stuff

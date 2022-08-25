@@ -1234,8 +1234,8 @@ def prepare_picks(
 
 
 def try_apply_agc(st, tribe, agc_window_sec=5, pre_processed=False,
-                  starttime=None, cores=None, parallel=False,
-                  thread_parallel=False, n_threads=1, **kwargs):
+                  starttime=None, cores=None, parallel=False, n_threads=1,
+                  **kwargs):
     """
     Wrapper to apply agc to a tribe.
     """
@@ -1269,12 +1269,6 @@ def try_apply_agc(st, tribe, agc_window_sec=5, pre_processed=False,
             # with parallel_backend('multiprocessing', n_jobs=cores):
             with parallel_backend('threading', n_jobs=cores):
                 traces = Parallel(n_jobs=cores, prefer='threads')(
-                    delayed(tr.agc)(agc_window_sec=agc_window_sec, **kwargs)
-                    for tr in st)
-            st = Stream(traces)
-        elif thread_parallel:
-            with parallel_backend('threading', n_jobs=n_threads):
-                traces = Parallel(n_jobs=n_threads, prefer='threads')(
                     delayed(tr.agc)(agc_window_sec=agc_window_sec, **kwargs)
                     for tr in st)
             st = Stream(traces)
@@ -1428,7 +1422,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
 def init_processing_wRotation(
         day_st, starttime, endtime, remove_response=False, pre_filt=None,
         inv=Inventory(), sta_translation_file='', parallel=False, cores=None,
-        min_segment_length_s=10, max_sample_rate_diff=1,
+        n_threads=1, min_segment_length_s=10, max_sample_rate_diff=1,
         skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
         skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
         taper_fraction=0.005, detrend_type='simple', downsampled_max_rate=None,
@@ -1479,38 +1473,42 @@ def init_processing_wRotation(
             Logger.info(
                 'Starting initial processing of %s for %s - %s.',
                 '.'.join(nsl), str(starttime)[0:19], str(endtime)[0:19])
-            st += _init_processing_per_channel_wRotation(
-                day_st.select(network=nsl[0], station=nsl[1], location=nsl[2]),
-                starttime, endtime, remove_response=remove_response,
-                pre_filt=pre_filt,
-                inv=inv.select(station=nsl[1], starttime=starttime,
-                               endtime=endtime),
-                min_segment_length_s=min_segment_length_s,
-                max_sample_rate_diff=max_sample_rate_diff,
-                skip_check_sampling_rates=skip_check_sampling_rates,
-                skip_interp_sample_rate_smaller=
-                skip_interp_sample_rate_smaller,
-                interpolation_method=interpolation_method,
-                sta_translation_file=sta_translation_file,
-                std_network_code=std_network_code,
-                std_location_code=std_location_code,
-                std_channel_prefix=std_channel_prefix,
-                detrend_type=detrend_type,
-                downsampled_max_rate=downsampled_max_rate,
-                taper_fraction=taper_fraction,
-                noise_balancing=noise_balancing,
-                balance_power_coefficient=balance_power_coefficient, **kwargs)
-    elif thread_parallel and n_threads:
+            with threadpool_limits(limits=n_threads, user_api='blas'):
+                Logger.info(
+                    'Starting initial 3-component processing with 1 process '
+                    'with up to %s threads.', str(n_threads))
+                st += _init_processing_per_channel_wRotation(
+                    day_st.select(network=nsl[0], station=nsl[1], location=nsl[2]),
+                    starttime, endtime, remove_response=remove_response,
+                    pre_filt=pre_filt,
+                    inv=inv.select(station=nsl[1], starttime=starttime,
+                                endtime=endtime),
+                    min_segment_length_s=min_segment_length_s,
+                    max_sample_rate_diff=max_sample_rate_diff,
+                    skip_check_sampling_rates=skip_check_sampling_rates,
+                    skip_interp_sample_rate_smaller=
+                    skip_interp_sample_rate_smaller,
+                    interpolation_method=interpolation_method,
+                    sta_translation_file=sta_translation_file,
+                    std_network_code=std_network_code,
+                    std_location_code=std_location_code,
+                    std_channel_prefix=std_channel_prefix,
+                    detrend_type=detrend_type,
+                    downsampled_max_rate=downsampled_max_rate,
+                    taper_fraction=taper_fraction,
+                    noise_balancing=noise_balancing,
+                    balance_power_coefficient=balance_power_coefficient, **kwargs)
+    # elif thread_parallel and n_threads:
 
-    # else:
+    else:
         if cores is None:
             cores = min(len(day_st), cpu_count())
         # Check if I can allow multithreading in each of the parallelized
         # subprocesses:
-        thread_parallel = False
+        # thread_parallel = False
         n_threads = 1
         if cores > 2 * len(day_st):
-            thread_parallel = True
+            # thread_parallel = True
             n_threads = int(cores / len(day_st))
         Logger.info('Starting initial 3-component processing with %s parallel '
                     'processes with up to %s threads each.', str(cores),
@@ -1594,7 +1592,8 @@ def _init_processing_per_channel(
         skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
         detrend_type='simple', taper_fraction=0.005, pre_filt=None,
         downsampled_max_rate=None, noise_balancing=False,
-        balance_power_coefficient=2, sta_translation_file='', **kwargs):
+        balance_power_coefficient=2, sta_translation_file='',
+        n_threads=1, **kwargs):
     """
     Inner loop over which the initial processing can be parallelized
     """
@@ -1630,7 +1629,7 @@ def _init_processing_per_channel(
         st = try_remove_responses(
             st, inv.select(starttime=starttime, endtime=endtime),
             taper_fraction=taper_fraction, pre_filt=pre_filt,
-            parallel=False, cores=1)
+            parallel=False, cores=1, n_threads=n_threads)
     # Detrend now?
     st = st.detrend(type='simple')
     # st = st.detrend(type='linear')
@@ -1677,7 +1676,7 @@ def _init_processing_per_channel_wRotation(
         detrend_type='simple', taper_fraction=0.005, downsampled_max_rate=25,
         noise_balancing=False, balance_power_coefficient=2, apply_agc=False,
         agc_window_sec=5, agc_method='gismo',
-        parallel=False, cores=1, **kwargs):
+        parallel=False, cores=1, n_threads=1, **kwargs):
     """
     Inner loop over which the initial processing can be parallelized
     """
@@ -1711,7 +1710,7 @@ def _init_processing_per_channel_wRotation(
         st = try_remove_responses(
             st, inv.select(starttime=starttime, endtime=endtime),
             taper_fraction=0.005, pre_filt=pre_filt,
-            parallel=parallel, cores=cores)
+            parallel=parallel, cores=cores, n_threads=n_threads)
     # Trim to full day and detrend again
     st.trim(starttime=starttime, endtime=endtime, pad=True,
             nearest_sample=True, fill_value=0)
@@ -1971,7 +1970,7 @@ def check_normalize_sampling_rate(
 
 def try_remove_responses(
         stream, inventory, taper_fraction=0.05, pre_filt=None,
-        parallel=False, cores=None, thread_parallel=False, n_threads=1,
+        parallel=False, cores=None, n_threads=1,
         output='DISP', gain_traces=True, **kwargs):
     """
     """
@@ -1980,13 +1979,14 @@ def try_remove_responses(
         return stream
 
     # remove response
-    if not parallel and not thread_parallel:
-        for tr in stream:
-            tr = _try_remove_responses(
-                tr, inventory, taper_fraction=taper_fraction,
-                pre_filt=pre_filt, output=output, gain_traces=gain_traces)
+    if not parallel:
+        with threadpool_limits(limits=n_threads, user_api='blas'):
+            for tr in stream:
+                tr = _try_remove_responses(
+                    tr, inventory, taper_fraction=taper_fraction,
+                    pre_filt=pre_filt, output=output, gain_traces=gain_traces)
     else:
-        if cores is None and (n_threads is None or n_threads == 1):
+        if cores is None:
             cores = min(len(stream), cpu_count())
 
         # If this function is called from a subprocess and asked for parallel

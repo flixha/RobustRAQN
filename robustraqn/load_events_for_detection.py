@@ -383,68 +383,70 @@ def load_event_stream(
     wave_at_sel_stations = Stream()
     for station in selected_stations:
         for channel_priority in channel_priorities:
-            waveAlreadyAtSelStation = wave_at_sel_stations.select(station=station)
-            if not waveAlreadyAtSelStation:
+            wave_alrdy_at_sel_station = wave_at_sel_stations.select(
+                station=station)
+            if not wave_alrdy_at_sel_station:
                 addWaves = st.select(station=station, channel=channel_priority)
                 wave_at_sel_stations += addWaves
     # If there are more than one traces for the same station-component-
     # combination, then choose the "best" trace
     wave_at_sel_stations_copy = wave_at_sel_stations.copy()
     for tr in wave_at_sel_stations_copy:
-        sameStaChanSt = wave_at_sel_stations.select(
+        same_sta_chan_st = wave_at_sel_stations.select(
             station=tr.stats.station, channel='*'+tr.stats.channel[-1])
-        removeTrSt = Stream()
-        keepTrSt = Stream()
-        nSameStaChanW = len(sameStaChanSt)
+        remove_tr_st = Stream()
+        keep_tr_st = Stream()
+        nSameStaChanW = len(same_sta_chan_st)
         if nSameStaChanW > 1:
             # 1. best trace: highest sample rate
-            samp_rates = [t.stats.sampling_rate for t in sameStaChanSt]
-            keepTrSt = sameStaChanSt.select(sampling_rate=max(samp_rates))
+            samp_rates = [t.stats.sampling_rate for t in same_sta_chan_st]
+            keep_tr_st = same_sta_chan_st.select(sampling_rate=max(samp_rates))
             # 2. best trace: longest trace
-            trace_lengths = [t.stats.npts for t in sameStaChanSt]
-            keepTrSt = sameStaChanSt.select(npts=max(trace_lengths))
+            trace_lengths = [t.stats.npts for t in same_sta_chan_st]
+            keep_tr_st = same_sta_chan_st.select(npts=max(trace_lengths))
             # 3. best trace: more complete metadata - location code
-            if len(keepTrSt) == 0 or len(keepTrSt) > 1:
-                loccodes = [t.stats.location for t in sameStaChanSt]
+            if len(keep_tr_st) == 0 or len(keep_tr_st) > 1:
+                loccodes = [t.stats.location for t in same_sta_chan_st]
                 if any(locc == '' for locc in loccodes) and\
                    any(locc == '??' for locc in loccodes):
-                    removeTrSt += sameStaChanSt.select(location="")
-                    keepTrSt += sameStaChanSt.select(
+                    remove_tr_st += same_sta_chan_st.select(location="")
+                    keep_tr_st += same_sta_chan_st.select(
                         sampling_rate=max(samp_rates), location="?*")
             # 4 best trace: more complete metadata - network code
-            if len(keepTrSt) == 0 or len(keepTrSt) > 1:
-                netcodes = [t.stats.network for t in sameStaChanSt]
+            if len(keep_tr_st) == 0 or len(keep_tr_st) > 1:
+                netcodes = [t.stats.network for t in same_sta_chan_st]
                 if (any(n == '' for n in netcodes)
                         and any(n == '??' for n in netcodes)):
-                    removeTrSt += sameStaChanSt.select(network="")
-                    keepTrSt += sameStaChanSt.select(
+                    remove_tr_st += same_sta_chan_st.select(network="")
+                    keep_tr_st += same_sta_chan_st.select(
                         sampling_rate=max(samp_rates), location="?*",
                         network="??")
-                if len(keepTrSt) > 1:
-                    keepTrSt = Stream() + keepTrSt[0]
-            for tt in sameStaChanSt:
+                if len(keep_tr_st) > 1:
+                    keep_tr_st = Stream() + keep_tr_st[0]
+            for tt in same_sta_chan_st:
                 wave_at_sel_stations.remove(tt)
-            wave_at_sel_stations += keepTrSt
+            wave_at_sel_stations += keep_tr_st
 
     # Double-check to remove duplicate channels
     # wave_at_sel_stations.merge(method=0, fill_value=0, interpolation_samples=0)
     # 2021-01-22: changed merge method to below one to fix error with
     #             incomplete day.
-    wave_at_sel_stations.merge(method=1, fill_value=0, interpolation_samples=-1)
+    wave_at_sel_stations.merge(method=1, fill_value=0,
+                               interpolation_samples=-1)
     k = 0
-    channelIDs = list()
+    channel_ids = list()
     for trace in wave_at_sel_stations:
-        if trace.id in channelIDs:
+        if trace.id in channel_ids:
             for j in range(0, k):
-                testSameIDtrace = wave_at_sel_stations[j]
-                if trace.id == testSameIDtrace.id:
+                test_same_id_trace = wave_at_sel_stations[j]
+                if trace.id == test_same_id_trace.id:
                     if (trace.stats.starttime >=
-                            testSameIDtrace.stats.starttime):
+                            test_same_id_trace.stats.starttime):
                         wave_at_sel_stations.remove(trace)
                     else:
-                        wave_at_sel_stations.remove(testSameIDtrace)
+                        wave_at_sel_stations.remove(test_same_id_trace)
         else:
-            channelIDs.append(trace.id)
+            channel_ids.append(trace.id)
             k += 1
     st = wave_at_sel_stations
     # Preprocessing
@@ -457,13 +459,13 @@ def load_event_stream(
             nearest_sample=True)
 
     # don't use the waveform if more than 5% is zero
-    nonZeroWave = Stream()
+    non_zero_wave = Stream()
     for tr in st:
         n_nonzero = np.count_nonzero(tr.copy().detrend().data)
         # if (sum(tr.copy().detrend().data==0) < tr.data.size*0.05 and not\
         if (n_nonzero > tr.data.size * 0.95 and not any(np.isnan(tr.data))):
-            nonZeroWave.append(tr)
-    st = nonZeroWave
+            non_zero_wave.append(tr)
+    st = non_zero_wave
     n_tr_after = len(st)
     Logger.info('Event %s (sfile %s): %s out of %s traces remaining after '
                 'initial selection.', event.short_str(), sfile,
@@ -710,7 +712,8 @@ def robust_rotate(stream, inventory, method="->ZNE"):
     return stream
 
 
-def parallel_rotate(st, inv, cores=None, method="->ZNE"):
+def parallel_rotate(st, inv, parallel=True, cores=None,
+                    thread_parallel=False, n_threads=1, method="->ZNE"):
     """
     wrapper function to rotate 3-component seismograms in a stream in parallel.
     """
@@ -748,12 +751,21 @@ def parallel_rotate(st, inv, cores=None, method="->ZNE"):
     #     (method, inventory=inv.select(
     #         network=nsl[0], station=nsl[1], location=nsl[2]))
     #     for nsl in unique_net_sta_loc_list)
-    streams = Parallel(n_jobs=cores)(delayed(
-        robust_rotate)(
-            st.select(network=nsl[0], station=nsl[1], location=nsl[2]),
-            inv.select(network=nsl[0], station=nsl[1], location=nsl[2]),
-            method="->ZNE")
-        for nsl in unique_net_sta_loc_list)
+    if thread_parallel and not parallel:
+        with parallel_backend('threading', n_jobs=cores):
+            streams = Parallel(n_jobs=n_threads, prefer='threads')(delayed(
+                robust_rotate)(
+                    st.select(network=nsl[0], station=nsl[1], location=nsl[2]),
+                    inv.select(network=nsl[0], station=nsl[1], location=nsl[2]),
+                    method=method)
+                for nsl in unique_net_sta_loc_list)
+    else:
+        streams = Parallel(n_jobs=cores)(delayed(
+            robust_rotate)(
+                st.select(network=nsl[0], station=nsl[1], location=nsl[2]),
+                inv.select(network=nsl[0], station=nsl[1], location=nsl[2]),
+                method=method)
+            for nsl in unique_net_sta_loc_list)
     st = Stream([tr for trace_st in streams for tr in trace_st])
     # for trace_st in streams:
     #     for tr in trace_st:
@@ -1676,7 +1688,7 @@ def _init_processing_per_channel_wRotation(
         detrend_type='simple', taper_fraction=0.005, downsampled_max_rate=25,
         noise_balancing=False, balance_power_coefficient=2, apply_agc=False,
         agc_window_sec=5, agc_method='gismo',
-        parallel=False, cores=1, n_threads=1, **kwargs):
+        parallel=False, cores=1, thread_parallel=False, n_threads=1, **kwargs):
     """
     Inner loop over which the initial processing can be parallelized
     """
@@ -1720,7 +1732,8 @@ def _init_processing_per_channel_wRotation(
     st = normalize_NSLC_codes(
         st, inv, sta_translation_file=sta_translation_file,
         std_network_code=std_network_code, std_location_code=std_location_code,
-        std_channel_prefix=std_channel_prefix, parallel=False, cores=1)
+        std_channel_prefix=std_channel_prefix, parallel=False, cores=1,
+        thread_parallel=thread_parallel, n_threads=n_threads)
 
     # Do noise-balancing by the station's PSDPDF average
     if noise_balancing:
@@ -1970,7 +1983,7 @@ def check_normalize_sampling_rate(
 
 def try_remove_responses(
         stream, inventory, taper_fraction=0.05, pre_filt=None,
-        parallel=False, cores=None, n_threads=1,
+        parallel=False, cores=None, thread_parallel=False, n_threads=1,
         output='DISP', gain_traces=True, **kwargs):
     """
     """
@@ -1979,12 +1992,22 @@ def try_remove_responses(
         return stream
 
     # remove response
-    if not parallel:
+    if not parallel and not thread_parallel:
         with threadpool_limits(limits=n_threads, user_api='blas'):
             for tr in stream:
                 tr = _try_remove_responses(
                     tr, inventory, taper_fraction=taper_fraction,
                     pre_filt=pre_filt, output=output, gain_traces=gain_traces)
+    elif thread_parallel and not parallel:
+        with threadpool_limits(limits=n_threads, user_api='blas'):
+            with parallel_backend('threading', n_jobs=n_threads):
+                streams = Parallel(n_jobs=cores, prefer='threads')(
+                    delayed(_try_remove_responses)
+                    (tr, inventory.select(station=tr.stats.station),
+                    taper_fraction, pre_filt, output, gain_traces)
+                    for tr in stream)
+        # st = Stream([tr for trace_st in streams for tr in trace_st])
+        stream = Stream([tr for tr in streams])
     else:
         if cores is None:
             cores = min(len(stream), cpu_count())
@@ -2316,7 +2339,8 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
                          std_location_code="00", std_channel_prefix="BH",
                          parallel=False, cores=None,
                          sta_translation_file="station_code_translation.txt",
-                         forbidden_chan_file="", rotate=True, **kwargs):
+                         forbidden_chan_file="", rotate=True,
+                         thread_parallel=False, n_threads=1, **kwargs):
     """
     1. Correct non-FDSN-standard-complicant channel codes
     2. Rotate to proper ZNE, and hence change codes from [Z12] to [ZNE]
@@ -2372,13 +2396,21 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
         if not inv:
             Logger.error(
                 'No inventory information available, cannot rotate channels')
-        else:    
+        else:
             if parallel:
-                st = parallel_rotate(st, inv, cores=cores, method="->ZNE")
+                st = parallel_rotate(st, inv, parallel=parallel, cores=cores,
+                                     thread_parallel=False, n_threads=1,
+                                     method="->ZNE")
+            elif thread_parallel:
+                st = parallel_rotate(st, inv, parallel=parallel, cores=cores,
+                                     thread_parallel=True, n_threads=n_threads,
+                                     method="->ZNE")
             else:
                 # st.rotate(method="->ZNE", inventory=inv)
                 # Use parallel-function to initiate error-catching rotation
-                st = parallel_rotate(st, inv, cores=1, method="->ZNE")
+                st = parallel_rotate(st, inv, parallel=parallel, cores=1,
+                                     thread_parallel=False, n_threads=1,
+                                     method="->ZNE")
 
     # Need to merge again here, because rotate may split merged traces if there
     # are masked arrays (i.e., values filled with None). The merge here will
@@ -2481,28 +2513,28 @@ def check_template(st, template_length, remove_nan_strict=True,
                     st[0].stats.starttime)
     # Check each trace
     k = 0
-    channelIDs = list()
+    channel_ids = list()
     st_copy = st.copy()
     for tr in st_copy:
         # Check templates for duplicate channels (happens when there are
         # P- and S-picks on the same channel). Then throw away the
         # S-trace (the later one) for now.
-        if tr.id in channelIDs:
+        if tr.id in channel_ids:
             for j in range(0, k):
-                testSameIDtrace = st[j]
-                if tr.id == testSameIDtrace.id:
+                test_same_id_trace = st[j]
+                if tr.id == test_same_id_trace.id:
                     # remove if the duplicate traces have the same start-time
-                    if (tr.stats.starttime == testSameIDtrace.stats.starttime
+                    if (tr.stats.starttime == test_same_id_trace.stats.starttime
                             and tr in st):
                         st.remove(tr)
                         continue
                     # if channel-duplication is forbidden, then throw away the
                     # later trace (i.e., S-trace)
                     elif not allow_channel_duplication:
-                        st.remove(testSameIDtrace)
+                        st.remove(test_same_id_trace)
                         continue
         else:
-            channelIDs.append(tr.id)
+            channel_ids.append(tr.id)
             k += 1
 
     st_copy = st.copy()

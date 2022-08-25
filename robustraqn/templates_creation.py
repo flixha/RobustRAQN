@@ -331,7 +331,9 @@ def _create_template_objects(
                 event=event, array_picks_dict=array_picks_dict,
                 stations_df=stations_df, **kwargs)
             if add_large_aperture_array_picks:
-                array_picks_dict = extract_array_picks(event=event)
+                array_picks_dict = extract_array_picks(
+                    event=event,
+                    seisarray_prefixes=LARGE_APERTURE_SEISARRAY_PREFIXES)
                 Logger.info('Adding array picks for large aperture arrays')
                 event = add_array_station_picks(
                     event=event, array_picks_dict=array_picks_dict,

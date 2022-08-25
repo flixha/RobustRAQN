@@ -1,4 +1,5 @@
 
+
 # %%
 import os
 from obspy import read_inventory
@@ -70,21 +71,25 @@ LARGE_APERTURE_SEISARRAY_PREFIXES = [
     '@(LADE|LENS|ODLO|TBLU|TRON|NWG01|N6004|N6005|N6006|N6007|N6008|N6132|SA55A)',
     '@(NSS|SA35)',
     # Nordland
-    '@(ROEST|N2RO|N2VA)',
-    '@(LOF|N2SV|N2VI)',
+    '@(ROEST|N2RO|N2VA|LOF|N2SV)',
+    # '@(ROEST|N2RO|N2VA)',
+    # '@(LOF|N2SV|N2VI)',
     '@(VAGH|KONS|STOK|LEIR|RAUS|MOR8|FLOS|STOK1|STOK2|NBB13|NBB14|NBB15)',
-    '@(GILDE|NBB05|NBB30|MELSS|NBB17|N1304)',  # South 2 of NOrdland
-    '@(FAUS|N2TV|NBB08|N2ST)',                 # North 2 of Nordland
+    '@(GILDE|NBB05|NBB30|MELSS|NBB17|N1304|FAUS|NBB08|N2ST)',  # Nordland
+    # '@(GILDE|NBB05|NBB30|MELSS|NBB17|N1304)',  # South 2 of NOrdland
+    # '@(FAUS|N2TV|NBB08|N2ST)',                 # North 2 of Nordland
     '@(VBYGD|STEI|N2LO|N2DI|N2HS|N2IH)',       # Northern part of Nordland
-    '@(KUA|RATU|NIKU|KOVU|KIR|KURU)',
+    '@(KUA|KOVU|KIR|KURU|LANU)',
+    '@(LOSSI|NIKU|RATU)',
     '@(SALU|SA15|SA15A|N7010)',
     '@(DUNU|SA16|N7017)',
     '@(NIKU|KOVU|RATU|KUA|KIR|SA13)',
     '@(KTK|HEF|LP71|LP81)',
     '@(VADS|SA05|SA05A|SA03)',
     '@(HAMF|SA04|SA07)',
-    '@(KIF|SA12|N2VI)',
-    '@(TRO|JETT)',
+    '@(TRO|JETT|KIF|SA12)',
+    # '@(KIF|SA12|N2VI)',
+    # '@(TRO|JETT)',
     '@(KEV|SA10|ARCES|AR[ABCDE][0-9])',
     '@(SOFL|FAR|IF0[1-9]|IF10|IF07)']             # ARCES / Kevo
 
@@ -557,10 +562,19 @@ def find_array_picks_baz_appvel(
                                 vel = vel_mod.layers[0][4]
                             else:
                                 continue
-                            # Compute indicence angle at station with taup
+                            # Compute indicence angle at station with taupy
+                            # Taupy has a problem with Pn phase for event at
+                            # 31 km depth even though moho is at 35 km... so
+                            # fix event depth a bit shallower.
+                            source_depth_in_km = origin.depth / 1000
+                            moho_depth = vel_mod.moho_depth
+                            if (len(arrival.phase) > 1 and
+                                  arrival.phase[1] == 'n' and moho_depth and
+                                  source_depth_in_km > 0.8 * moho_depth):
+                                source_depth_in_km = 0.8 * moho_depth
                             try:
                                 taup_arrivals = taup_mod.get_travel_times(
-                                    source_depth_in_km=origin.depth / 1000,
+                                    source_depth_in_km=source_depth_in_km,
                                     distance_in_degree=arrival.distance,
                                     phase_list=[arrival.phase])
                             except (TypeError, ValueError) as e:
@@ -667,7 +681,7 @@ def _check_existing_and_add_pick(event, new_pick):
 def add_array_station_picks(
         event, stations_df, array_picks_dict=None, array_baz_dict=None,
         array_app_vel_dict=None, baz=None, app_vel=None,
-        seisarray_prefixes=SEISARRAY_PREFIXES, min_array_distance_factor=10,
+        seisarray_prefixes=SEISARRAY_PREFIXES, min_array_distance_factor=8,
         mod_file=os.path.join(os.path.dirname(__file__), 'models',
                               'NNSN1D_plusAK135'), **kwargs):
     """
@@ -780,6 +794,12 @@ def add_array_station_picks(
             array_stations_df, array_prefix=seisarray_prefix,
             coordsys='lonlat', return_center=True, center_coord_output='xy')
         array_center = array_geo_center[-1]
+        # Also need center coordinates in lat lon degrees for some calculations
+        array_llgeo_center = get_geometry(
+            array_stations_df, array_prefix=seisarray_prefix,
+            coordsys='lonlat', return_center=True,
+            center_coord_output='lonlat')
+        array_center_ll = array_llgeo_center[-1]
 
         # Compute array apperture - find maximum distance between array station
         # and array center, times two.
@@ -794,7 +814,7 @@ def add_array_station_picks(
                 origin.longitude is not None):
             event_array_dist = degrees2kilometers(
                 locations2degrees(origin.latitude, origin.longitude,
-                                  array_center[1], array_center[0]))
+                                  array_center_ll[1], array_center_ll[0]))
             event_array_dist = np.sqrt(
                 event_array_dist ** 2 + origin.depth ** 2)
             # Check if array is far enough from event to assume plane wave
@@ -1435,6 +1455,7 @@ if __name__ == "__main__":
             highcut=19.9, min_snr=3, prepick=0.3, samp_rate=40.0,
             min_n_traces=13, seisan_wav_path=seisan_wav_path,
             inv=inv, remove_response=False, output='VEL', add_array_picks=True,
+            add_large_aperture_array_picks=False,
             parallel=parallel, cores=cores, write_out=True,
             templ_path='tests/data/Templates', make_pretty_plot=False,
             normalize_NSLC=True)
@@ -1464,6 +1485,7 @@ if __name__ == "__main__":
         party = Party().read('tests/data/Detections/UniqueDet2021-01-05.tgz')
     # party[0].detections = [party[0][10]]
     # party[0].detections = [party[0][0]]
+
 
 
 

@@ -1,0 +1,196 @@
+ 2021  1 5 1742 43.3 RQ 59.822   7.898  0.0  BER 54 0.5 0.9LBER                1
+ 2021  1 5 1742 43.300  59.82200    7.89800    0.000  0.500                    H
+ GAP=55    BER  0.34       1.6     1.4  3.4  7.0610e-04                        E
+ Action:ARG 22-05-02 10:15 OP:RR   STATUS:               ID:20210105174243     I
+ OLDACT:UPS 21-12-09 10:56 OP:bms  STATUS:               ID:20210105174243 S   3
+ OLDACT:UP  21-08-17 12:11 OP:fh   STATUS:               ID:20210105174243 S   3
+ OLDACT:UPD 21-04-29 11:15 OP:mls  STATUS:               ID:20210105174144dS   3
+ OLDACT:UPD 21-04-29 09:56 OP:mls  STATUS:               ID:20210105174144dS   3
+ OLDACT:UPD 21-04-16 10:17 OP:mls  STATUS:               ID:20210105174144dS   3
+ OLDACT:UP  21-04-16 09:48 OP:mls  STATUS:               ID:20210105174144dS   3
+ OLDACT:UPD 21-02-15 11:51 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-02-12 14:29 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-02-05 13:32 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-02-02 12:01 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-01-31 21:12 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-01-29 12:34 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-01-28 20:58 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-01-27 14:03 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-01-27 12:00 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-01-26 13:57 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-01-26 09:54 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-01-25 21:27 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPS 21-01-24 21:43 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-01-20 10:30 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-01-19 21:23 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-01-19 09:31 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPS 21-01-18 09:27 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-01-13 11:14 OP:mls  STATUS:               ID:20210105174124     3
+ OLDACT:UPD 21-01-12 21:22 OP:mls  STATUS:               ID:20210105174124     3
+ OLDACT:UPD 21-01-12 10:49 OP:mls  STATUS:               ID:20210105174124     3
+ OLDACT:UPD 21-01-11 12:03 OP:mls  STATUS:               ID:20210105174124     3
+ OLDACT:UPD 21-01-08 11:25 OP:mls  STATUS:               ID:20210105174124     3
+ OLDACT:UPD 21-01-07 13:30 OP:mls  STATUS:               ID:20210105174124     3
+ OLDACT:UPD 21-01-06 15:28 OP:mls  STATUS:               ID:20210105174124     3
+ OLDACT:UPD 21-01-06 11:36 OP:mls  STATUS:               ID:20210105174124     3
+ OLDACT:UP  21-01-06 09:27 OP:mls  STATUS:               ID:20210105174124     3
+ OLDACT:NEW 21-01-05 19:00 OP:aut  STATUS:               ID:20210105174124     3
+ OLDACT:REE 21-01-06 09:26 OP:mls  STATUS:               ID:20210105174124     3
+ OLDACT:UP  21-01-06 09:26 OP:mls  STATUS:               ID:20210105174124     3
+ OLDACT:UPD 21-01-15 10:48 OP:mls  STATUS:               ID:20210105174124     3
+ OLDACT:UPD 21-01-21 09:48 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPS 21-01-22 11:08 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPS 21-01-22 12:12 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:UPD 21-03-03 10:39 OP:mls  STATUS:               ID:20210105174143 S   3
+ OLDACT:DUP 21-03-08 16:20 OP:fh   STATUS:               ID:20210105174144dS   3
+ OLDACT:UP  21-03-08 16:24 OP:fh   STATUS:               ID:20210105174144dS   3
+ XNEAR    0.0 XFAR  210.0  SDEP 15.00                                          3
+ OLDACT:UP  21-03-08 16:25 OP:fh   STATUS:               ID:20210105174144dS   3
+ OLDACT:UP  21-03-12 10:00 OP:fh   STATUS:               ID:20210105174144dS   3
+ OLDACT:UP  21-03-12 10:02 OP:fh   STATUS:               ID:20210105174144dS   3
+ OLDACT:UPD 21-04-29 12:54 OP:mls  STATUS:               ID:20210105174144dS   3
+ OLDACT:UPS 21-04-29 13:21 OP:mls  STATUS:               ID:20210105174243 S   3
+ OLDACT:UPD 21-10-21 07:59 OP:bms  STATUS:               ID:20210105174243 S   3
+ OLDACT:UPD 21-12-09 11:10 OP:bms  STATUS:               ID:20210105174243 S   3
+ ACTION:UP  22-01-05 12:16 OP:fh   STATUS:               ID:20210105174243 S   3
+ OLDACT:ARX 22-03-07 14:52 OP:fh   STATUS:               ID:20210105174243 S   3
+ 2021-01-05-1741-24S.N_SEA_105                                                 6
+ 2021-01-05-1742-12M.NNSN__217                                                 6
+ STAT COM NTLO IPHASE   W HHMM SS.SSS   PAR1  PAR2 AGA OPE  AIN  RES W  DIS CAZ7
+ BAS14HHZ 2G00 EP         1742 53.200              BER fh  90.0 0.1110 60.8 272 
+ BAS14HHN 2G00 ES         1743  0.410              BER fh  90.0 0.0610 60.8 272 
+ BAS12HHZ 2G00 EP         1742 54.130              BER fh  91.0-0.0910 67.8 285 
+ BAS12HHN 2G00 ES         1743  2.260              BER fh  91.0-0.0510 67.8 285 
+ ODD1 HHZ NS00 EP         1742 54.860              BER fh  91.0-0.03 9 71.9 278 
+ ODD1 HHN NS00 ES         1743  3.270              BER fh  91.0-0.20 9 71.9 278 
+ ODD1 HHZ NS00  IAML      1743  4.690    3.8  0.34     fh                       
+ BAS24HHN 2G00 ES         1743  5.590              BER fh  90.0 0.15 9 78.9 260 
+ KON03HHN NO   ES         1743  7.142              BER fh  91.0-0.13 8 85.5  94 
+ KON02HHN NO   ES         1743  8.863              BER fh  90.0-0.22 8 91.9 109 
+ KON02HHN NO   E          1743 13.363              BER fh              91.9 109 
+ BLS5 HHZ NS00 EP       1 1742 58.290              BER fh  90.0 0.06 6 92.6 242 
+ BLS5 HHZ NS00  IAML      1743  9.780    3.9  0.22     fh                       
+ BLS5 HHE NS00 ES       1 1743  9.830              BER fh  90.0 0.55 6 92.6 242 
+ BAS22HHZ 2G00 EP       1 1742 58.690              BER fh  90.0 0.15 6 94.6 271 
+ BAS22HHN 2G00 ES         1743  9.780              BER fh  90.0-0.06 8 94.6 271 
+ BAS23HHZ 2G00 EP         1742 58.690              BER fh  91.0 0.05 8 95.2 278 
+ BAS23HHN 2G00 ES         1743  9.960              BER fh  91.0-0.05 8 95.2 278 
+ SKAR HHZ NS00 EP         1742 59.440              BER fh  90.0 0.29 7 98.3  13 
+ SKAR HHN NS00 ES         1743 11.160              BER fh  90.0 0.28 7 98.3  13 
+ SKAR HHZ NS00  IAML      1743 16.790    2.5  0.30     fh                       
+ BAS21HHZ 2G00 EP         1743  0.100              BER fh  90.0 0.03 7  104 274 
+ BAS21HHN 2G00 ES         1743 12.240              BER fh  90.0-0.25 7  104 274 
+ BAS20HHZ 2G00 EP         1743  1.640              BER fh  90.0 0.17 7  113 279 
+ BAS20HHN 2G00 ES         1743 14.890              BER fh  90.0-0.04 7  113 279 
+ BAS09HHZ 2G00 EP         1743  2.080              BER fh  90.0 0.06 6  116 293 
+ BAS09HHN 2G00 ES         1743 15.630              BER fh  90.0-0.25 6  116 293 
+ BAS19HHZ 2G00 EP         1743  2.630              BER fh  90.0-0.02 6  120 280 
+ BAS19HHN 2G00 ES         1743 16.620              BER fh  90.0-0.35 6  120 280 
+ BAS18HHZ 2G00 EP         1743  4.110              BER fh  90.0-0.51 5  132 283 
+ BAS18HHN 2G00 ES         1743 19.390              BER fh  90.0-1.02 5  132 283 
+ KON04HHZ NO   EP         1743  5.687              BER fh  70.0-0.55 5  143  82 
+ KON04HHN NO   ES         1743 22.981              BER fh  70.0-0.23 5  143  82 
+ BAS17HHZ NS   EP         1743  6.820              BER fh  70.0-0.05 4  147 287 
+ BAS17HHN NS   ES         1743 24.140              BER fh  70.0-0.18 4  147 287 
+ KMY  HHZ NS00 EP         1743 10.300              BER fh  50.0 1.09 3  165 247 
+ KMY  HHN NS00 ES         1743 29.050              BER fh  50.0 0.66 3  165 247 
+ KMY  HHZ NS00  IAML      1743 30.230    3.3  0.70     fh                       
+ ASK  HHZ NS00 EP       1 1743 10.230              BER fh  50.0 0.80 2  167 297 
+ ASK  HHN NS00 ES         1743 29.900              BER fh  50.0 1.12 3  167 297 
+ ASK  HHZ NS00  IAML      1743 32.410    2.8  0.46     fh                       
+ BAS15HHZ NS   EP         1743 10.460              BER fh  50.0 0.72 3  169 288 
+ BAS15HHN NS   ES         1743 30.180              BER fh  50.0 0.87 3  169 288 
+ SNARTEHE NS00 ES         1743 30.050              BER fh  50.0 0.56 3  170 194 
+ SNARTEHZ NS00  IAML      1743 31.700    7.5  0.20     fh                       
+ BAS03HHZ NS   EP       2 1743 12.060              BER fh  50.0 1.55 1  175 298 
+ BAS03HHN 2G00 ES         1743 31.760              BER fh  50.0 1.10 2  175 298 
+ HOMB HHE NS00 ES       2 1743 31.290              BER fh  50.0 0.43 1  176 168 
+ HOMB HHZ NS00  IAML      1744  5.800    5.6  0.66     fh                       
+ HYA  HHN NS00 ES       2 1743 33.040              BER fh  50.0 2.10 1  177 329 
+ HYA  HHZ NS00  IAML      1744 12.950    3.7  0.66     fh                       
+ NAO04BHZ NO00 EP       1 1743 14.120              BER fh  50.0 1.41 1  193  54 
+ NAO04BHZ NO00  IAML      1743 39.790    2.1  0.45     fh                       
+ NAO03BHZ NO00 EP       2 1743 14.200              BER fh  50.0 1.40 1  194  55 
+ NAO03BHZ NO00  IAML      1743 39.040    2.6  0.65     fh                       
+ NAO05BHZ NO00 EP       2 1743 14.920              BER fh  50.0 1.58 0  198  53 
+ NAO05BHZ NO00  IAML      1743 39.920    1.9  0.30     fh                       
+ NAO02BHZ NO00 EP       1 1743 14.900              BER fh  50.0 1.45 1  199  55 
+ NAO02BHZ NO00  IAML      1743 41.180    2.5  0.45     fh                       
+ NAO01BHZ NO00 EP         1743 15.590              BER fh  50.0 1.91 1  201  54 
+ NAO01BHN NO00 ES         1743 38.140              BER fh  50.0 1.96 1  201  54 
+ NAO01BHZ NO00  IAML      1743 41.670    1.8  0.35     fh                       
+ NBO04BHZ NO00 ESg      2 1743 40.260              BER fh  90.0-0.76 0  206  49 
+ NBO04BHZ NO00  IAML      1743 40.610    2.4  0.60     fh                       
+ STRU HHN UP-- ES       2 1743 40.840              BER fh  50.0 3.55 0  206 114 
+ NBO04BHZ NO00 EPg      2 1743 16.940              BER fh  90.0 0.48 0  206  49 
+ NBO00BHZ NO00 EP         1743 16.160              BER fh  50.0 1.53 0  208  48 
+ NBO00BHE NO00 ES         1743 39.280              BER fh  50.0 1.46 0  208  48 
+ NBO00BHZ NO00 ESg      2 1743 40.720              BER fh  90.0-0.97 0  208  48 
+ NBO00BHZ NO00  IAML      1743 47.710    1.5  0.50     fh                       
+ NBO05BHZ NO00 EP       1 1743 15.880              BER fh  50.0 1.28 0  208  47 
+ NBO05BHZ NO00  IAML      1743 44.580    1.4  0.55     fh                       
+ NBO03BHZ NO00 EP       1 1743 16.500              BER fh  50.0 1.72 0  209  49 
+ NBO03BHZ NO00  IAML      1743 43.330    2.0  0.45     fh                       
+ NBO01BHZ NO00 EP       1 1743 16.560              BER fh  50.0 1.62 0  211  48 
+ NBO01BHZ NO00 ESg      2 1743 41.730              BER fh  90.0-0.63 0  211  48 
+ NBO01BHZ NO00  IAML      1743 43.580    1.4  0.30     fh                       
+ NBO02BHZ NO00 EP       1 1743 17.050              BER fh  50.0 1.85 0  213  49 
+ NBO02BHZ NO00 ESg      2 1743 42.030              BER fh  90.0-0.95 0  213  49 
+ NBO02BHZ NO00  IAML      1743 46.760    3.7  0.95     fh                       
+ NC604BHZ NO00 EP       2 1743 17.200              BER fh  50.0 1.33 0  218  61 
+ NC604BHZ NO00 EPg      2 1743 18.430              BER fh  90.0-0.05 0  218  61 
+ NC604BHZ NO00  IAML      1743 44.850    2.2  0.15     fh                       
+ NC603BHZ NO00  IAML      1743 45.830    2.0  0.20     fh                       
+ NC605BHZ NO00 EP       2 1743 17.330              BER fh  50.0 1.07 0  221  60 
+ NC605BHZ NO00  IAML      1743 46.000    1.8  0.35     fh                       
+ NC603BHZ NO00 EP       2 1743 17.260              BER fh  50.0 1.00 0  221  62 
+ SUE  HHN NS00 ES         1743 43.010              BER fh  50.0 2.51 0  221 310 
+ SUE  HHZ NS00  IAML      1743 45.700    2.3  0.26     fh                       
+ NC600BHZ NO00 ESg      2 1743 44.730              BER fh  90.0-0.95 0  222  61 
+ NC600BHZ NO00  IAML      1743 48.150    1.6  0.25     fh                       
+ NC602BHZ NO00 EPg      2 1743 19.630              BER fh  90.0-0.08 0  226  62 
+ NC602BHZ NO00 ESg      2 1743 45.540              BER fh  90.0-1.12 0  226  62 
+ NC602BHZ NO00  IAML      1743 49.970    1.9  0.75     fh                       
+ NC204BHZ NO00 EP         1743 18.340              BER fh  50.0 1.48 0  226  43 
+ NC602BHZ NO00 EP       1 1743 18.220              BER fh  50.0 1.41 0  226  62 
+ NC203BHZ NO00  IAML      1743 48.570    1.9  0.40     fh                       
+ NC204BHZ NO00  IAML      1743 47.700    1.4  0.35     fh                       
+ NC203BHZ NO00 EP       1 1743 17.920              BER fh  50.0 1.06 0  226  44 
+ NC200BHZ NO00 EP       1 1743 18.500              BER fh  50.0 1.25 0  228  43 
+ NC200BHZ NO00 EPg        1743 19.980              BER fh  90.0-0.23 0  228  43 
+ NC200BHZ NO00  IAML      1743 47.900    1.8  0.25     fh                       
+ NC202BHZ NO00 EP       1 1743 18.460              BER fh  50.0 1.07 0  230  45 
+ NC202BHZ NO00  IAML      1743 49.510    1.1  0.40     fh                       
+ NC201BHZ NO00 EP       2 1743 18.970              BER fh  50.0 1.15 0  233  44 
+ NC201BHZ NO00 EPg        1743 20.830              BER fh  90.0-0.09 0  233  44 
+ NC201BHZ NO00 ESg      2 1743 47.490              BER fh  90.0-1.28 0  233  44 
+ NC201BHZ NO00  IAML      1743 48.420    1.8  0.25     fh                       
+ NC303BHZ NO00 EP         1743 21.270              BER fh  50.0 1.88 0  247  49 
+ NC303BHZ NO00  IAML      1744 10.850    1.5  0.70     fh                       
+ NC304BHZ NO00 EPg      2 1743 22.760              BER fh  90.0-0.63 0  248  48 
+ NC304BHZ NO00 ESg      2 1743 52.080              BER fh  90.0-0.99 0  248  48 
+ NC304BHZ NO00  IAML      1743 52.980    1.3  0.45     fh                       
+ NC403BHZ NO00 EP       2 1743 21.860              BER fh  50.0 2.19 0  248  55 
+ NC403BHZ NO00 ESg      2 1743 51.860              BER fh  90.0-1.26 0  248  55 
+ NC403BHZ NO00  IAML      1743 53.190    4.5  0.90     fh                       
+ NC404BHZ NO00 ESg        1743 51.690              BER fh  90.0-1.89 0  250  54 
+ NC404BHZ NO00  IAML      1743 54.290    1.7  0.20     fh                       
+ NC300BHZ NO00 EPg        1743 23.130              BER fh  90.0-0.63 0  251  49 
+ NC300BHZ NO00  IAML      1743 53.510    1.2  0.30     fh                       
+ NC400BHZ NO00 EP       2 1743 22.880              BER fh  50.0 2.72 0  253  55 
+ NC400BHZ NO00 ESg        1743 52.440              BER fh  90.0-1.75 0  253  55 
+ NC400BHZ NO00  IAML      1743 54.170    1.7  0.45     fh                       
+ NC305BHZ NO00 ESg      2 1743 52.790              BER fh  90.0-1.50 0  253  48 
+ NC305BHZ NO00  IAML      1743 55.640    1.8  0.80     fh                       
+ NC3  BHZ NO00 ESg      2A1743 52.309               RR                          
+ NC3  BHZ NO00  BAZ-Sg  2A1743 52.309  228.0  4.20  RR                          
+ NC300BHZ NO00 ESg      2A1743 52.309               RR                          
+ NC300BHZ NO00  BAZ-Sg  2A1743 52.309  228.0  4.20  RR                          
+ NC301BHZ NO00 ESg      2A1743 53.248               RR                          
+ NC301BHZ NO00  BAZ-Sg  2A1743 53.248  228.0  4.20  RR                          
+ NC302BHZ NO00 ESg      2A1743 52.239               RR                          
+ NC302BHZ NO00  BAZ-Sg  2A1743 52.239  228.0  4.20  RR                          
+ NC303BHZ NO00 ESg      2A1743 51.201               RR                          
+ NC303BHZ NO00  BAZ-Sg  2A1743 51.201  228.0  4.20  RR                          
+                                                                                
+

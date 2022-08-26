@@ -20,6 +20,7 @@ from obspy.core.utcdatetime import UTCDateTime
 from obspy.core.event import Origin, Pick, Arrival
 from obspy.core.event.base import CreationInfo, WaveformStreamID
 from obspy.taup import TauPyModel
+from obspy.core.util.attribdict import AttribDict
 
 from obsplus.events.validate import attach_all_resource_ids
 from obsplus import events_to_df
@@ -524,18 +525,26 @@ def read_bayesloc_arrivals(arrival_file, custom_epoch=None):
     return arrival_df
 
 
-def get_bayesloc_filepath(path_or_file, default_output_file):
+def read_bayesloc_phases(phases_file):
+    """
+    Function to read output/phases_freq_stats.out file.
+    """
+    phases_df = pd.read_csv(phases_file, delimiter=' ')
+    return phases_df
+
+
+def get_bayesloc_filepath(
+        path_or_file, default_output_file='origins_ned_stats.out'):
     """
     Check if a string is either the final path or the directory to a Bayesloc
     run - in the latter case, return the path to the relevant file.
     """
     if os.path.isdir(path_or_file):
-        test_f = os.path.join(path_or_file, 'origins_ned_stats.out')
+        test_f = os.path.join(path_or_file, default_output_file)
         if os.path.isfile(test_f):
             path_or_file = test_f
         else:
-            test_f = os.path.join(path_or_file, 'output',
-                                  'origins_ned_stats.out')
+            test_f = os.path.join(path_or_file, 'output', default_output_file)
             if os.path.isfile(test_f):
                 path_or_file = test_f
             else:
@@ -549,14 +558,27 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
     """
     Add bayesloc arrivals to a catalog
     """
+    # TODO: what to do if there is no phases file yet
+    phases_file = get_bayesloc_filepath(
+        arrival_file, default_output_file='phases_freq_stats.out')
     arrival_file = get_bayesloc_filepath(
-        arrival_file, default_output_file='arrival')
+        arrival_file, default_output_file='arrival.dat')
 
     if len(catalog) == 0:
         raise TypeError(
             'Catalog is empty, use bayesloc_utils.read_bayesloc_origins')
     arrival_df = read_bayesloc_arrivals(
         arrival_file, custom_epoch=custom_epoch)
+    if phases_file is not None:
+        phases_df = read_bayesloc_phases(phases_file)
+        # need to remove event_id column so they don't become duplicated
+        phases_df = phases_df.drop(columns=['ev_id', 'sta_id', 'phase'])
+        if len(phases_df) == len(arrival_df):
+            arrival_df = pd.concat([arrival_df, phases_df], axis=1)
+        else:
+            Logger.error(
+                'There are %s arrivals and %s output stats for phases, can ',
+                'not merge stats together...', len(arrival_df), len(phases_df))
 
     add_picks = False
     # Add picks and arrivals if there are no picks in catalog yet
@@ -564,14 +586,18 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
         add_picks = True
     
     for event in catalog:
+        bayesloc_event_id = None
         for origin in event.origins:
             try:
                 bayesloc_event_id = origin.extra.get(
                     'bayesloc_event_id')['value']
+                bayesloc_origin = origin
             except AttributeError:
                 continue
-        
-
+        if bayesloc_event_id is None:
+            Logger.info('There is no Bayesloc solution for event %s',
+                        event.short_str())
+            continue
 
         # Need to read in residuals files - which ones?
         # Either read directly  from file XXX
@@ -585,17 +611,31 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
         # 
         # Select arrivals / picks
         event_arrival_df = arrival_df[arrival_df.ev_id==bayesloc_event_id]
+        Logger.info('Adding bayesloc-arrivals to origin for event %s',
+                    event.short_str())
         for row in event_arrival_df.itertuples():
             pick_found = False
             # If there are already picks in catalog, try to find the one that
             # matches the bayesloc-arrival.
             if not add_picks:
-                pick_found = True
                 pick = [p for p in event.picks
                         if p.waveform_id.station_code==row.sta_id and
                         p.time==row.utctime and p.phase_hint==row.phase]
                 if len(pick) == 1:
-                    new_pick = pick
+                    pick_found = True
+                    new_pick = pick[0]
+                # If picks are called "P1" or "S1", find by time / first letter
+                elif (len(pick) == 0 and len(row.phase) > 1 and
+                        row.phase[-1] == '1'):
+                    pick = [p for p in event.picks
+                        if p.waveform_id.station_code==row.sta_id and
+                        p.time==row.utctime and p.phase_hint and
+                        p.phase_hint[0]==row.phase.removesuffix('1')]
+                    if len(pick) == 1:
+                        pick_found = True
+                        new_pick = pick[0]
+                if not pick_found:
+                    continue
             # If there are no picks in catalog, add all arrivals as new picks.
             if add_picks or not pick_found:
                 new_pick = Pick(
@@ -604,12 +644,28 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
                     phase_hint=row.phase)
                 event.picks.append(new_pick)
             # Add arrivals to origin
+            # - time_correction: sum of bayesloc corrections
+            # - time_residual: hmm... does Bayesloc output residual?
+            # - also need to add: most likely phase hint and probability for
+            #   input phase hint 
+            # 
             new_arrival = Arrival(pick_id=new_pick.resource_id,
-                                phase=row.phase,
-                                # time_correction=,  # TODO
-                                #time_residual=,
-                                )
-            origin.arrivals.append(new_arrival)
+                                  phase=row.phase,
+                                  # time_correction=,  # TODO
+                                  #time_residual=,
+                                  )
+            if not hasattr(new_arrival, 'extra'):
+                new_arrival.extra = AttribDict()
+            new_arrival.extra.update({'original_phase': row.phase})
+            new_arrival.extra.update({'prob_as_called': row.prob_as_called})
+            new_arrival.extra.update({'most_prob_phase': row.most_prob_phase})
+            # Need to find the field with the probability for the new phasehint
+            new_arrival.extra.update({
+                'prob_as_suggested': getattr(row, row.most_prob_phase)})
+            new_arrival.extra.update({'n': row.n})
+            # TODO could add probabilities for all other phase hints, but
+            #      that may not be so very useful.
+            bayesloc_origin.arrivals.append(new_arrival)
         # try:
         #     origin = [orig for orig in event.origins
         #               if orig.creation_info.author=='Bayesloc'][0]
@@ -646,8 +702,10 @@ def read_bayesloc_events(bayesloc_output_folder, custom_epoch=None):
     return catalog
 
 
-def update_cat_from_bayesloc(cat, bayesloc_stats_out_files, custom_epoch=None,
-                             **kwargs):
+def update_cat_from_bayesloc(
+        cat, bayesloc_stats_out_files, custom_epoch=None, add_arrivals=False,
+        update_phase_hints=False, keep_best_fit_pick_only=False,
+        remove_1_suffix=False, min_phase_probability=0, **kwargs):
     """
     Update a catalog's locations from a bayesloc-relocation run
     """
@@ -659,6 +717,7 @@ def update_cat_from_bayesloc(cat, bayesloc_stats_out_files, custom_epoch=None,
         
     # Loop through multiple bayesloc output folders
     for bayesloc_stats_out_file in bayesloc_stats_out_files:
+        bayesloc_folder = bayesloc_stats_out_file
         bayesloc_stats_out_file = get_bayesloc_filepath(
             bayesloc_stats_out_file, default_output_file='origins_ned_stats.out')
         cat_backup = cat.copy()
@@ -744,6 +803,10 @@ def update_cat_from_bayesloc(cat, bayesloc_stats_out_files, custom_epoch=None,
                         tmp_cat_df.depth_sd.iloc[0] * 1000)
                     bayes_orig.time_errors.uncertainty = (
                         tmp_cat_df.time_sd.iloc[0])
+                    bayes_orig.extra = {
+                        'bayesloc_event_id': {
+                                'value': tmp_cat_df.ev_id.iloc[0],
+                                'namespace': 'Bayesloc'}}
                     Logger.info(
                         'Added origin solution from Bayesloc for event %s',
                         event.short_str())
@@ -759,9 +822,143 @@ def update_cat_from_bayesloc(cat, bayesloc_stats_out_files, custom_epoch=None,
                 # TODO: load phase probabilities, take the one that is most likely
                 #       the "correct" pick for each phase, and fix picks
                 #       accordingly.
+            if add_arrivals:
+                cat = add_bayesloc_arrivals(
+                    bayesloc_folder, catalog=cat, custom_epoch=custom_epoch)
+            if update_phase_hints:
+                cat = _update_bayesloc_phase_hints(
+                    cat, remove_1_suffix=remove_1_suffix)
+            # Keep only the best fitting pick only when there are multiple
+            # picks with the same phase-hint for same event at station
+            # Can be selected based on highest probability OR smallest residual
+            if keep_best_fit_pick_only:
+                cat = _select_bestfit_bayesloc_picks(
+                    cat, min_phase_probability=min_phase_probability)
     return cat
+
+
+def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
+    """
+    """
+    for event in cat:
+        Logger.info(
+            'Event %s: Sorting out duplicate picks: keeping only those picks /'
+            ' arrivals that best fit.', event.short_str())
+        bayesloc_event_id = None
+        bayesloc_origin = None
+        for origin in event.origins:
+            try:
+                bayesloc_event_id = origin.extra.get(
+                    'bayesloc_event_id')['value']
+                break
+            except AttributeError:
+                continue
+        if bayesloc_event_id is not None:
+            bayesloc_origin = origin
+        else:
+            continue
+        uniq_bayes_phases = list(set([
+            (arrival.pick_id.get_referred_object().waveform_id.station_code,
+             arrival.phase)
+            for arrival in bayesloc_origin.arrivals]))
+        for station, phase in uniq_bayes_phases:
+            rel_arrivals = [
+                arrival for arrival in bayesloc_origin.arrivals
+                if phase == arrival.phase and station ==
+                arrival.pick_id.get_referred_object().waveform_id.station_code]
+            # Can save some time here if there is only 1 pick:
+            if len(rel_arrivals) == 1 and min_phase_probability == 0:
+                continue
+            rel_picks = [
+                arrival.pick_id.get_referred_object()
+                for arrival in rel_arrivals]
+            phase_probabilities = [arrival.extra.prob_as_called
+                                   for arrival in rel_arrivals]
+            max_phase_probability = max(phase_probabilities)
+            max_phase_prob_idx = np.argmax(phase_probabilities)
+            # Keep only the best one
+            if max_phase_probability > min_phase_probability:
+                Logger.debug(
+                    'Event %s: There are %s picks for %s for station %s, '
+                    'keeping only the best fitting pick.', event.short_str(),
+                    len(rel_picks), phase, station)
+            else:
+                Logger.debug(
+                    'Event %s: There are %s picks for %s for station %s, '
+                    'but probably (max: %s) none are properly assigned.',
+                    event.short_str(), len(rel_picks), phase, station,
+                    max_phase_probability)
+            for j, (arrival, pick) in enumerate(zip(rel_arrivals, rel_picks)):
+                if (j == max_phase_prob_idx and
+                        max_phase_probability > min_phase_probability):
+                    continue
+                bayesloc_origin.arrivals.remove(arrival)
+                event.picks.remove(pick)
+    return cat
+
+
+def _update_bayesloc_phase_hints(cat, remove_1_suffix=False):
+    """
+    Update arrivals and picks with phase hints indicated by Bayesloc.
+    """
+    for event in cat:
+        bayesloc_event_id = None
+        bayesloc_origin = None
+        for origin in event.origins:
+            try:
+                bayesloc_event_id = origin.extra.get(
+                    'bayesloc_event_id')['value']
+                break
+            except AttributeError:
+                continue
+        Logger.info('Updating phase hints for event %s', event.short_str())
+        if bayesloc_event_id is not None:
+            bayesloc_origin = origin
+            for arrival in bayesloc_origin.arrivals:
+                if hasattr(arrival, 'extra'):
+                    if (arrival.extra.original_phase !=
+                            arrival.extra.most_prob_phase):
+                        # Rename pick phase according to Bayesloc
+                        pick = arrival.pick_id.get_referred_object()
+                        arrival.phase = arrival.extra.most_prob_phase
+                        arrival.extra.prob_as_called = (
+                            arrival.extra.prob_as_suggested)
+                        pick.phase_hint = arrival.extra.most_prob_phase
+                    # original_phase prob_as_called most_prob_phase
+                # When first arrival phase is called like "P1" or "S1", may need to
+                # rename:
+                if (remove_1_suffix and len(arrival.phase[-1]) > 1 and
+                        arrival.phase[-1] == '1'):
+                    arrival.phase.removesuffix('1')
+    return cat
+
 
 
 # %%
 # cat = read_bayesloc_events('/home/felix/Software/Bayesloc/Example_Ridge_Gibbons_2017/output')
+
+
+
+
+# %% TEST TEST TEST
+
+import logging
+Logger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
+
+
+from obspy.io.nordic.core import read_nordic
+catalog = read_nordic(
+    '/home/seismo/WOR/felix/R/SEI/REA/INTEU/2020/12/14-1935-58R.S202012')
+
+Logger.info('Updating catalog from bayesloc solutions')
+bayesloc_path = ['/home/felix/Documents2/Ridge/Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_10b']
+
+update_cat_from_bayesloc(
+    catalog, bayesloc_path, custom_epoch=UTCDateTime(1960, 1, 1, 0, 0, 0),
+    add_arrivals=True, update_phase_hints=True, keep_best_fit_pick_only=True,
+    remove_1_suffix=True, min_phase_probability=0)
 # %%

@@ -412,7 +412,8 @@ def find_array_picks_baz_appvel(
         event, phase_hints=None, seisarray_prefixes=SEISARRAY_PREFIXES,
         array_picks_dict=None, array_baz_dict=None, array_app_vel_dict=None,
         vel_mod=None, taup_mod=None, mod_file=os.path.join(
-            os.path.dirname(__file__), 'models','NNSN1D_plusAK135')):
+            os.path.dirname(__file__), 'models','NNSN1D_plusAK135'),
+        origin_default_depth=10000):
     """
     For one event, for every phase, find all picks at the same array, find the
     backazimuth and the apparent velocity, either from measurements or from the
@@ -566,7 +567,8 @@ def find_array_picks_baz_appvel(
                             # Taupy has a problem with Pn phase for event at
                             # 31 km depth even though moho is at 35 km... so
                             # fix event depth a bit shallower.
-                            source_depth_in_km = origin.depth / 1000
+                            o_depth = origin.depth or origin_default_depth
+                            source_depth_in_km = o_depth / 1000
                             moho_depth = vel_mod.moho_depth
                             if (len(arrival.phase) > 1 and
                                   arrival.phase[1] == 'n' and moho_depth and
@@ -653,8 +655,12 @@ def _check_extra_info(new_pick, pick):
         except KeyError:
             weight_val_old = None
         if weight_val is not None and weight_val_old is not None:
-            if int(weight_val) > int(weight_val_old):
-                weight = weight_val
+            try:
+                if int(weight_val) > int(weight_val_old):
+                    weight = weight_val
+            except ValueError as e:
+                Logger.error('Could not set pick weight for pick %s', pick)
+                Logger.error(e)
     # Set all info for pick weight
     if weight is not None:
         new_pick.extra = {
@@ -683,7 +689,8 @@ def add_array_station_picks(
         array_app_vel_dict=None, baz=None, app_vel=None,
         seisarray_prefixes=SEISARRAY_PREFIXES, min_array_distance_factor=8,
         mod_file=os.path.join(os.path.dirname(__file__), 'models',
-                              'NNSN1D_plusAK135'), **kwargs):
+                              'NNSN1D_plusAK135'),
+        origin_default_depth=10000, **kwargs):
     """
     Returns all picks at array stations from 
         # ARRAY stuff
@@ -815,8 +822,9 @@ def add_array_station_picks(
             event_array_dist = degrees2kilometers(
                 locations2degrees(origin.latitude, origin.longitude,
                                   array_center_ll[1], array_center_ll[0]))
+            o_depth = origin.depth or origin_default_depth
             event_array_dist = np.sqrt(
-                event_array_dist ** 2 + origin.depth ** 2)
+                event_array_dist ** 2 + o_depth ** 2)
             # Check if array is far enough from event to assume plane wave
             if (event_array_dist / min_array_distance_factor
                     <= array_aperture):

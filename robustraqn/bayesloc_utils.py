@@ -935,30 +935,30 @@ def _update_bayesloc_phase_hints(cat, remove_1_suffix=False):
 
 
 # %%
-# cat = read_bayesloc_events('/home/felix/Software/Bayesloc/Example_Ridge_Gibbons_2017/output')
+    # cat = read_bayesloc_events('/home/felix/Software/Bayesloc/Example_Ridge_Gibbons_2017/output')
 
 
 
 
 # %% TEST TEST TEST
+if __name__ == "__main__":
+    import logging
+    Logger = logging.getLogger(__name__)
+    # logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 
-import logging
-Logger = logging.getLogger(__name__)
-# logging.basicConfig(level=logging.INFO)
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 
+    from obspy.io.nordic.core import read_nordic
+    catalog = read_nordic(
+        '/home/seismo/WOR/felix/R/SEI/REA/INTEU/2020/12/14-1935-58R.S202012')
 
-from obspy.io.nordic.core import read_nordic
-catalog = read_nordic(
-    '/home/seismo/WOR/felix/R/SEI/REA/INTEU/2020/12/14-1935-58R.S202012')
+    Logger.info('Updating catalog from bayesloc solutions')
+    bayesloc_path = ['/home/felix/Documents2/Ridge/Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_10b']
 
-Logger.info('Updating catalog from bayesloc solutions')
-bayesloc_path = ['/home/felix/Documents2/Ridge/Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_10b']
-
-update_cat_from_bayesloc(
-    catalog, bayesloc_path, custom_epoch=UTCDateTime(1960, 1, 1, 0, 0, 0),
-    add_arrivals=True, update_phase_hints=True, keep_best_fit_pick_only=True,
-    remove_1_suffix=True, min_phase_probability=0)
+    update_cat_from_bayesloc(
+        catalog, bayesloc_path, custom_epoch=UTCDateTime(1960, 1, 1, 0, 0, 0),
+        add_arrivals=True, update_phase_hints=True, keep_best_fit_pick_only=True,
+        remove_1_suffix=True, min_phase_probability=0)
 # %%

@@ -655,8 +655,12 @@ def _check_extra_info(new_pick, pick):
         except KeyError:
             weight_val_old = None
         if weight_val is not None and weight_val_old is not None:
-            if int(weight_val) > int(weight_val_old):
-                weight = weight_val
+            try:
+                if int(weight_val) > int(weight_val_old):
+                    weight = weight_val
+            except ValueError as e:
+                Logger.error('Could not set pick weight for pick %s', pick)
+                Logger.error(e)
     # Set all info for pick weight
     if weight is not None:
         new_pick.extra = {

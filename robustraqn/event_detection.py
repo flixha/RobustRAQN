@@ -466,6 +466,13 @@ def run_day_detection(
                     return
                 else:
                     return [party, return_st]
+            
+            for family in short_party:
+                for detection in family:
+                    _ = detection._calculate_event(
+                        template=family.template, template_st=None,
+                         estimate_origin=True, correct_prepick=True)
+                
             short_party = short_party.decluster(
                 trig_int=trig_int, timing='detect', metric=decluster_metric,
                 hypocentral_separation=hypocentral_separation,
@@ -479,6 +486,12 @@ def run_day_detection(
                 short_party.write(detection_file_name + '.csv', format='csv',
                             overwrite=True)
 
+    # Add origins to detections
+    for family in party:
+        for detection in family:
+            _ = detection._calculate_event(
+                template=family.template, template_st=None,
+                    estimate_origin=True, correct_prepick=True)
     # Decluster detection and save them to filesf
     # metric='avg_cor' isn't optimal when one detection may only be good on
     # very few channels - i.e., allowing higher CC than any detection made on

@@ -847,16 +847,20 @@ def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
             for arrival in bayesloc_origin.arrivals
             if arrival.pick_id.get_referred_object() is not None]))
         for station, phase in uniq_bayes_phases:
+            if station is None:
+                continue
             rel_arrivals = [
                 arrival for arrival in bayesloc_origin.arrivals
                 if phase == arrival.phase and station ==
-                arrival.pick_id.get_referred_object().waveform_id.station_code]
+                arrival.pick_id.get_referred_object().waveform_id.station_code
+                if arrival.pick_id.get_referred_object() is not None]
             # Can save some time here if there is only 1 pick:
             if len(rel_arrivals) == 1 and min_phase_probability == 0:
                 continue
             rel_picks = [
                 arrival.pick_id.get_referred_object()
-                for arrival in rel_arrivals]
+                for arrival in rel_arrivals
+                if arrival.pick_id.get_referred_object() is not None]
             phase_probabilities = [arrival.extra.prob_as_called.value
                                    for arrival in rel_arrivals]
             max_phase_probability = max(phase_probabilities)
@@ -905,6 +909,8 @@ def _update_bayesloc_phase_hints(cat, remove_1_suffix=False):
                     if (arrival.extra.original_phase.value !=
                             arrival.extra.most_prob_phase.value):
                         # Rename pick phase according to Bayesloc
+                        if arrival.pick_id.get_referred_object() is None:
+                            continue
                         pick = arrival.pick_id.get_referred_object()
                         arrival.phase = arrival.extra.most_prob_phase.value
                         arrival.extra.prob_as_called.value = (

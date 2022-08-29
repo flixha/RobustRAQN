@@ -104,8 +104,8 @@ def _shorten_tribe_streams(
                     templ.st, background=False, event=templ.event,
                     sort_by='distance', show=False, return_figure=False,
                     size=(25, 50), save=True, savefile=image_name)
-            Logger.info("Made shortened template %s", templ_name)
-            Logger.info(templ)
+            Logger.debug("Made shortened template %s", templ_name)
+            Logger.debug(templ)
     # Check that all traces are same length
     if check_len_strict:
         stempl_lengths = list(set(

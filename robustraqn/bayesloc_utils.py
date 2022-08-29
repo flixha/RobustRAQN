@@ -841,9 +841,6 @@ def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
     """
     """
     for event in cat:
-        Logger.info(
-            'Event %s: Sorting out duplicate picks: keeping only those picks /'
-            ' arrivals that best fit.', event.short_str())
         bayesloc_event_id = None
         bayesloc_origin = None
         for origin in event.origins:
@@ -854,6 +851,9 @@ def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
             except AttributeError:
                 continue
         if bayesloc_event_id is not None:
+            Logger.info(
+                'Event %s: Sorting out duplicate picks: keeping only those picks /'
+                ' arrivals that best fit.', event.short_str())
             bayesloc_origin = origin
         else:
             continue
@@ -880,8 +880,9 @@ def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
             if max_phase_probability > min_phase_probability:
                 Logger.debug(
                     'Event %s: There are %s picks for %s for station %s, '
-                    'keeping only the best fitting pick.', event.short_str(),
-                    len(rel_picks), phase, station)
+                    'keeping only the best fitting pick above probability %s.',
+                    event.short_str(), len(rel_picks), phase, station,
+                    min_phase_probability)
             else:
                 Logger.debug(
                     'Event %s: There are %s picks for %s for station %s, '
@@ -911,8 +912,8 @@ def _update_bayesloc_phase_hints(cat, remove_1_suffix=False):
                 break
             except AttributeError:
                 continue
-        Logger.info('Updating phase hints for event %s', event.short_str())
         if bayesloc_event_id is not None:
+            Logger.info('Updating phase hints for event %s', event.short_str())
             bayesloc_origin = origin
             for arrival in bayesloc_origin.arrivals:
                 if hasattr(arrival, 'extra'):

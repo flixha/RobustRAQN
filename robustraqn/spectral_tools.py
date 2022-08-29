@@ -105,8 +105,8 @@ def balance_noise(self, inv, balance_power_coefficient=2,
         #                ' model available for %s', str(self))
         Logger.exception(e)
         Logger.warning(
-            'Cannot balance trace by noise PDF, there is no noise model '
-            'available for %s %s. Using dummy bandpass filter 3-50 Hz',
+            'Trace %s: Cannot balance by noise PDF, there is no noise model '
+            'available for %s. Using dummy bandpass filter 3-50 Hz',
             self.id, str(self.stats.starttime))
         f_filter = np.array([1, 3, 50, 100])
         amp_filter = np.array([10e5, 1, 1, 10e5])

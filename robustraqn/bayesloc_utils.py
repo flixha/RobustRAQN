@@ -270,6 +270,24 @@ def _get_traveltime(model, degree, depth, phase):
                     return(np.nan)
 
 
+def _get_nordic_event_id(event):
+    """
+    Get the event id that is mentioned in the most recent comment in event read
+    from Nordic file.
+    """
+    if hasattr(event, 'extra') and 'nordic_event_id' in event.extra.keys():
+        event_id = event.extra['nordic_event_id']['value']
+    else:
+        # sort comments by date they were written
+        comments = event.comments.copy()
+        comments = sorted(comments, key=lambda x: x.text.split(' ')[1],
+                            reverse=True)
+        event_id = int(
+            [com.text.split('ID:')[-1].strip('SdLRD ')
+            for com in comments if 'ID:' in com.text][0])
+    return event_id
+
+
 def write_ttimes_files(
         model, mod_name=None,
         phase_list=['P', 'Pg', 'Pn', 'S', 'Sg', 'Sn', 'P1', 'S1'],
@@ -361,26 +379,33 @@ def write_ttimes_files(
         f.close()
 
 
-def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
-                          custom_epoch=None, agency_id=''):
+def read_bayesloc_origins(
+        bayesloc_origins_ned_stats_file, cat=Catalog(),
+        custom_epoch=None, agency_id='', find_event_without_id=False,
+        s_diff=3, max_bayes_error_km=100):
     """
     Read bayesloc origins into Catalog and pandas datafrane
     """
+    bayesloc_solutions_added = False
     catalog_empty = False
     if len(cat) == 0:
         catalog_empty = True
-    cat_backup = cat.copy()
-    # for event in cat:
-    #     attach_all_resource_ids(event)
-    # remove arrivals to avoid error in conversion to dataframe
-    for ev in cat:
-        try:
-            orig = ev.preferred_origin() or ev.origins[0]
-            orig.arrivals = []
-        except (AttributeError, KeyError):
-            pass
-    cat_df = events_to_df(cat)
-    cat_df['events'] = cat.events
+    # cat_backup = cat.copy()
+
+    # Skip if all events have bayesloc solutions already
+    bayesloc_event_ids = []
+    for event in cat:
+        bayesloc_event_id = None
+        for origin in event.origins:
+            try:
+                bayesloc_event_id = origin.extra.get(
+                    'bayesloc_event_id')['value']
+                break
+            except AttributeError:
+                continue
+        bayesloc_event_ids.append(bayesloc_event_id)
+    if all([id is not None for id in bayesloc_event_ids]):
+        return cat, pd.DataFrame(), False
 
     bayes_df = pd.read_csv(bayesloc_origins_ned_stats_file, delimiter=' ')
     bayes_df = bayes_df.sort_values(by='time_mean')
@@ -394,9 +419,12 @@ def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
         #         'custom_epoch needs to be of type numpy.datetime64')
         # np.datetime64('1960-01-01T00:00:00') - 
         #     np.datetime64('1970-01-01T00:00:00')
+        if isinstance(custom_epoch, UTCDateTime):
+            custom_epoch = custom_epoch.datetime
         if not isinstance(custom_epoch, datetime):
             raise TypeError(
-                'custom_epoch needs to be of type datetime.datetime')
+                'custom_epoch needs to be of type datetime.datetime or ' +
+                'UTCDateTime')
         # custom_epoch = datetime.datetime(1960,1,1,0,0,0)
         epoch_correction_s = (
             custom_epoch - datetime(1970,1,1,0,0,0)).total_seconds()
@@ -412,27 +440,36 @@ def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
     # cat_SgLoc = read_seisan_database('Sfiles_MAD10_Saga_02_Sg')
     # cat_Sgloc_df = events_to_df(cat_SgLoc)
     # cat_Sgloc_df['events'] = cat_SgLoc.events
-    s_diff = 3
-    max_bayes_error_km = 50
 
-    # put back arrivals
-    for event, event_backup in zip(cat, cat_backup):
-        backup_orig = (
-            event_backup.preferred_origin() or event_backup.origins[0])
+    # remove arrivals to avoid error in conversion to dataframe
+    for ev in cat:
         try:
-            orig.arrivals = backup_orig.arrivals
-        except AttributeError:
+            orig = ev.preferred_origin() or ev.origins[0]
+            orig.arrivals = []
+        except (AttributeError, KeyError):
             pass
+    # Code below not needed I think....
+    # cat_df = None
+    # cat_df = events_to_df(cat)
+    # cat_df['events'] = cat.events
+    # # put back arrivals
+    # for event, event_backup in zip(cat, cat_backup):
+    #     backup_orig = (
+    #         event_backup.preferred_origin() or event_backup.origins[0])
+    #     try:
+    #         orig.arrivals = backup_orig.arrivals
+    #     except AttributeError:
+    #         pass
 
     # Code to sort in the new locations from BAYESLOC / Seisan into catalog
     if catalog_empty:
         bayes_df = bayes_df.reset_index() 
         for row in bayes_df.itertuples():
             bayes_orig = Origin(
-                latitude = row.lat_mean,
-                longitude = row.lon_mean,
-                depth = row.depth_mean * 1000,
-                time = row.datetime,
+                latitude=row.lat_mean,
+                longitude=row.lon_mean,
+                depth=row.depth_mean * 1000,
+                time=row.datetime,
                 latitude_errors=QuantityError(uncertainty=kilometers2degrees(
                     row.north_sd)),
                 longitude_errors=QuantityError(uncertainty=kilometers2degrees(
@@ -445,7 +482,6 @@ def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
                 'bayesloc_event_id': {
                     'value': row.ev_id,
                     'namespace': 'Bayesloc'}}
-            
             # TODO: add covariance matrix and other uncertainties
             new_event = Event(
                 origins=[bayes_orig],
@@ -454,12 +490,15 @@ def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
             cat.append(new_event)
     else:
         for event in cat:
-            bayes_orig = (event.preferred_origin() or event.origins[0]).copy()
-            lower_dtime = (bayes_orig.time - s_diff)._get_datetime()
-            upper_dtime = (bayes_orig.time + s_diff)._get_datetime()
+            cat_orig = (event.preferred_origin() or event.origins[0]).copy()
+            nordic_event_id = _get_nordic_event_id(event)
+            tmp_cat_df = bayes_df.loc[bayes_df.ev_id == int(nordic_event_id)]
+            if find_event_without_id and len(tmp_cat_df) == 0:
+                lower_dtime = (cat_orig.time - s_diff)._get_datetime()
+                upper_dtime = (cat_orig.time + s_diff)._get_datetime()
+                tmp_cat_df = bayes_df.loc[(bayes_df.datetime > lower_dtime) & (
+                    bayes_df.datetime < upper_dtime)]
 
-            tmp_cat_df = bayes_df.loc[(bayes_df.datetime > lower_dtime) & (
-                bayes_df.datetime < upper_dtime)]
             if len(tmp_cat_df) > 0:
                 # Make new origin with all the data
                 bayes_orig = Origin()
@@ -484,6 +523,7 @@ def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
                     Logger.info(
                         'Added origin solution from Bayesloc for event %s',
                         event.short_str())
+                    bayesloc_solutions_added = True
                     # Put bayesloc origin as first in list
                     # new_orig_list = list()
                     # new_orig_list.append(bayes_orig)
@@ -491,12 +531,13 @@ def read_bayesloc_origins(bayesloc_origins_ned_stats_file, cat=Catalog(),
                     # event.origins = new_orig_list
                     bayes_orig.extra = {
                         'bayesloc_event_id': {
-                            'value': row.ev_id,
+                            'value': tmp_cat_df.iloc[0].ev_id,
                             'namespace': 'Bayesloc'}}
                     # event.origins.append(bayes_orig)
                     event.origins = [bayes_orig] + event.origins
                     event.preferred_origin_id = bayes_orig.resource_id
-    return cat, bayes_df
+                # else:
+    return cat, bayes_df, bayesloc_solutions_added
 
 
 def read_bayesloc_arrivals(arrival_file, custom_epoch=None):
@@ -508,6 +549,8 @@ def read_bayesloc_arrivals(arrival_file, custom_epoch=None):
     arrival_times = [time.gmtime(value) for value in arrival_df.time.values]
     # Allow a custom epoch time, e.g., one that starts before 1970
     if custom_epoch is not None:
+        if isinstance(custom_epoch, UTCDateTime):
+            custom_epoch = custom_epoch.datetime
         if not isinstance(custom_epoch, datetime):
             raise TypeError(
                 'custom_epoch needs to be of type datetime.datetime')
@@ -558,6 +601,25 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
     """
     Add bayesloc arrivals to a catalog
     """
+    # Check if any of the events in the catalog can be updated with arrivals,
+    # if not return to save time
+    bayes_origins_in_cat = False
+    for event in catalog:
+        bayesloc_event_id = None
+        for origin in event.origins:
+            try:
+                bayesloc_event_id = origin.extra.get(
+                    'bayesloc_event_id')['value']
+                bayes_origins_in_cat = True
+            except AttributeError:
+                continue
+            continue
+    if not bayes_origins_in_cat:
+        Logger.info('There are no bayesloc origins in catalog, not trying to '
+                    'add Bayesloc arrivals either.')
+        return catalog
+
+
     # TODO: what to do if there is no phases file yet
     phases_file = get_bayesloc_filepath(
         arrival_file, default_output_file='phases_freq_stats.out')
@@ -595,8 +657,9 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
             except AttributeError:
                 continue
         if bayesloc_event_id is None:
-            Logger.info('There is no Bayesloc solution for event %s',
-                        event.short_str())
+            Logger.info(
+                'Cannot add bayesloc arrivals, there is no Bayesloc solution '
+                ' for event %s', event.short_str())
             continue
 
         # Need to read in residuals files - which ones?
@@ -654,15 +717,25 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
                                   # time_correction=,  # TODO
                                   #time_residual=,
                                   )
+            nsp = 'Bayesloc'
             if not hasattr(new_arrival, 'extra'):
                 new_arrival.extra = AttribDict()
-            new_arrival.extra.update({'original_phase': row.phase})
-            new_arrival.extra.update({'prob_as_called': row.prob_as_called})
-            new_arrival.extra.update({'most_prob_phase': row.most_prob_phase})
+            # bayes_orig.extra = {
+            #         'bayesloc_event_id': {
+            #             'value': row.ev_id,
+            #             'namespace': 'Bayesloc'}}
+            new_arrival.extra.update({'original_phase':
+                {'value': row.phase, 'namespace': nsp}})
+            new_arrival.extra.update({'prob_as_called':
+                {'value': row.prob_as_called, 'namespace': nsp}})
+            new_arrival.extra.update({'most_prob_phase': 
+                {'value': row.most_prob_phase, 'namespace': nsp}})
             # Need to find the field with the probability for the new phasehint
             new_arrival.extra.update({
-                'prob_as_suggested': getattr(row, row.most_prob_phase)})
-            new_arrival.extra.update({'n': row.n})
+                'prob_as_suggested': 
+                    {'value': getattr(row, row.most_prob_phase),
+                     'namespace': nsp}})
+            new_arrival.extra.update({'n': {'value': row.n, 'namespace': nsp}})
             # TODO could add probabilities for all other phase hints, but
             #      that may not be so very useful.
             bayesloc_origin.arrivals.append(new_arrival)
@@ -691,7 +764,7 @@ def update_tribe_from_bayesloc(tribe, bayesloc_stats_out_file,
 def read_bayesloc_events(bayesloc_output_folder, custom_epoch=None):
     """
     """
-    catalog, bayes_df = read_bayesloc_origins(
+    catalog, bayes_df, _ = read_bayesloc_origins(
         bayesloc_origins_ned_stats_file=os.path.join(
             bayesloc_output_folder, 'origins_ned_stats.out'),
         custom_epoch=custom_epoch)
@@ -703,9 +776,11 @@ def read_bayesloc_events(bayesloc_output_folder, custom_epoch=None):
 
 
 def update_cat_from_bayesloc(
-        cat, bayesloc_stats_out_files, custom_epoch=None, add_arrivals=False,
-        update_phase_hints=False, keep_best_fit_pick_only=False,
-        remove_1_suffix=False, min_phase_probability=0, **kwargs):
+        cat, bayesloc_stats_out_files, custom_epoch=None, agency_id='',
+        find_event_without_id=False, s_diff=3, max_bayes_error_km=100,
+        add_arrivals=False, update_phase_hints=False,
+        keep_best_fit_pick_only=False, remove_1_suffix=False,
+        min_phase_probability=0, **kwargs):
     """
     Update a catalog's locations from a bayesloc-relocation run
     """
@@ -720,120 +795,29 @@ def update_cat_from_bayesloc(
         bayesloc_folder = bayesloc_stats_out_file
         bayesloc_stats_out_file = get_bayesloc_filepath(
             bayesloc_stats_out_file, default_output_file='origins_ned_stats.out')
-        cat_backup = cat.copy()
-        # for event in cat:
-        #     attach_all_resource_ids(event)
-        # remove arrivals to avoid error in conversion to dataframe
-        for ev in cat:
-            orig = ev.preferred_origin() or ev.origins[0]
-            orig.arrivals = []
-        cat_df = events_to_df(cat)
-        cat_df['events'] = cat.events
-
-        bayes_df = pd.read_csv(bayesloc_stats_out_file, delimiter=' ')
-        bayes_df = bayes_df.sort_values(by='time_mean')
-
-        # This assumes a default starttime of 1970-01-01T00:00:00
-        bayes_times = [time.gmtime(value)
-                       for value in bayes_df.time_mean.values]
-        # Allow a custom epoch time, e.g., one that starts before 1970
-        if custom_epoch is not None:
-            # if not isinstance(custom_epoch, np.datetime64):
-            # raise TypeError(
-            #         'custom_epoch needs to be of type numpy.datetime64')
-            # np.datetime64('1960-01-01T00:00:00') - 
-            #     np.datetime64('1970-01-01T00:00:00')
-            if isinstance(custom_epoch, UTCDateTime):
-                custom_epoch = custom_epoch.datetime
-            if not isinstance(custom_epoch, datetime):
-                raise TypeError(
-                    'custom_epoch needs to be of type datetime.datetime')
-            # custom_epoch = datetime.datetime(1960,1,1,0,0,0)
-            epoch_correction_s = (
-                custom_epoch - datetime(1970,1,1,0,0,0)).total_seconds()
-            bayes_times = [time.gmtime(value + epoch_correction_s)
-                        for value in bayes_df.time_mean.values]
-        bayes_utctimes = [
-            UTCDateTime(bt.tm_year, bt.tm_mon, bt.tm_mday, bt.tm_hour,
-                        bt.tm_min, bt.tm_sec + (et - int(et)))
-            for bt, et in zip(bayes_times, bayes_df.time_mean.values)]
-        bayes_df['utctime'] = bayes_utctimes
-        bayes_df['datetime'] = [butc._get_datetime()
-                                for butc in bayes_utctimes]
-
-        # cat_SgLoc = read_seisan_database('Sfiles_MAD10_Saga_02_Sg')
-        # cat_Sgloc_df = events_to_df(cat_SgLoc)
-        # cat_Sgloc_df['events'] = cat_SgLoc.events
-        s_diff = 3
-        max_bayes_error_km = 50
-
-        # put back arrivals
-        for event, event_backup in zip(cat, cat_backup):
-            orig = event.preferred_origin() or event.origins[0]
-            backup_orig = (
-                event_backup.preferred_origin() or event_backup.origins[0])
-            orig.arrivals = backup_orig.arrivals
-
-        # Code to sort in the new locations from BAYESLOC / Seisan into catalog
-        # TODO: can this be done in a parallel loop to speed it up? - maybe not
-        #       because of object-id references.
-        for event in cat:
-            bayes_orig = (event.preferred_origin() or event.origins[0]).copy()
-            lower_dtime = (bayes_orig.time - s_diff)._get_datetime()
-            upper_dtime = (bayes_orig.time + s_diff)._get_datetime()
-
-            tmp_cat_df = bayes_df.loc[(bayes_df.datetime > lower_dtime) & (
-                bayes_df.datetime < upper_dtime)]
-            if len(tmp_cat_df) > 0:
-                if (tmp_cat_df.time_sd.iloc[0] < s_diff * 3 and
-                        tmp_cat_df.depth_sd.iloc[0] < max_bayes_error_km and
-                        tmp_cat_df.north_sd.iloc[0] < max_bayes_error_km and
-                        tmp_cat_df.east_sd.iloc[0] < max_bayes_error_km):
-                    # Make new origin with all the data
-                    bayes_orig = Origin()
-                    bayes_orig.latitude = tmp_cat_df.lat_mean.iloc[0]
-                    bayes_orig.longitude = tmp_cat_df.lon_mean.iloc[0]
-                    bayes_orig.depth = tmp_cat_df.depth_mean.iloc[0] * 1000
-                    bayes_orig.time = tmp_cat_df.datetime.iloc[0]
-                    bayes_orig.latitude_errors.uncertainty = kilometers2degrees(
-                        tmp_cat_df.north_sd.iloc[0])
-                    bayes_orig.longitude_errors.uncertainty = kilometers2degrees(
-                        tmp_cat_df.east_sd.iloc[0])
-                    bayes_orig.depth_errors.uncertainty = (
-                        tmp_cat_df.depth_sd.iloc[0] * 1000)
-                    bayes_orig.time_errors.uncertainty = (
-                        tmp_cat_df.time_sd.iloc[0])
-                    bayes_orig.extra = {
-                        'bayesloc_event_id': {
-                                'value': tmp_cat_df.ev_id.iloc[0],
-                                'namespace': 'Bayesloc'}}
-                    Logger.info(
-                        'Added origin solution from Bayesloc for event %s',
-                        event.short_str())
-                # Put bayesloc origin as first in list
-                # new_orig_list = list()
-                # new_orig_list.append(bayes_orig)
-                # new_orig_list.append(event.origins)
-                # event.origins = new_orig_list
-                # Put bayesloc origin at first spot in list
-                event.origins = [bayes_orig] + event.origins
-                event.preferred_origin_id = bayes_orig.resource_id
-                # TODO indicate that this solution is from Bayesloc
-                # TODO: load phase probabilities, take the one that is most likely
-                #       the "correct" pick for each phase, and fix picks
-                #       accordingly.
-            if add_arrivals:
-                cat = add_bayesloc_arrivals(
-                    bayesloc_folder, catalog=cat, custom_epoch=custom_epoch)
-            if update_phase_hints:
-                cat = _update_bayesloc_phase_hints(
-                    cat, remove_1_suffix=remove_1_suffix)
-            # Keep only the best fitting pick only when there are multiple
-            # picks with the same phase-hint for same event at station
-            # Can be selected based on highest probability OR smallest residual
-            if keep_best_fit_pick_only:
-                cat = _select_bestfit_bayesloc_picks(
-                    cat, min_phase_probability=min_phase_probability)
+        
+        cat, _, bayesloc_solutions_added = read_bayesloc_origins(
+            bayesloc_stats_out_file, cat=cat, custom_epoch=custom_epoch,
+            agency_id=agency_id, find_event_without_id=find_event_without_id,
+            s_diff=s_diff, max_bayes_error_km=max_bayes_error_km)
+        if not bayesloc_solutions_added:
+            continue
+        # TODO indicate that this solution is from Bayesloc
+        # TODO: load phase probabilities, take the one that is most likely
+        #       the "correct" pick for each phase, and fix picks
+        #       accordingly.
+        if add_arrivals:
+            cat = add_bayesloc_arrivals(
+                bayesloc_folder, catalog=cat, custom_epoch=custom_epoch)
+        if update_phase_hints:
+            cat = _update_bayesloc_phase_hints(
+                cat, remove_1_suffix=remove_1_suffix)
+        # Keep only the best fitting pick only when there are multiple
+        # picks with the same phase-hint for same event at station
+        # Can be selected based on highest probability OR smallest residual
+        if keep_best_fit_pick_only:
+            cat = _select_bestfit_bayesloc_picks(
+                cat, min_phase_probability=min_phase_probability)
     return cat
 
 
@@ -872,7 +856,7 @@ def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
             rel_picks = [
                 arrival.pick_id.get_referred_object()
                 for arrival in rel_arrivals]
-            phase_probabilities = [arrival.extra.prob_as_called
+            phase_probabilities = [arrival.extra.prob_as_called.value
                                    for arrival in rel_arrivals]
             max_phase_probability = max(phase_probabilities)
             max_phase_prob_idx = np.argmax(phase_probabilities)
@@ -917,14 +901,14 @@ def _update_bayesloc_phase_hints(cat, remove_1_suffix=False):
             bayesloc_origin = origin
             for arrival in bayesloc_origin.arrivals:
                 if hasattr(arrival, 'extra'):
-                    if (arrival.extra.original_phase !=
-                            arrival.extra.most_prob_phase):
+                    if (arrival.extra.original_phase.value !=
+                            arrival.extra.most_prob_phase.value):
                         # Rename pick phase according to Bayesloc
                         pick = arrival.pick_id.get_referred_object()
-                        arrival.phase = arrival.extra.most_prob_phase
-                        arrival.extra.prob_as_called = (
-                            arrival.extra.prob_as_suggested)
-                        pick.phase_hint = arrival.extra.most_prob_phase
+                        arrival.phase = arrival.extra.most_prob_phase.value
+                        arrival.extra.prob_as_called.value = (
+                            arrival.extra.prob_as_suggested.value)
+                        pick.phase_hint = arrival.extra.most_prob_phase.value
                     # original_phase prob_as_called most_prob_phase
                 # When first arrival phase is called like "P1" or "S1", may need to
                 # rename:
@@ -953,13 +937,21 @@ if __name__ == "__main__":
 
     from obspy.io.nordic.core import read_nordic
     catalog = read_nordic(
-        '/home/seismo/WOR/felix/R/SEI/REA/INTEU/2020/12/14-1935-58R.S202012')
+        # '/home/seismo/WOR/felix/R/SEI/REA/INTEU/2020/12/14-1935-58R.S202012')
+        '/home/seismo/WOR/felix/R/SEI/REA/INTEU/2021/07/05-0423-41R.S202107')
+    
 
     Logger.info('Updating catalog from bayesloc solutions')
-    bayesloc_path = ['/home/felix/Documents2/Ridge/Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_10b']
+    bayesloc_path = [
+        '/home/felix/Documents2/Ridge/Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_09',
+        '/home/felix/Documents2/Ridge/Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_10b']
 
     update_cat_from_bayesloc(
         catalog, bayesloc_path, custom_epoch=UTCDateTime(1960, 1, 1, 0, 0, 0),
-        add_arrivals=True, update_phase_hints=True, keep_best_fit_pick_only=True,
-        remove_1_suffix=True, min_phase_probability=0)
+        agency_id='BER', find_event_without_id=True, s_diff=3,
+        max_bayes_error_km=100, add_arrivals=True, update_phase_hints=True,
+        keep_best_fit_pick_only=True, remove_1_suffix=True,
+        min_phase_probability=0)
+
+
 # %%

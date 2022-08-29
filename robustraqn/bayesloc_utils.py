@@ -844,7 +844,8 @@ def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
         uniq_bayes_phases = list(set([
             (arrival.pick_id.get_referred_object().waveform_id.station_code,
              arrival.phase)
-            for arrival in bayesloc_origin.arrivals]))
+            for arrival in bayesloc_origin.arrivals
+            if arrival.pick_id.get_referred_object() is not None]))
         for station, phase in uniq_bayes_phases:
             rel_arrivals = [
                 arrival for arrival in bayesloc_origin.arrivals

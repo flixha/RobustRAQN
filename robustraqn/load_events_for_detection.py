@@ -2647,7 +2647,7 @@ def reevaluate_detections(
         save_progress=False, process_cores=None, spike_test=False, min_chans=4,
         time_difference_threshold=3, detect_value_allowed_error=60,
         return_party_with_short_templates=False, min_n_station_sites=4,
-        use_weights=False, **kwargs):
+        use_weights=False, copy_data=True, **kwargs):
     """
     This function takes a set of detections and reruns the match-filter
     detection with a set of templates that are shortened to XX length. Only if
@@ -2738,7 +2738,7 @@ def reevaluate_detections(
         concurrency=concurrency, xcorr_func=xcorr_func, group_size=group_size,
         full_peaks=full_peaks, save_progress=save_progress,
         process_cores=process_cores, spike_test=spike_test,
-        use_weights=use_weights)
+        use_weights=use_weights, copy_data=copy_data)
 
     # Check detections from short templates again the original set of
     # detections. If there is no short-detection for an original detection,

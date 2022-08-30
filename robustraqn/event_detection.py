@@ -169,7 +169,7 @@ def run_day_detection(
         time_difference_threshold=3, detect_value_allowed_error=60,
         multiplot=False, day_st=Stream(), check_array_misdetections=False,
         min_n_station_sites=4, short_tribe=Tribe(), write_party=False,
-        detection_path='Detections', redetection_path=None,
+        detection_path='Detections', redetection_path=None, copy_data=True,
         return_stream=False, dump_stream_to_disk=False, day_hash_file=None,
         use_weights=False, sta_translation_file=os.path.expanduser(
             "~/Documents2/ArrayWork/Inventory/station_code_translation.txt"),
@@ -178,9 +178,11 @@ def run_day_detection(
     Function to run reading, initial processing, detection etc. on one day.
     """
     Logger.info('Starting detection run for day %s', str(date)[0:10])
-    # Keep user's data safe - Probably not needed; so try to avoid to save time
-    # tribe = tribe.copy()
-    # short_tribe = short_tribe.copy()
+    # Keep user's data safe
+    #  - - - - Probably not needed if it is also done in EQcorrscan, else COPY!
+    if not copy_data:
+        tribe = tribe.copy()
+        short_tribe = short_tribe.copy()
     # Set the path to the folders with continuous data:
     # archive_path2 = '/data/seismo-wav/EIDA/archive'
     # client2 = Client(archive_path2)
@@ -379,7 +381,7 @@ def run_day_detection(
             # parallel_process=False, #concurrency=None,
             group_size=n_templates_per_run, full_peaks=False,
             save_progress=False, process_cores=cores, spike_test=False,
-            use_weights=use_weights, **kwargs)
+            use_weights=use_weights, copy_data=copy_data, **kwargs)
         # xcorr_func='fftw', concurrency=None, cores=1,
         # xcorr_func=None, concurrency=None, cores=1,
         # xcorr_func=None, concurrency='multiprocess', cores=cores,

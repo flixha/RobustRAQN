@@ -2779,9 +2779,9 @@ def reevaluate_detections(
             # If there is a short-detection close enough in time to the
             # original detection, then check detection values:
             if not any(time_diffs <= time_diff_thresh):
-                Logger.info('No detections within time-threshold found during '
-                            + 're-evaluation of %s at %s', det.template_name,
-                            det.detect_time)
+                Logger.debug('No detections within time-threshold found during '
+                             + 're-evaluation of %s at %s', det.template_name,
+                             det.detect_time)
             else:
                 # get the matching short-detection
                 sdi = np.argmin(time_diffs)

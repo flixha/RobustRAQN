@@ -14,13 +14,15 @@ import textwrap
 from datetime import datetime
 from joblib.parallel import Parallel, delayed
 
-from obspy.core.event import Catalog, Event, QuantityError
+from obspy.core.event import (
+    Catalog, Event, QuantityError, OriginQuality, OriginUncertainty)
 from obspy.geodetics.base import degrees2kilometers, kilometers2degrees
 from obspy.core.utcdatetime import UTCDateTime
 from obspy.core.event import Origin, Pick, Arrival
 from obspy.core.event.base import CreationInfo, WaveformStreamID
 from obspy.taup import TauPyModel
 from obspy.core.util.attribdict import AttribDict
+from obspy.io.nordic.ellipse import Ellipse
 
 from obsplus.events.validate import attach_all_resource_ids
 from obsplus import events_to_df
@@ -379,6 +381,39 @@ def write_ttimes_files(
         f.close()
 
 
+def _fill_bayes_origin_quality(event, orig):
+    """
+    """
+    if orig is not None and orig.quality is not None:
+        orig_quality = orig.quality
+    else:
+        orig_quality = OriginQuality(
+            used_station_count=len(set(
+                [pick.waveform_id.station_code for pick in event.picks
+                    if pick.waveform_id is not None])))
+    return orig_quality
+
+
+def _fill_bayes_origin_uncertainty(row):
+    """
+    Uncertainty ellipse from Bayesloc output:
+    row: pandas dataframe Series or dataframe row
+    """
+    if isinstance(row, pd.DataFrame):
+        row = row.iloc[0]
+    cov = [[row.east_sd, row.north_east_cor],
+            [row.north_east_cor, row.north_sd]]
+    ellipse = Ellipse.from_cov(cov, center=(0, 0))
+    origin_uncertainty = None
+    if ellipse:
+        origin_uncertainty = OriginUncertainty(
+            max_horizontal_uncertainty=ellipse.a * 1000.,
+            min_horizontal_uncertainty=ellipse.b * 1000.,
+            azimuth_max_horizontal_uncertainty=ellipse.theta,
+            preferred_description="uncertainty ellipse")
+    return origin_uncertainty
+
+
 def read_bayesloc_origins(
         bayesloc_origins_ned_stats_file, cat=Catalog(),
         custom_epoch=None, agency_id='', find_event_without_id=False,
@@ -442,10 +477,12 @@ def read_bayesloc_origins(
     # cat_Sgloc_df['events'] = cat_SgLoc.events
 
     # remove arrivals to avoid error in conversion to dataframe
+    orig = None
+    arrivals = []
     for ev in cat:
         try:
             orig = ev.preferred_origin() or ev.origins[0]
-            orig.arrivals = []
+            # orig.arrivals = []
         except (AttributeError, KeyError):
             pass
     # Code below not needed I think....
@@ -465,6 +502,10 @@ def read_bayesloc_origins(
     if catalog_empty:
         bayes_df = bayes_df.reset_index() 
         for row in bayes_df.itertuples():
+            origin_quality = _fill_bayes_origin_quality(None, orig)
+            origin_uncertainty = _fill_bayes_origin_uncertainty(row)
+            # Keep arrivals from previous origin - those will be updated with
+            # Bayesloc-stats later.
             bayes_orig = Origin(
                 latitude=row.lat_mean,
                 longitude=row.lon_mean,
@@ -477,12 +518,16 @@ def read_bayesloc_origins(
                 depth_errors=QuantityError(uncertainty=row.depth_sd * 1000),
                 time_errors=QuantityError(uncertainty=row.time_sd),
                 creation_info=CreationInfo(
-                    agency_id=agency_id, author='Bayesloc'))
+                    agency_id=agency_id, author='Bayesloc'),
+                arrivals=arrivals,
+                quality=orig_quality,
+                origin_uncertainty=origin_uncertainty)
             bayes_orig.extra = {
                 'bayesloc_event_id': {
                     'value': row.ev_id,
                     'namespace': 'Bayesloc'}}
-            # TODO: add covariance matrix and other uncertainties
+            # TODO: add full covariance matrix for north-east-depth-time
+            #       covariances and other uncertainties
             new_event = Event(
                 origins=[bayes_orig],
                 creation_info=CreationInfo(
@@ -491,6 +536,7 @@ def read_bayesloc_origins(
     else:
         for event in cat:
             cat_orig = (event.preferred_origin() or event.origins[0]).copy()
+            arrivals = cat_orig.arrivals.copy()
             nordic_event_id = _get_nordic_event_id(event)
             tmp_cat_df = bayes_df.loc[bayes_df.ev_id == int(nordic_event_id)]
             if find_event_without_id and len(tmp_cat_df) == 0:
@@ -516,6 +562,9 @@ def read_bayesloc_origins(
                     tmp_cat_df.time_sd.iloc[0])
                 bayes_orig.creation_info=CreationInfo(
                     agency_id=agency_id, author='Bayesloc')
+                bayes_orig.arrivals = arrivals
+                origin_quality = _fill_bayes_origin_quality(event, bayes_orig)
+                origin_uncertainty = _fill_bayes_origin_uncertainty(tmp_cat_df)
                 if (tmp_cat_df.time_sd.iloc[0] < s_diff * 3 and
                         tmp_cat_df.depth_sd.iloc[0] < max_bayes_error_km and
                         tmp_cat_df.north_sd.iloc[0] < max_bayes_error_km and
@@ -619,7 +668,6 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
                     'add Bayesloc arrivals either.')
         return catalog
 
-
     # TODO: what to do if there is no phases file yet
     phases_file = get_bayesloc_filepath(
         arrival_file, default_output_file='phases_freq_stats.out')
@@ -711,12 +759,25 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
             # - time_residual: hmm... does Bayesloc output residual?
             # - also need to add: most likely phase hint and probability for
             #   input phase hint 
-            # 
-            new_arrival = Arrival(pick_id=new_pick.resource_id,
-                                  phase=row.phase,
-                                  # time_correction=,  # TODO
-                                  #time_residual=,
-                                  )
+            # First, let's try to find the corresponding arrival in bayesloc-
+            # origin that was copied over from previous location (contains data
+            # like azimuth, apparent velocity, and residuals that Bayesloc does
+            # not know):
+            existing_arrival = None
+            if pick_found:
+                for arrival in bayesloc_origin.arrivals:
+                    if arrival.pick_id == new_pick.resource_id:
+                        existing_arrival = arrival
+            if existing_arrival is not None:
+                # Copy arrival and adjust based on Bayesloc output
+                new_arrival = existing_arrival
+            else:
+                # Create new arrival based on all information from Bayesloc
+                new_arrival = Arrival(pick_id=new_pick.resource_id,
+                                      phase=row.phase,
+                                      # time_correction=,  # TODO
+                                      #time_residual=,
+                                      )
             nsp = 'Bayesloc'
             if not hasattr(new_arrival, 'extra'):
                 new_arrival.extra = AttribDict()
@@ -736,9 +797,11 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
                     {'value': getattr(row, row.most_prob_phase),
                      'namespace': nsp}})
             new_arrival.extra.update({'n': {'value': row.n, 'namespace': nsp}})
-            # TODO could add probabilities for all other phase hints, but
-            #      that may not be so very useful.
-            bayesloc_origin.arrivals.append(new_arrival)
+            # TODO could add probabilities for all other the other phase hints,
+            #      that the pick/arrival could refer to, but that may not be 
+            #      very useful.
+            if new_arrival not in bayesloc_origin.arrivals:
+                bayesloc_origin.arrivals.append(new_arrival)
         # try:
         #     origin = [orig for orig in event.origins
         #               if orig.creation_info.author=='Bayesloc'][0]

@@ -986,7 +986,7 @@ def _update_bayesloc_phase_hints(cat, remove_1_suffix=False):
                     # original_phase prob_as_called most_prob_phase
                 # When first arrival phase is called like "P1" or "S1", may need to
                 # rename:
-                if (remove_1_suffix and len(arrival.phase[-1]) > 1 and
+                if (remove_1_suffix and len(arrival.phase) > 1 and
                         arrival.phase[-1] == '1'):
                     arrival.phase.removesuffix('1')
     return cat

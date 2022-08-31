@@ -926,8 +926,11 @@ def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
                 arrival.pick_id.get_referred_object()
                 for arrival in rel_arrivals
                 if arrival.pick_id.get_referred_object() is not None]
-            phase_probabilities = [arrival.extra.prob_as_called.value
-                                   for arrival in rel_arrivals]
+            phase_probabilities = [
+                arrival.extra.prob_as_called.value
+                for arrival in rel_arrivals
+                if hasattr(arrival, 'extra') and
+                hasattr(arrival.extra, 'prob_as_called')]
             if len(phase_probabilities) == 0:
                 continue
             max_phase_probability = max(phase_probabilities)

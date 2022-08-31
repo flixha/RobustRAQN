@@ -1053,6 +1053,19 @@ def _update_bayesloc_phase_hints(cat, remove_1_suffix=False):
                         # Rename pick phase according to Bayesloc
                         if arrival.pick_id.get_referred_object() is None:
                             continue
+                        try:
+                            is_different_phase_type = (
+                                arrival.phase[0] ==
+                                arrival.extra.most_prob_phase.value[0])
+                            if not is_different_phase_type:
+                                Logger.debug(
+                                    '%s, %s: Output phase from bayesloc '
+                                    'changes phase hint from %s to %s',
+                                    event.short_str(), str(pick.waveform_id),
+                                    arrival.phase,
+                                    arrival.extra.most_prob_phase.value)
+                        except IndexError:
+                            pass
                         arrival.phase = arrival.extra.most_prob_phase.value
                         arrival.extra.prob_as_called.value = (
                             arrival.extra.prob_as_suggested.value)

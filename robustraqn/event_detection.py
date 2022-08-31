@@ -480,6 +480,11 @@ def run_day_detection(
                 trig_int=trig_int, timing='detect', metric=decluster_metric,
                 hypocentral_separation=hypocentral_separation,
                 min_chans=min_chans, absolute_values=absolute_values)
+            # 2nd pass to decluster based on origin times
+            short_party = short_party.decluster(
+                trig_int=trig_int, timing='origin', metric=decluster_metric,
+                hypocentral_separation=hypocentral_separation,
+                min_chans=min_chans, absolute_values=absolute_values)
             # TODO: maybe the order should be:
             # check array-misdet - decluster party - compare short-party vs. party
             if write_party:
@@ -500,6 +505,12 @@ def run_day_detection(
     # very few channels - i.e., allowing higher CC than any detection made on
     # many channels
     party = party.decluster(trig_int=trig_int, timing='detect',
+                            metric=decluster_metric, min_chans=min_chans,
+                            hypocentral_separation=hypocentral_separation,
+                            absolute_values=absolute_values)
+    # 2nd pass to decluster based on origin times - to avoid duplication of
+    # events that ran in different batches with different nan-traces.
+    party = party.decluster(trig_int=trig_int, timing='origin',
                             metric=decluster_metric, min_chans=min_chans,
                             hypocentral_separation=hypocentral_separation,
                             absolute_values=absolute_values)

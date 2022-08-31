@@ -686,9 +686,74 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
     if phases_file is not None:
         phases_df = read_bayesloc_phases(phases_file)
         # need to remove event_id column so they don't become duplicated
-        phases_df = phases_df.drop(columns=['ev_id', 'sta_id', 'phase'])
+        
         if len(phases_df) == len(arrival_df):
-            arrival_df = pd.concat([arrival_df, phases_df], axis=1)
+            # Actually, input and output are not sorted exactly in the same way
+            # output phases_freq_stats is sorted by:
+            # event_id, earliest arrival time at station (but all picks at 
+            # station together), pick times at station
+
+            # Logger.info('Merging input and output arrival dataframes...')
+            
+            # # Get a dataframe with unique combinations of ev_id + sta_id
+            # unique_evid_station_df = arrival_df[
+            #     ['ev_id', 'sta_id']].drop_duplicates()
+            # # Group into dataframes that share same ev_id and sta_id
+            # event_station_groups = arrival_df.groupby(['ev_id', 'sta_id'])
+            # event_station_dfs = [
+            #     event_station_groups.get_group((row.ev_id, row.sta_id))
+            #     for row in unique_evid_station_df.itertuples()]
+            # # Sort each dataframe internally ?? (needed?)
+            # for event_station_df in event_station_dfs:
+            #     # Set new column to earliest arrival time within dataframe
+            #     event_station_df['earliest_event_station_time'] = min(
+            #         event_station_df.time)
+            # # Concatenate all dataframes
+            # sorted_arrival_df = pd.concat(event_station_dfs)
+            
+            arrival_df['earliest_event_station_time'] = arrival_df.groupby(
+                ['ev_id', 'sta_id'])['time'].transform('min')
+            # Sort full dataframe by: ev_id, earliest arrival time per station
+            sorted_arrival_df = arrival_df.sort_values(
+                ['ev_id', 'earliest_event_station_time', 'sta_id', 'time'],
+                ascending=[True, True, True, True], ignore_index=True)
+            # Set a new index within each group, which increases with pick-time
+            sorted_arrival_df['internal_index'] = sorted_arrival_df.groupby(
+                ['ev_id', 'sta_id', 'phase']).cumcount()
+            
+            # Write the same type of internal index into phases_df (here we can
+            # assume that within each group, phases_df is sorted by pick time)
+            phases_df['internal_index'] = phases_df.groupby(
+                ['ev_id', 'sta_id', 'phase']).cumcount()
+
+            arrival_df = sorted_arrival_df.merge(
+                phases_df, on=['ev_id', 'sta_id', 'phase', 'internal_index'])
+            
+            # Assert that the order of ev_id, sta_id_phase matches in both dfs:
+            # assert(sorted_arrival_df[['ev_id', 'sta_id', 'phase']].equals(
+            #     phases_df[['ev_id', 'sta_id', 'phase']]))
+            # phases_df = phases_df.rename(columns={
+            #    'ev_id': 'ev_id2', 'sta_id': 'sta_id2', 'phase': 'phase2'})
+            # phases_df = phases_df.drop(columns=['ev_id', 'sta_id', 'phase'])
+                        
+            # Concatenate arrival- and phases-output files:
+            #arrival_df = pd.concat([sorted_arrival_df, phases_df], axis=1)
+            # Logger.info('Done merging input and output arrival dataframes.')
+            
+            # Check where the dataframes still differ
+            # diff_df = arrival_df[arrival_df['sta_id'] != arrival_df['sta_id2']]
+            # df = (
+            #     df.assign(key=df.groupby('c2')['c1'].transform('max'))
+            #     .sort_values(['key', 'c2', 'c1'], ascending=False, ignore_index=True)
+            #     .drop(columns=['key'])
+            
+            # Maybe this is a way to write it quicker, but doesn't work yet.
+            # arrival_df.assign(
+            #     earliest_event_station_time=arrival_df.groupby(
+            #         ['ev_id', 'sta_id']))['time'].transform('min').sort_values(
+            #             ['ev_id', 'earliest_event_station_time'], ascending=True,
+            #             ignore_index=True).drop(columns=['earliest_event_station_time'])
+            # groupby(by='ev_id')
         else:
             Logger.error(
                 'There are %s arrivals and %s output stats for phases, can ',
@@ -903,8 +968,8 @@ def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
                 continue
         if bayesloc_event_id is not None:
             Logger.info(
-                'Event %s: Sorting out duplicate picks: keeping only those picks /'
-                ' arrivals that best fit.', event.short_str())
+                'Event %s: Sorting out duplicate picks: keeping only those '
+                'picks / arrivals that best fit.', event.short_str())
             bayesloc_origin = origin
         else:
             continue
@@ -916,21 +981,21 @@ def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
         for station, phase in uniq_bayes_phases:
             if station is None:
                 continue
-            rel_arrivals = [
+            similar_arrivals = [
                 arrival for arrival in bayesloc_origin.arrivals
                 if arrival.pick_id.get_referred_object() is not None and
                 phase == arrival.phase and station ==
                 arrival.pick_id.get_referred_object().waveform_id.station_code]
             # Can save some time here if there is only 1 pick:
-            if len(rel_arrivals) == 1 and min_phase_probability == 0:
+            if len(similar_arrivals) == 1 and min_phase_probability == 0:
                 continue
-            rel_picks = [
+            similar_picks = [
                 arrival.pick_id.get_referred_object()
-                for arrival in rel_arrivals
+                for arrival in similar_arrivals
                 if arrival.pick_id.get_referred_object() is not None]
             phase_probabilities = [
                 arrival.extra.prob_as_called.value
-                for arrival in rel_arrivals
+                for arrival in similar_arrivals
                 if hasattr(arrival, 'extra') and
                 hasattr(arrival.extra, 'prob_as_called')]
             if len(phase_probabilities) == 0:
@@ -941,16 +1006,20 @@ def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
             if max_phase_probability > min_phase_probability:
                 Logger.debug(
                     'Event %s: There are %s picks for %s for station %s, '
-                    'keeping only the best fitting pick above probability %s.',
-                    event.short_str(), len(rel_picks), phase, station,
-                    min_phase_probability)
+                    'keeping only the best fitting pick (best: %s, worst: %s) '
+                    'above probability %s.', event.short_str(),
+                    len(similar_picks), phase, station, max_phase_probability,
+                    min(phase_probabilities), min_phase_probability)
             else:
                 Logger.debug(
                     'Event %s: There are %s picks for %s for station %s, '
-                    'but probably (max: %s) none are properly assigned.',
-                    event.short_str(), len(rel_picks), phase, station,
-                    max_phase_probability)
-            for j, (arrival, pick) in enumerate(zip(rel_arrivals, rel_picks)):
+                    'but probably (best: %s, worst: %s) none are properly '
+                    'assigned with probability > %s.',
+                    event.short_str(), len(similar_picks), phase, station,
+                    max_phase_probability, min(phase_probabilities),
+                    min_phase_probability)
+            for j, (arrival, pick) in enumerate(
+                    zip(similar_arrivals, similar_picks)):
                 if (j == max_phase_prob_idx and
                         max_phase_probability > min_phase_probability):
                     continue
@@ -977,23 +1046,25 @@ def _update_bayesloc_phase_hints(cat, remove_1_suffix=False):
             Logger.info('Updating phase hints for event %s', event.short_str())
             bayesloc_origin = origin
             for arrival in bayesloc_origin.arrivals:
+                pick = arrival.pick_id.get_referred_object()
                 if hasattr(arrival, 'extra'):
                     if (arrival.extra.original_phase.value !=
                             arrival.extra.most_prob_phase.value):
                         # Rename pick phase according to Bayesloc
                         if arrival.pick_id.get_referred_object() is None:
                             continue
-                        pick = arrival.pick_id.get_referred_object()
                         arrival.phase = arrival.extra.most_prob_phase.value
                         arrival.extra.prob_as_called.value = (
                             arrival.extra.prob_as_suggested.value)
                         pick.phase_hint = arrival.extra.most_prob_phase.value
                     # original_phase prob_as_called most_prob_phase
-                # When first arrival phase is called like "P1" or "S1", may need to
-                # rename:
+                # When first arrival phase is called like "P1" or "S1", may
+                # need to rename:
                 if (remove_1_suffix and len(arrival.phase) > 1 and
                         arrival.phase[-1] == '1'):
                     arrival.phase.removesuffix('1')
+                if pick.phase_hint != arrival.phase:
+                    pick.phase_hint = arrival.phase
     return cat
 
 
@@ -1013,12 +1084,11 @@ if __name__ == "__main__":
         level=logging.DEBUG,
         format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 
-
     from obspy.io.nordic.core import read_nordic
     catalog = read_nordic(
-        # '/home/seismo/WOR/felix/R/SEI/REA/INTEU/2020/12/14-1935-58R.S202012')
-        '/home/seismo/WOR/felix/R/SEI/REA/INTEU/2021/07/05-0423-41R.S202107')
-    
+        '/home/seismo/WOR/felix/R/SEI/REA/INTEU/2020/12/14-1935-58R.S202012')
+        # '/home/seismo/WOR/felix/R/SEI/REA/INTEU/2021/07/05-0423-41R.S202107')
+    # 'a8598f5d-d25d-4b69-8547-298589d29bc3'
 
     Logger.info('Updating catalog from bayesloc solutions')
     bayesloc_path = [

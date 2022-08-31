@@ -565,8 +565,10 @@ def read_bayesloc_origins(
                 bayes_orig.creation_info=CreationInfo(
                     agency_id=agency_id, author='Bayesloc')
                 bayes_orig.arrivals = arrivals
-                origin_quality = _fill_bayes_origin_quality(event, bayes_orig)
-                origin_uncertainty = _fill_bayes_origin_uncertainty(tmp_cat_df)
+                bayes_orig.quality = _fill_bayes_origin_quality(
+                    event, bayes_orig)
+                bayes_orig.origin_uncertainty = _fill_bayes_origin_uncertainty(
+                    tmp_cat_df)
                 if (tmp_cat_df.time_sd.iloc[0] < s_diff * 3 and
                         tmp_cat_df.depth_sd.iloc[0] < max_bayes_error_km and
                         tmp_cat_df.north_sd.iloc[0] < max_bayes_error_km and

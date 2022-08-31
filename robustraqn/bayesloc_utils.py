@@ -282,6 +282,8 @@ def _get_nordic_event_id(event):
     else:
         # sort comments by date they were written
         comments = event.comments.copy()
+        comments = [comment for comment in comments
+                    if len(comment.text.split(' ')) > 1]
         comments = sorted(comments, key=lambda x: x.text.split(' ')[1],
                             reverse=True)
         event_id = int(
@@ -914,9 +916,9 @@ def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
                 continue
             rel_arrivals = [
                 arrival for arrival in bayesloc_origin.arrivals
-                if phase == arrival.phase and station ==
-                arrival.pick_id.get_referred_object().waveform_id.station_code
-                if arrival.pick_id.get_referred_object() is not None]
+                if arrival.pick_id.get_referred_object() is not None and
+                phase == arrival.phase and station ==
+                arrival.pick_id.get_referred_object().waveform_id.station_code]
             # Can save some time here if there is only 1 pick:
             if len(rel_arrivals) == 1 and min_phase_probability == 0:
                 continue
@@ -926,6 +928,8 @@ def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
                 if arrival.pick_id.get_referred_object() is not None]
             phase_probabilities = [arrival.extra.prob_as_called.value
                                    for arrival in rel_arrivals]
+            if len(phase_probabilities) == 0:
+                continue
             max_phase_probability = max(phase_probabilities)
             max_phase_prob_idx = np.argmax(phase_probabilities)
             # Keep only the best one

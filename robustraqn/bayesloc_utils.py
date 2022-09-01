@@ -1076,7 +1076,7 @@ def _update_bayesloc_phase_hints(cat, remove_1_suffix=False):
                 if (remove_1_suffix and len(arrival.phase) > 1 and
                         arrival.phase[-1] == '1'):
                     arrival.phase.removesuffix('1')
-                if pick.phase_hint != arrival.phase:
+                if pick is not None and pick.phase_hint != arrival.phase:
                     pick.phase_hint = arrival.phase
     return cat
 

@@ -498,13 +498,23 @@ def _create_template_objects(
 
         # templ_name = str(event.origins[0].time) + '_' + 'templ'
         orig = event.preferred_origin() or event.origins[0]
-        templ_name = str(orig.time)[0:22] + '_' + 'templ'
-        templ_name = templ_name.lower().replace('-', '_')\
-            .replace(':', '_').replace('.', '_').replace('/', '')
-        # templ_name = templ_name.lower().replace(':','_')
-        # templ_name = templ_name.lower().replace('.','_')
-        # template.write('TemplateObjects/' + templ_name + '.mseed',
-        # format="MSEED")
+        templ_name = ''
+        # Make sure that template doesn't get a name that exists already
+        nt = 0
+        while templ_name in template_names or templ_name == '':
+            if templ_name in template_names and templ_name != '':
+                Logger.warning(
+                    'Template name %s already taken, trying with a different '
+                    'name.', templ_name)
+            templ_time = orig.time + nt
+            templ_name = str(templ_time)[0:22] + '_' + 'templ'
+            templ_name = (templ_name.lower().replace('-', '_').replace(
+                ':', '_').replace('.', '_').replace('/', ''))
+            nt += 1
+            # templ_name = templ_name.lower().replace(':','_')
+            # templ_name = templ_name.lower().replace('.','_')
+            # template.write('TemplateObjects/' + templ_name + '.mseed',
+            # format="MSEED")
         template_names.append(templ_name)
         # except:
         #    print("WARNING: There was an issue creating a template for " +

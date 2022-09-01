@@ -962,7 +962,8 @@ def same_comp_requested(bulk, station, component):
 
 def read_ispaq_stats(folder, networks=['??'], stations=['*'],
                      ispaq_prefixes=['all'], ispaq_suffixes=['simpleMetrics'],
-                     file_type='csv', startyear=1970, endyear=2030):
+                     file_type='csv', startyear=1970, endyear=2030,
+                     starttime=None, endtime=None):
     """
     function to read in Mustang-style data metrics from an ispaq-"csv"-output
     folder.
@@ -1021,6 +1022,19 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
                             merged_metrics_file[0])
                 ispaq = pd.read_parquet(merged_metrics_file[0])
                 load_all_files = False
+                # Reduce size of ispaq according to requested years:
+                # ispaq['startyear'] = pd.to_numeric(ispaq.start.str[0:4])
+                # ispaq = ispaq[(ispaq.startyear >= startyear) &
+                #               (ispaq.startyear <= endyear)]
+                # ispaq.drop(columns=['startyear'])
+                # Quicker with datetime rather than numbers:
+                # Make starttime and endtime columns
+                ispaq['starttime'] = pd.to_datetime(ispaq.start)
+                # Select only relevant years / times
+                ispaq = ispaq[
+                    (ispaq.starttime >= datetime.datetime(startyear, 1, 1)) &
+                    (ispaq.starttime <= datetime.datetime(endyear, 12, 31))]
+                ispaq.drop(columns=['starttime'])
 
     # Find all files that match criteria
     if load_all_files:
@@ -1068,6 +1082,18 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
             Logger.error('No data quality metrics available for years %s - %s',
                         startyear, endyear)
             return ispaq
+
+    if starttime is not None and endtime is not None:
+        if isinstance(starttime, UTCDateTime):
+            starttime = starttime.datetime
+        if isinstance(endtime, UTCDateTime):
+            endtime = endtime.datetime
+        ispaq['starttime'] = pd.to_datetime(ispaq.start)
+        ispaq['endtime'] = pd.to_datetime(ispaq.end)
+        # Select only relevant years / times
+        ispaq = ispaq[(ispaq.starttime >= starttime) &
+                        (ispaq.starttime <= endtime)]
+        ispaq.drop(columns=['starttime', 'endtime'])
 
     # Set an extra "startday"-column to use as index
     if 'startday' not in ispaq.columns:

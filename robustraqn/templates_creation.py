@@ -500,6 +500,8 @@ def _create_template_objects(
         orig = event.preferred_origin() or event.origins[0]
         templ_name = ''
         # Make sure that template doesn't get a name that exists already
+        # TODO: this only takes care of duplicate names if events/sfiles are in
+        #       the same batch within parallel-loop (e.g., ok for day batches).
         nt = 0
         while templ_name in template_names or templ_name == '':
             if templ_name in template_names and templ_name != '':

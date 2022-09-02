@@ -355,7 +355,7 @@ def run_day_detection(
                     np.sqrt(tr.stats.extra.rms_snr) *
                     # tr.stats.extra.rms_snr ** (1/3) *
                     # Lower weight with more traces per station
-                    1 / np.sqrt(station_trace_counter[tr.stats.station]) *
+                    1 / (station_trace_counter[tr.stats.station] ** (1/3)) *
                     # Extra weight factor, e.g. for arrays vs single stations
                     station_weight_factor)
                 # Not needed, right?... (happens in match_filter, after pre-

@@ -495,6 +495,7 @@ def _create_template_objects(
             n_station_sites_list = [station_sites.count(site)
                                     for site in station_sites]
             for tr in templateSt:
+                tr.stats.extra.station_weight_factor = 1
                 for u_sta, n_station_sites in zip(unique_stations,
                                                   n_station_sites_list):
                     if tr.stats.station == u_sta:

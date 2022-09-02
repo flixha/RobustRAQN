@@ -181,6 +181,8 @@ def run_day_detection(
     Logger.info('Starting detection run for day %s', str(date)[0:10])
     # Keep user's data safe
     #  - - - - Probably not needed if it is also done in EQcorrscan, else COPY!
+    #  - - - - It looks like it's quicker to copy each batch itself within
+    #          EQcorrscan rather than copy the full tribe
     if not copy_data:
         tribe = tribe.copy()
         short_tribe = short_tribe.copy()
@@ -247,7 +249,7 @@ def run_day_detection(
         bulk_request, bulk_rejected, day_stats = create_bulk_request(
             inv.select(starttime=starttime_req, endtime=endtime_req),
             starttime_req, endtime_req, stats=ispaq,
-            parallel=parallel, cores=cores, stations=selected_stations,
+            parallel=False, cores=1, stations=selected_stations,
             minimum_sample_rate=minimum_sample_rate, **kwargs)
         if not bulk_request:
             Logger.warning('No waveforms requested for %s - %s',

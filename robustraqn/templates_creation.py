@@ -316,12 +316,18 @@ def _create_template_objects(
             if "blacklisted template" in comment.text:
                 continue
         # TODO: maybe I should select the "best" origin somewhere (e.g.,
-        # smallest errors, largest number of stations etc)
+        # smallest errors, largest number of stations etc) - Bayesloc origin is
+        # added in position 0.
         origin = event.preferred_origin() or event.origins[0]
 
         if not check_template_event_errors_ok(origin, file=event_str,
                                               **kwargs):
             continue
+
+        # TODO: if there are a lot of different picks at one station, e.g.:
+        #       P, Pn, Pb, Pg, S, Sn, Sb, Sg; then throw out some so that there
+        #       is less trace overlap and trace duplication (affects memory
+        #       usage!)
 
         # Add picks at array stations if requested
         if add_array_picks:

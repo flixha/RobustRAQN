@@ -352,10 +352,10 @@ def run_day_detection(
                 # weight = trace_snr * trace_noise_level
                 # TODO: use cube root??? - difference may be very small,
                 #       but should be tested on Snorre events
-                # tr.stats.extra.rms_snr ** (1/3) *
                 tr.stats.extra.weight = (
                     # Higher weight with higher SNR
                     np.sqrt(tr.stats.extra.rms_snr) *
+                    # tr.stats.extra.rms_snr ** (1/3) *
                     # Lower weight with more traces per station
                     1 / np.sqrt(station_trace_counter[tr.stats.station]) *
                     # Extra weight factor, e.g. for arrays vs single stations
@@ -497,11 +497,15 @@ def run_day_detection(
                 trig_int=trig_int, timing='detect', metric=decluster_metric,
                 hypocentral_separation=hypocentral_separation,
                 min_chans=min_chans, absolute_values=absolute_values)
+            n_det1 = len([d for f in short_party for d in f])
             # 2nd pass to decluster based on origin times
             short_party = short_party.decluster(
                 trig_int=trig_int, timing='origin', metric=decluster_metric,
                 hypocentral_separation=hypocentral_separation,
                 min_chans=min_chans, absolute_values=absolute_values)
+            n_det2 = len([d for f in short_party for d in f])
+            Logger.info('Short party: After two-stage declustering, %s '
+                        '(%s on 1st round) detections are left',  n_det2, n_det1)
             # TODO: maybe the order should be:
             # check array-misdet - decluster party - compare short-party vs. party
             if write_party:
@@ -517,6 +521,7 @@ def run_day_detection(
             _ = detection._calculate_event(
                 template=family.template, template_st=None,
                     estimate_origin=True, correct_prepick=True)
+
     # Decluster detection and save them to filesf
     # metric='avg_cor' isn't optimal when one detection may only be good on
     # very few channels - i.e., allowing higher CC than any detection made on
@@ -525,12 +530,16 @@ def run_day_detection(
                             metric=decluster_metric, min_chans=min_chans,
                             hypocentral_separation=hypocentral_separation,
                             absolute_values=absolute_values)
+    n_det1 = len([d for f in party for d in f])
     # 2nd pass to decluster based on origin times - to avoid duplication of
     # events that ran in different batches with different nan-traces.
     party = party.decluster(trig_int=trig_int, timing='origin',
                             metric=decluster_metric, min_chans=min_chans,
                             hypocentral_separation=hypocentral_separation,
                             absolute_values=absolute_values)
+    n_det2 = len([d for f in party for d in f])
+    Logger.info('After two-stage declustering, %s (%s on 1st round) detections'
+                ' are left', n_det2, n_det1)
 
     if write_party:
         detection_file_name = os.path.join(detection_path,

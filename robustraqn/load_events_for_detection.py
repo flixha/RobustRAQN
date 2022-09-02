@@ -2755,8 +2755,8 @@ def reevaluate_detections(
         # select matching family
         short_fam = short_party.select(long_fam.template.name)
         if len(short_fam) == 0:
-            Logger.info('Re-evaluation obtained no detections for %s.',
-                        long_fam)
+            Logger.debug('Re-evaluation obtained no detections for %s.',
+                          long_fam)
             continue
         short_det_times_np = np.array(
             [np.datetime64(d.detect_time.ns, 'ns') for d in short_fam])

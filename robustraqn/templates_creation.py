@@ -92,10 +92,11 @@ def _shorten_tribe_streams(
             tr.trim(starttime=tr.stats.starttime,
                     endtime=tr.stats.starttime + new_templ_len)
         if len(templ.st) >= min_n_traces:
-            orig = templ.event.preferred_origin() or templ.event.origins[0]
-            templ_name = str(orig.time)[0:22] + '_' + 'templ'
-            templ_name = templ_name.lower().replace('-', '_')\
-                .replace(':', '_').replace('.', '_').replace('/', '')
+            templ_name = templ.name
+            # orig = templ.event.preferred_origin() or templ.event.origins[0]
+            # templ_name = str(orig.time)[0:22] + '_' + 'templ'
+            # templ_name = templ_name.lower().replace('-', '_')\
+            #     .replace(':', '_').replace('.', '_').replace('/', '')
             # make a nice plot
             if make_pretty_plot:
                 image_name = os.path.join('TemplatePlots',

@@ -29,6 +29,7 @@ from importlib import reload
 import numpy as np
 import pickle
 import hashlib
+from collections import Counter
 from joblib import Parallel, delayed, parallel_backend
 
 from timeit import default_timer
@@ -324,13 +325,21 @@ def run_day_detection(
     # noise into account:
     if use_weights:
         for templ in tribe:
+            station_trace_counter = Counter(
+                [tr.stats.station for tr in templ.st])
             for tr in templ.st:
+                # This happens in match_filter:
+                    # tr.stats.extra.weight = (
+                    #     tr.stats.extra.weight * tr.stats.extra.noise_rms_amp /
+                    #     cont_noise_rms_amp)
                 # Get trace snr from ispaq-stats  - need to calc noise-amp in
-                # relevant frequenc band
-                if day_stats is not None:
-                    # day_stats[tr.id]
-                    # TODO get noise level in a smarter way
-                    det_day_noise_level = 1
+                # relevant frequency band?
+                # -- this is not needed when response is removed, then it's
+                # easier and happens in match_filter now.
+                #if day_stats is not None:
+                #    # day_stats[tr.id]
+                #    # maybe get noise level in a smarter way,
+                #    det_day_noise_level = 1
                 try:
                     station_weight_factor = (
                         tr.stats.extra.station_weight_factor)
@@ -339,14 +348,20 @@ def run_day_detection(
                     station_weight_factor = 1
                 # look up noise on this day /trace
                 # weight = trace_snr * trace_noise_level
+                # TODO: use cube root??? - difference may be very small,
+                #       but should be tested on Snorre events
+                # tr.stats.extra.rms_snr ** (1/3) *
                 tr.stats.extra.weight = (
-                    # TODO: use cube root??? - difference may be very small,
-                    #       but should be tested on Snorre events
-                    # tr.stats.extra.rms_snr ** (1/3) *
+                    # Higher weight with higher SNR
                     np.sqrt(tr.stats.extra.rms_snr) *
-                    station_weight_factor *
-                    np.sqrt(
-                        tr.stats.extra.day_noise_level / det_day_noise_level))
+                    # Lower weight with more traces per station
+                    1 / np.sqrt(station_trace_counter[tr.stats.station]) *
+                    # Extra weight factor, e.g. for arrays vs single stations
+                    station_weight_factor)
+                # Not needed, right?... (happens in match_filter, after pre-
+                # processing):
+                    # * np.sqrt(
+                    #     tr.stats.extra.day_noise_level / det_day_noise_level))
 
     # tmp adjust process_lenght parameters
     daylong = True

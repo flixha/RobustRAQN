@@ -14,6 +14,7 @@
 - includes all traces from a seismic array for which a pick or beam information is available into the templates, the matched-filter detection, and the lag-calc picking
 - optionally sets station-specific filters derived from noise data
 - optionally applies automatic gain control to reduce the prominence of spurious detections
+- optionally weights channels according to RMS signal-to-noise ratio of template, and noise level during recording of template against noise level in data that is being searched 
 
 **In addition, there is extra support for:**
 - read and write input/output files for the location programs Growclust and Bayesloc
@@ -24,7 +25,6 @@
 **Here is what's still missing (but planned):**
 - include automatic unit testing
 - read IRIS Mustang metrics directly from SQL database or from webservice
-- weight channels for detection identification
 - support alternative cross correlation metrics like C|C|
 - support running from configuration file
 - include detection benchmark sets

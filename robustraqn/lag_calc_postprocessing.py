@@ -4,10 +4,12 @@ import getpass
 
 from multiprocessing import Pool, cpu_count
 from multiprocessing.pool import ThreadPool
+from xml.dom.minidom import Attr
 
 import numpy as np
 import difflib
 import pandas as pd
+from pathlib import Path
 
 from obspy.core.stream import Stream
 from obspy.core.event import (Event, Catalog, Origin, Comment, CreationInfo,
@@ -141,6 +143,7 @@ def add_origins_to_detected_events(
 def postprocess_picked_events(
         picked_catalog, party, tribe, original_stats_stream,
         det_tribe=Tribe(), write_sfiles=False, sfile_path='Sfiles',
+        write_to_year_month_folders=False,
         operator='feha', all_channels_for_stations=[], extract_len=300,
         min_pick_stations=4, min_n_station_sites=4,
         min_picks_on_detection_stations=6, write_waveforms=False,
@@ -396,6 +399,7 @@ def postprocess_picked_events(
             request_fdsn=request_fdsn, wav_out_dir=sfile_path,
             extract_len=extract_len, det_tribe=det_tribe,
             all_chans_for_stations=all_channels_for_stations,
+            write_to_year_month_folders=write_to_year_month_folders,
             parallel=parallel, cores=cores)
 
     # Create Seisan-style Sfiles for the whole day
@@ -411,10 +415,18 @@ def postprocess_picked_events(
             #  added to the filename's time.
             filename_exists = True
             orig_time = event.origins[0].time
+            sfile_rea_path = os.path.join(sfile_path,
+                                          '{:04}'.format(orig_time.year),
+                                          '{:02}'.format(orig_time.month))
             while filename_exists:
                 sfile_name = orig_time.strftime(
                     '%d-%H%M-%S' + evtype + '.S%Y%m')
-                sfile_out = os.path.join(sfile_path, sfile_name)
+                if write_to_year_month_folders:
+                    # Make Year/month structure in folder if it does not exist
+                    Path(sfile_rea_path).mkdir(parents=True, exist_ok=True)
+                    sfile_out = os.path.join(sfile_rea_path, sfile_name)
+                else:
+                    sfile_out = os.path.join(sfile_path, sfile_name)
                 filename_exists = os.path.exists(sfile_out)
                 orig_time = orig_time + 1
             _write_nordic(event, sfile_out, userid=operator, evtype=evtype,
@@ -428,8 +440,8 @@ def postprocess_picked_events(
 
 def extract_stream_for_picked_events(
         catalog, party, template_path, archives, det_tribe=Tribe(),
-        request_fdsn=False, wav_out_dir='.', extract_len=300,
-        all_chans_for_stations=[], parallel=False, cores=1):
+        request_fdsn=False, wav_out_dir='.', write_to_year_month_folders=False,
+        extract_len=300, all_chans_for_stations=[], parallel=False, cores=1):
     """
     Extracts a stream object with all channels from the SDS-archive.
     Allows the input of multiple archives as a list
@@ -496,7 +508,7 @@ def extract_stream_for_picked_events(
                 stream_list[n_st] += st
 
     wavefiles = list()
-    for stream in stream_list:
+    for detection, stream in zip(detection_list, stream_list):
         # 2019_09_24t13_38_14
         # 2019-12-15-0323-41S.NNSN__008
         utc_str = str(stream[0].stats.starttime)
@@ -504,9 +516,29 @@ def extract_stream_for_picked_events(
         # Define waveform filename based on starttime of stream
         w_name = (utc_str[0:13] + utc_str[14:19] +
                   'M.EQCS__' + str(len(stream)).zfill(3))
-        waveform_filename = os.path.join(wav_out_dir, w_name)
-        wavefiles.append(waveform_filename)
-        stream.write(waveform_filename, format='MSEED')
+        
+        
+
+        try:
+            orig_time = detection.event.origins[0].time
+        except (KeyError, AttributeError, IndexError):
+            # Origin time would be about 1/4 to 1/3 into stream
+            orig_time = (
+                stream[0].stats.starttime +
+                (stream[0].stats.endtime - stream[0].stats.starttime) * 1/4)
+        if write_to_year_month_folders:
+            wav_folder_path = os.path.join(wav_out_dir,
+                                           '{:04}'.format(orig_time.year),
+                                           '{:02}'.format(orig_time.month))
+            # Make Year/month structure in folder if it does not exist
+            Path(wav_folder_path).mkdir(parents=True, exist_ok=True)
+            waveform_path_filename = os.path.join(wav_folder_path, w_name)
+            stream.write(waveform_path_filename, format='MSEED')
+            wavefiles.append(waveform_path_filename)
+        else:
+            waveform_filename = os.path.join(wav_out_dir, w_name)
+            wavefiles.append(waveform_filename)
+            stream.write(waveform_filename, format='MSEED')
 
     return wavefiles
 

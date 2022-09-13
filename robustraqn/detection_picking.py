@@ -179,7 +179,8 @@ def pick_events_for_day(
         write_party=False, ignore_cccsum_comparison=True,
         all_vert=True, all_horiz=True, vertical_chans=['Z', 'H'],
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
-        sfile_path='Sfiles', operator='EQC', day_hash_file=None, **kwargs):
+        sfile_path='Sfiles', write_to_year_month_folders=False,
+        operator='EQC', day_hash_file=None, **kwargs):
     """
     Day-loop for picker
     """
@@ -465,6 +466,7 @@ def pick_events_for_day(
         extract_len=extract_len, write_waveforms=True, archives=archives,
         request_fdsn=request_fdsn, template_path=template_path,
         min_pick_stations=8, min_picks_on_detection_stations=3,
+        write_to_year_month_folders=write_to_year_month_folders,
         parallel=parallel, cores=io_cores, **kwargs)
 
     append_list_completed_days(

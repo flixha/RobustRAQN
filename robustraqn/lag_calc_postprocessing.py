@@ -448,10 +448,15 @@ def extract_stream_for_picked_events(
     """
     detection_list = list()
     for event in catalog:
+        found_detection = False
         for family in party:
             for detection in family:
                 if detection.id == event.resource_id:
                     detection_list.append(detection)
+                    found_detection = True
+                    break
+            if found_detection:
+                break
 
     # Find stream of detection template - can be loaded from tribe or files
     if len(det_tribe) > 0:
@@ -508,7 +513,7 @@ def extract_stream_for_picked_events(
                 stream_list[n_st] += st
 
     wavefiles = list()
-    for detection, stream in zip(detection_list, stream_list):
+    for event, detection, stream in zip(catalog, detection_list, stream_list):
         # 2019_09_24t13_38_14
         # 2019-12-15-0323-41S.NNSN__008
         utc_str = str(stream[0].stats.starttime)
@@ -517,12 +522,13 @@ def extract_stream_for_picked_events(
         w_name = (utc_str[0:13] + utc_str[14:19] +
                   'M.EQCS__' + str(len(stream)).zfill(3))
         try:
-            orig_time = detection.event.origins[0].time
+            orig_time = event.origins[0].time # detection.event.origins[0].time
         except (KeyError, AttributeError, IndexError):
+            orig_time = detection.detect_time
             # Origin time would be about 1/4 to 1/3 into stream
-            orig_time = (
-                stream[0].stats.starttime +
-                (stream[0].stats.endtime - stream[0].stats.starttime) * 1/4)
+            # orig_time = (
+            #     stream[0].stats.starttime +
+            #     (stream[0].stats.endtime - stream[0].stats.starttime) * 1/4)
         if write_to_year_month_folders:
             wav_folder_path = os.path.join(wav_out_dir,
                                            '{:04}'.format(orig_time.year),

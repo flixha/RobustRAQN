@@ -1598,7 +1598,7 @@ def init_processing_wRotation(
     return st
 
 
-def mask_consecutive(data, value_to_mask=0, min_run_length=3, axis=-1):
+def mask_consecutive(data, value_to_mask=0, min_run_length=5, axis=-1):
     """
     from user https://stackoverflow.com/users/2988730/mad-physicist posted at
     https://stackoverflow.com/questions/63741396/how-to-build-a-mask-true-or-
@@ -1623,7 +1623,7 @@ def mask_consecutive(data, value_to_mask=0, min_run_length=3, axis=-1):
     return np.cumsum(result, axis=axis, out=result).view(bool)
 
 
-def mask_consecutive_zeros(st, value_to_mask=0, min_run_length=3, axis=-1):
+def mask_consecutive_zeros(st, min_run_length=5):
     """
     Mask consecutive Zeros in trace
     """
@@ -1633,7 +1633,8 @@ def mask_consecutive_zeros(st, value_to_mask=0, min_run_length=3, axis=-1):
         # Convert trace data to masked array if required
         if np.any(consecutive_zeros_mask):
             Logger.info(
-                'Trace %s contains consecutive zeros, masking Zero data', tr)
+                'Trace %s contains more than %s consecutive zeros, '
+                'masking Zero data', tr, min_run_length)
             tr.data = np.ma.MaskedArray(
                 data=tr.data, mask=consecutive_zeros_mask, fill_value=None)
     return st
@@ -1654,7 +1655,7 @@ def _init_processing_per_channel(
 
     # First check if there are consecutive Zeros in the data (happens for
     # example in Norsar data; this should be gaps rather than Zeros)
-    st = mask_consecutive_zeros(st, value_to_mask=0, min_run_length=3, axis=-1)
+    st = mask_consecutive_zeros(st, value_to_mask=0, min_run_length=5, axis=-1)
     st = st.split()
 
     # Second check trace segments for strange sampling rates and segments that
@@ -1743,7 +1744,7 @@ def _init_processing_per_channel_wRotation(
 
     # First check if there are consecutive Zeros in the data (happens for
     # example in Norsar data; this should be gaps rather than Zeros)
-    st = mask_consecutive_zeros(st, value_to_mask=0, min_run_length=3, axis=-1)
+    st = mask_consecutive_zeros(st, value_to_mask=0, min_run_length=5, axis=-1)
     st = st.split()
 
     # Second, check trace segments for strange sampling rates and segments that
@@ -2880,5 +2881,5 @@ if __name__ == "__main__":
         '/data/seismo-wav/SLARCHIVE/1999/NO/SPA0/SHZ.D/NO.SPA0.00.SHZ.D.1999.213')
     st2 = st.slice(starttime=UTCDateTime(1999,8,1,20,36,51),
                    endtime=UTCDateTime(1999,8,1,20,36,54))
-    st = mask_consecutive_zeros(st, value_to_mask=0, min_run_length=3, axis=-1)
+    st = mask_consecutive_zeros(st, value_to_mask=0, min_run_length=5, axis=-1)
     st = st.split()

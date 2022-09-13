@@ -1509,7 +1509,8 @@ def init_processing_wRotation(
                     downsampled_max_rate=downsampled_max_rate,
                     taper_fraction=taper_fraction,
                     noise_balancing=noise_balancing,
-                    balance_power_coefficient=balance_power_coefficient, **kwargs)
+                    balance_power_coefficient=balance_power_coefficient,
+                    **kwargs)
     # elif thread_parallel and n_threads:
 
     else:
@@ -2868,3 +2869,16 @@ def reevaluate_detections(
                 str(n_det))
 
     return long_return_party, short_return_party
+
+
+
+
+# %% TESTS
+if __name__ == "__main__":
+    from obspy import UTCDateTime
+    st = read(
+        '/data/seismo-wav/SLARCHIVE/1999/NO/SPA0/SHZ.D/NO.SPA0.00.SHZ.D.1999.213')
+    st2 = st.slice(starttime=UTCDateTime(1999,8,1,20,36,51),
+                   endtime=UTCDateTime(1999,8,1,20,36,54))
+    st = mask_consecutive_zeros(st, value_to_mask=0, min_run_length=3, axis=-1)
+    st = st.split()

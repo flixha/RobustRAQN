@@ -1655,7 +1655,7 @@ def _init_processing_per_channel(
 
     # First check if there are consecutive Zeros in the data (happens for
     # example in Norsar data; this should be gaps rather than Zeros)
-    st = mask_consecutive_zeros(st, value_to_mask=0, min_run_length=5, axis=-1)
+    st = mask_consecutive_zeros(st, min_run_length=5)
     st = st.split()
 
     # Second check trace segments for strange sampling rates and segments that
@@ -1744,7 +1744,7 @@ def _init_processing_per_channel_wRotation(
 
     # First check if there are consecutive Zeros in the data (happens for
     # example in Norsar data; this should be gaps rather than Zeros)
-    st = mask_consecutive_zeros(st, value_to_mask=0, min_run_length=5, axis=-1)
+    st = mask_consecutive_zeros(st, min_run_length=5)
     st = st.split()
 
     # Second, check trace segments for strange sampling rates and segments that
@@ -2881,5 +2881,5 @@ if __name__ == "__main__":
         '/data/seismo-wav/SLARCHIVE/1999/NO/SPA0/SHZ.D/NO.SPA0.00.SHZ.D.1999.213')
     st2 = st.slice(starttime=UTCDateTime(1999,8,1,20,36,51),
                    endtime=UTCDateTime(1999,8,1,20,36,54))
-    st = mask_consecutive_zeros(st, value_to_mask=0, min_run_length=5, axis=-1)
+    st = mask_consecutive_zeros(st, min_run_length=5)
     st = st.split()

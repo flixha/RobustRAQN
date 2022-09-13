@@ -170,6 +170,7 @@ def pick_events_for_day(
         apply_agc=False, agc_window_sec=5,
         parallel=False, cores=None, io_cores=1,
         check_array_misdetections=False, xcorr_func='fmf', arch='cpu',
+        re_eval_thresh_factor=0.6, min_n_station_sites=4, use_weights=False,
         concurrency='concurrent', trig_int=12, minimum_sample_rate=20,
         time_difference_threshold=8, detect_value_allowed_error=60,
         threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
@@ -180,7 +181,7 @@ def pick_events_for_day(
         all_vert=True, all_horiz=True, vertical_chans=['Z', 'H'],
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
         sfile_path='Sfiles', write_to_year_month_folders=False,
-        operator='EQC', day_hash_file=None, **kwargs):
+        operator='EQC', day_hash_file=None, copy_data=True, **kwargs):
     """
     Day-loop for picker
     """
@@ -380,6 +381,7 @@ def pick_events_for_day(
                 dayparty, short_tribe, stream=day_st,
                 threshold=new_threshold-2, trig_int=trig_int/4,
                 threshold_type=threshold_type,
+                re_eval_thresh_factor=re_eval_thresh_factor,
                 overlap='calculate', plotDir='ReDetectionPlots',
                 plot=False, fill_gaps=True, ignore_bad_data=True,
                 daylong=daylong, ignore_length=True, min_chans=min_det_chans,
@@ -390,7 +392,9 @@ def pick_events_for_day(
                 group_size=n_templates_per_run, process_cores=cores,
                 time_difference_threshold=time_difference_threshold,
                 detect_value_allowed_error=detect_value_allowed_error,
-                return_party_with_short_templates=True, **kwargs)
+                return_party_with_short_templates=True,
+                min_n_station_sites=min_n_station_sites,
+                use_weights=use_weights, copy_data=copy_data, **kwargs)
         if not dayparty:
             Logger.warning('Party of families of detections is empty.')
             append_list_completed_days(

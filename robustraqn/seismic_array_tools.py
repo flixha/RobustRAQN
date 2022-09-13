@@ -1151,7 +1151,8 @@ def array_lag_calc(
                          flags=fnmatch.EXTMATCH)]) > 0])
             # Factor to relax cc-requirement by - noise of stacked traces
             # should in theory reduce by sqrt(n_traces)
-            cc_relax_factor = np.sqrt(len(array_st_dict[seisarray_prefix]))
+            # cc_relax_factor = np.sqrt(len(array_st_dict[seisarray_prefix]))
+            cc_relax_factor = len(array_st_dict[seisarray_prefix]) ** (1/3)
             Logger.info('Preparing traces for array %s, for picking phase %s'
                         ' with lag-calc. CC relax factor is %s',
                         seisarray_prefix, phase_hint, str(cc_relax_factor))

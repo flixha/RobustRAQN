@@ -18,7 +18,6 @@ from obspy import UTCDateTime
 from obspy.clients.fdsn import RoutingClient
 from eqcorrscan.core.match_filter.tribe import Tribe
 from eqcorrscan.core.match_filter.party import Party
-from eqcorrscan.utils.pre_processing import _stream_quick_select
 
 from robustraqn.obspy.clients.filesystem.sds import Client
 from robustraqn.quality_metrics import (get_waveforms_bulk, read_ispaq_stats)
@@ -558,7 +557,7 @@ def check_duplicate_template_channels(
                 trace_check_id = (
                     trace_id[0:-1] + '[' + ''.join(horizontal_chans) + ']')
             # same_id_st = template.st.select(id=trace_check_id)
-            same_id_st = _stream_quick_select(template.st, trace_check_id)
+            same_id_st = template.st.select(id=trace_check_id)
             if len(same_id_st) == 1 and same_id_st[0] not in temp_st_new:
                 temp_st_new += same_id_st
             elif len(same_id_st) > 1:  # keep only earliest traces

@@ -1597,6 +1597,47 @@ def init_processing_wRotation(
     return st
 
 
+def mask_consecutive(data, value_to_mask=0, min_run_length=3, axis=-1):
+    """
+    from user https://stackoverflow.com/users/2988730/mad-physicist posted at
+    https://stackoverflow.com/questions/63741396/how-to-build-a-mask-true-or-
+    false-for-consecutive-zeroes-in-a-row-in-a-pandas
+    - posted under license CC-BY-SA 4.0 (compatible with GPLv3 used in
+      RobustRAQN, see license: https://creativecommons.org/licenses/by-sa/4.0/)
+    - variable names modified
+    """
+    shape = list(data.shape)
+    shape[axis] = 1;
+    z = np.zeros(shape, dtype=bool)
+    mask = np.concatenate((z, data == value_to_mask, z), axis=axis)
+    locs = np.argwhere(np.diff(mask, axis=axis))
+    run_lengths = locs[1::2, axis] - locs[::2, axis]
+    valid_runs = np.flatnonzero(run_lengths >= min_run_length)
+    result = np.zeros(data.shape, dtype=np.int8)
+    v = 2 * valid_runs
+    result[tuple(locs[v, :].T)] = 1
+    v += 1
+    v = v[locs[v, axis] < result.shape[axis]]
+    result[tuple(locs[v, :].T)] = -1
+    return np.cumsum(result, axis=axis, out=result).view(bool)
+
+
+def mask_consecutive_zeros(st, value_to_mask=0, min_run_length=3, axis=-1):
+    """
+    Mask consecutive Zeros in trace
+    """
+    for tr in st:
+        consecutive_zeros_mask = mask_consecutive(
+            tr.data, value_to_mask=0, min_run_length=min_run_length, axis=-1)
+        # Convert trace data to masked array if required
+        if np.any(consecutive_zeros_mask):
+            Logger.info(
+                'Trace %s contains consecutive zeros, masking Zero data', tr)
+            tr.data = np.ma.MaskedArray(
+                data=tr.data, mask=consecutive_zeros_mask, fill_value=None)
+    return st
+
+
 def _init_processing_per_channel(
         st, starttime, endtime, remove_response=False,
         inv=Inventory(), min_segment_length_s=10, max_sample_rate_diff=1,
@@ -1610,7 +1651,12 @@ def _init_processing_per_channel(
     Inner loop over which the initial processing can be parallelized
     """
 
-    # First check trace segments for strange sampling rates and segments that
+    # First check if there are consecutive Zeros in the data (happens for
+    # example in Norsar data; this should be gaps rather than Zeros)
+    st = mask_consecutive_zeros(st, value_to_mask=0, min_run_length=3, axis=-1)
+    st = st.split()
+
+    # Second check trace segments for strange sampling rates and segments that
     # are too short:
     st, st_normalized = check_normalize_sampling_rate(
         st, inv,
@@ -1692,9 +1738,14 @@ def _init_processing_per_channel_wRotation(
     """
     Inner loop over which the initial processing can be parallelized
     """
-
     outtic = default_timer()
-    # First check trace segments for strange sampling rates and segments that
+
+    # First check if there are consecutive Zeros in the data (happens for
+    # example in Norsar data; this should be gaps rather than Zeros)
+    st = mask_consecutive_zeros(st, value_to_mask=0, min_run_length=3, axis=-1)
+    st = st.split()
+
+    # Second, check trace segments for strange sampling rates and segments that
     # are too short:
     st, st_normalized = check_normalize_sampling_rate(
         st, inv, min_segment_length_s=min_segment_length_s,
@@ -2645,7 +2696,7 @@ def reevaluate_detections(
         parallel_process=False, cores=None, xcorr_func='fftw',
         concurrency=None, arch='precise', group_size=1, full_peaks=False,
         save_progress=False, process_cores=None, spike_test=False, min_chans=4,
-        time_difference_threshold=3, detect_value_allowed_error=60,
+        time_difference_threshold=1, detect_value_allowed_error=60,
         return_party_with_short_templates=False, min_n_station_sites=4,
         use_weights=False, copy_data=True, **kwargs):
     """

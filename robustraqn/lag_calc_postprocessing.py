@@ -516,9 +516,6 @@ def extract_stream_for_picked_events(
         # Define waveform filename based on starttime of stream
         w_name = (utc_str[0:13] + utc_str[14:19] +
                   'M.EQCS__' + str(len(stream)).zfill(3))
-        
-        
-
         try:
             orig_time = detection.event.origins[0].time
         except (KeyError, AttributeError, IndexError):

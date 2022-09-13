@@ -257,7 +257,7 @@ def postprocess_picked_events(
                     p.waveform_id.channel_code[0:2] == pick_chan[0:2] and
                     p.phase_hint[0] == pick.phase_hint[0])]
             matching_picks = sorted(matching_picks, key=lambda p: p.time)
-            if matching_picks:
+            if matching_picks and pick == matching_picks[0]:
                 if len(matching_picks[0].phase_hint) > 1:
                     # option to allow first arriving P/S remain as P/S instead
                     # of Pn/Sn; otherwise some location programs may struggle.
@@ -265,7 +265,7 @@ def postprocess_picked_events(
                             matching_picks[0].phase_hint == 'Pn'):
                         pass
                     else:
-                        pick.phase_hint = matching_picks[0].phase_hint
+                        pick.phase_hint = matching_picks[0].phase_hint[0]
 
             # pick.time = pick.time + 0.2
             if pick.phase_hint[0] == 'P':

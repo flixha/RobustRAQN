@@ -1746,6 +1746,17 @@ def _init_processing_per_channel_wRotation(
     # example in Norsar data; this should be gaps rather than Zeros)
     st = mask_consecutive_zeros(st, min_run_length=5)
     st = st.split()
+    removal_st = Stream()
+    for tr in st:
+        if hasattr(tr.data, 'mask'):
+            # Masked values indicate Zeros or missing data
+            n_masked_values = np.sum(tr.data.mask)
+            # Maximum 20 % should be masked
+            if n_masked_values / tr.stats.npts > 0.2:
+                removal_st += tr
+    # Remove trace if not enough real data (not masked, not Zero)
+    for tr in removal_st:
+        st.remove(tr)
 
     # Second, check trace segments for strange sampling rates and segments that
     # are too short:
@@ -2788,10 +2799,11 @@ def reevaluate_detections(
         fill_gaps=fill_gaps, ignore_bad_data=ignore_bad_data,
         ignore_length=ignore_length,
         parallel_process=parallel_process, cores=cores,
-        concurrency=concurrency, xcorr_func=xcorr_func, group_size=group_size,
+        concurrency=concurrency, xcorr_func=xcorr_func, arch=arch,
+        group_size=group_size,
         full_peaks=full_peaks, save_progress=save_progress,
         process_cores=process_cores, spike_test=spike_test,
-        use_weights=use_weights, copy_data=copy_data)
+        use_weights=use_weights, copy_data=copy_data, **kwargs)
 
     # Check detections from short templates again the original set of
     # detections. If there is no short-detection for an original detection,

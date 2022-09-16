@@ -133,7 +133,8 @@ def _shorten_tribe_streams(
 
 def check_template_event_errors_ok(
         origin, max_horizontal_error_km=None, max_depth_error_km=None,
-        max_time_error_s=None, file='', **kwargs):
+        max_time_error_s=None, file='', min_latitude=None, max_latitude=None,
+        min_longitude=None, max_longitude=None, **kwargs):
     """
     function to check origin errors gracefully
     """
@@ -142,6 +143,20 @@ def check_template_event_errors_ok(
         Logger.info(
             'Rejected template, event has no origin, cannot check errors.')
         return True
+    # Check location
+    if min_latitude and origin.latitude:
+        if origin.latitude < min_latitude:
+            return False
+    if max_latitude and origin.latitude:
+        if origin.latitude > max_latitude:
+            return False
+    if min_longitude and origin.longitude:
+        if origin.longitude < min_longitude:
+            return False
+    if max_longitude and origin.longitude:
+        if origin.longitude > max_longitude:
+            return False
+    
     # # Check horizontal error
     if max_horizontal_error_km:
         max_hor_error = list()
@@ -320,8 +335,8 @@ def _create_template_objects(
         # added in position 0.
         origin = event.preferred_origin() or event.origins[0]
 
-        if not check_template_event_errors_ok(origin, file=event_str,
-                                              **kwargs):
+        if not check_template_event_errors_ok(
+            origin, file=event_str, **kwargs):
             continue
 
         # TODO: if there are a lot of different picks at one station, e.g.:

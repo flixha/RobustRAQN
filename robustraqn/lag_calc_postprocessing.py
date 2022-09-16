@@ -4,6 +4,7 @@ import getpass
 
 from multiprocessing import Pool, cpu_count
 from multiprocessing.pool import ThreadPool
+from joblib import Parallel, delayed
 from xml.dom.minidom import Attr
 
 import numpy as np
@@ -567,79 +568,102 @@ def replace_templates_for_picking(party, tribe, set_sample_rate=100.0):
     return party
 
 
+def _check_duplicate_template_channels(
+    template, all_vert=False, all_horiz=False, vertical_chans=['Z'],
+    horizontal_chans=['E', 'N', '1', '2']):
+    """
+    Check template for duplicate channels (happens when there are P- and
+        S-picks on the same channel, or Pn/Pg and Sn/Sg). Then throw away the
+        later one for now.
+    """
+    # Keep only the earliest trace for traces with same ID
+    temp_st_new = Stream()
+    unique_trace_ids = sorted(list(set([tr.id for tr in template.st])))
+    for trace_id in unique_trace_ids:
+        trace_check_id = trace_id
+        if (all_vert and len(vertical_chans) > 1
+                and trace_id[-1] in vertical_chans):
+            # Formulate wildcards to select existing traces
+            trace_check_id = (
+                trace_id[0:-1] + '[' + ''.join(vertical_chans) + ']')
+        elif (all_horiz and len(horizontal_chans) > 1
+                and trace_id[-1] in horizontal_chans):
+            trace_check_id = (
+                trace_id[0:-1] + '[' + ''.join(horizontal_chans) + ']')
+        # same_id_st = template.st.select(id=trace_check_id)
+        same_id_st = template.st.select(id=trace_check_id)
+        if len(same_id_st) == 1 and same_id_st[0] not in temp_st_new:
+            temp_st_new += same_id_st
+        elif len(same_id_st) > 1:  # keep only earliest traces
+            starttimes = [tr.stats.starttime for tr in same_id_st]
+            earliest_starttime = min(starttimes)
+            for tr in same_id_st:
+                if (tr.stats.starttime == earliest_starttime
+                        and tr not in temp_st_new):
+                    temp_st_new += tr
+    template.st = temp_st_new  # replace previous template stream
+
+    # Also throw away the later pick from the template's event
+    new_pick_list = list()
+    pick_tr_id_list = list()
+    uniq_pick_trace_ids = sorted(list(set(
+        [pick.waveform_id.id for pick in template.event.picks])))
+    for pick_tr_id in uniq_pick_trace_ids:
+        pick_tr_check_id = [pick_tr_id]
+        if (all_vert and len(vertical_chans) > 1
+                and pick_tr_id[-1] in vertical_chans):
+            for vert_chan in vertical_chans:
+                if vert_chan != pick_tr_id[-1]:
+                    pick_tr_check_id.append(pick_tr_id[0:-1] + vert_chan)
+        elif (all_horiz and len(horizontal_chans) > 1
+                and pick_tr_id[-1] in horizontal_chans):
+            for hor_chan in horizontal_chans:
+                if hor_chan != pick_tr_id[-1]:
+                    pick_tr_check_id.append(pick_tr_id[0:-1] + hor_chan)
+        same_id_picks = [pick for pick in template.event.picks
+                            if pick.waveform_id.id in pick_tr_check_id]
+        if (len(same_id_picks) == 1
+                and same_id_picks[0] not in new_pick_list):
+            new_pick_list.append(same_id_picks[0])
+        elif len(same_id_picks) > 1:  # keep only earliest picks per trace
+            pick_times = [pick.time for pick in same_id_picks]
+            earliest_pick_time = min(pick_times)
+            for pick in same_id_picks:
+                # Every trace can only have one pick for lag-calc. If there
+                # are two picks at the same time on same trace (e.g.,
+                # one manual and one for array), then just keep the first
+                # one from the list.
+                if (pick.time == earliest_pick_time
+                        and pick not in new_pick_list
+                        and pick_tr_id not in pick_tr_id_list):
+                    new_pick_list.append(pick)
+                    pick_tr_id_list.append(pick_tr_id)
+    template.event.picks = new_pick_list
+    return template
+
+
 def check_duplicate_template_channels(
         tribe, all_vert=False, all_horiz=False, vertical_chans=['Z'],
-        horizontal_chans=['E', 'N', '1', '2']):
+        horizontal_chans=['E', 'N', '1', '2'], parallel=False, cores=None):
     """
     Check templates for duplicate channels (happens when there are P- and
         S-picks on the same channel, or Pn/Pg and Sn/Sg). Then throw away the
         later one for now.
     """
     Logger.info('Checking templates in %s for duplicate channels', tribe)
-    for template in tribe:
-        # Keep only the earliest trace for traces with same ID
-        temp_st_new = Stream()
-        unique_trace_ids = sorted(list(set([tr.id for tr in template.st])))
-        for trace_id in unique_trace_ids:
-            trace_check_id = trace_id
-            if (all_vert and len(vertical_chans) > 1
-                    and trace_id[-1] in vertical_chans):
-                # Formulate wildcards to select existing traces
-                trace_check_id = (
-                    trace_id[0:-1] + '[' + ''.join(vertical_chans) + ']')
-            elif (all_horiz and len(horizontal_chans) > 1
-                    and trace_id[-1] in horizontal_chans):
-                trace_check_id = (
-                    trace_id[0:-1] + '[' + ''.join(horizontal_chans) + ']')
-            # same_id_st = template.st.select(id=trace_check_id)
-            same_id_st = template.st.select(id=trace_check_id)
-            if len(same_id_st) == 1 and same_id_st[0] not in temp_st_new:
-                temp_st_new += same_id_st
-            elif len(same_id_st) > 1:  # keep only earliest traces
-                starttimes = [tr.stats.starttime for tr in same_id_st]
-                earliest_starttime = min(starttimes)
-                for tr in same_id_st:
-                    if (tr.stats.starttime == earliest_starttime
-                            and tr not in temp_st_new):
-                        temp_st_new += tr
-        template.st = temp_st_new  # replace previous template stream
-
-        # Also throw away the later pick from the template's event
-        new_pick_list = list()
-        pick_tr_id_list = list()
-        uniq_pick_trace_ids = sorted(list(set(
-            [pick.waveform_id.id for pick in template.event.picks])))
-        for pick_tr_id in uniq_pick_trace_ids:
-            pick_tr_check_id = [pick_tr_id]
-            if (all_vert and len(vertical_chans) > 1
-                    and pick_tr_id[-1] in vertical_chans):
-                for vert_chan in vertical_chans:
-                    if vert_chan != pick_tr_id[-1]:
-                        pick_tr_check_id.append(pick_tr_id[0:-1] + vert_chan)
-            elif (all_horiz and len(horizontal_chans) > 1
-                    and pick_tr_id[-1] in horizontal_chans):
-                for hor_chan in horizontal_chans:
-                    if hor_chan != pick_tr_id[-1]:
-                        pick_tr_check_id.append(pick_tr_id[0:-1] + hor_chan)
-            same_id_picks = [pick for pick in template.event.picks
-                             if pick.waveform_id.id in pick_tr_check_id]
-            if (len(same_id_picks) == 1
-                    and same_id_picks[0] not in new_pick_list):
-                new_pick_list.append(same_id_picks[0])
-            elif len(same_id_picks) > 1:  # keep only earliest picks per trace
-                pick_times = [pick.time for pick in same_id_picks]
-                earliest_pick_time = min(pick_times)
-                for pick in same_id_picks:
-                    # Every trace can only have one pick for lag-calc. If there
-                    # are two picks at the same time on same trace (e.g.,
-                    # one manual and one for array), then just keep the first
-                    # one from the list.
-                    if (pick.time == earliest_pick_time
-                            and pick not in new_pick_list
-                            and pick_tr_id not in pick_tr_id_list):
-                        new_pick_list.append(pick)
-                        pick_tr_id_list.append(pick_tr_id)
-        template.event.picks = new_pick_list
+    if not parallel:
+        for template in tribe:
+            template = _check_duplicate_template_channels(template)
+    else:
+        if cores is None:
+            n_cores = cpu_count()
+        cores = min(cores, len(tribe))
+        out_lists = Parallel(n_jobs=cores)(
+            delayed(_check_duplicate_template_channels)(template)
+            for template in tribe)
+        tribe = Tribe([out for out in out_lists
+                       if out is not None and len(out.st) > 0])
+    return tribe
 
     # for template in tribe:
     #     nt = 0
@@ -716,8 +740,6 @@ def check_duplicate_template_channels(
         #                 continue
         #     else:
         #         pick_ids.append(pick.waveform_id.id)
-
-    return tribe
 
 
 def extract_detections(detections, templates, archive, arc_type,

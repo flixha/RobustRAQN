@@ -1644,13 +1644,13 @@ def mask_consecutive_zeros(st, min_run_length=5, min_data_percentage=80,
                 data=tr.data, mask=consecutive_zeros_mask, fill_value=None)
     st = st.split()  # After splitting there should be no masks
     removal_st = Stream()
+    min_data_fraction = min_data_percentage / 100
     for tr in st:
         if hasattr(tr.data, 'mask'):
             # Masked values indicate Zeros or missing data
             n_masked_values = np.sum(tr.data.mask)
             # Maximum 20 % should be masked
-            if n_masked_values / tr.stats.npts > (
-                    1 - min_data_percentage / 100):
+            if n_masked_values / tr.stats.npts > (1 - min_data_fraction):
                 removal_st += tr
     # Once traces are split they should not have masks any more. So need to
     # check length of data in trace again.
@@ -1658,12 +1658,14 @@ def mask_consecutive_zeros(st, min_run_length=5, min_data_percentage=80,
     for uniq_tr_id in uniq_tr_ids:
         trace_len_in_seconds = np.sum(
             [tr.stats.npts / tr.stats.sampling_rate for tr in st])
-        if trace_len_in_seconds < (endtime - starttime) * min_data_percentage:
+        if trace_len_in_seconds < (endtime - starttime) * min_data_fraction:
             for tr in st:
                 if tr not in removal_st and tr.id == uniq_tr_id:
                     removal_st += tr
     # Remove trace if not enough real data (not masked, not Zero)
     for tr in removal_st:
+        Logger.info('After masking consecutive zeros, there is  less than %s '
+                    '"%" data for trace %s - removing.', tr.id,)
         st.remove(tr)
     return st
 

@@ -169,7 +169,7 @@ def pick_events_for_day(
         remove_response=False, inv=Inventory(),
         apply_agc=False, agc_window_sec=5,
         parallel=False, cores=None, io_cores=1,
-        check_array_misdetections=False, xcorr_func='fmf', arch='cpu',
+        check_array_misdetections=False, xcorr_func='fmf', arch='precise',
         re_eval_thresh_factor=0.6, min_n_station_sites=4, use_weights=False,
         concurrency='concurrent', trig_int=12, minimum_sample_rate=20,
         time_difference_threshold=8, detect_value_allowed_error=60,
@@ -367,6 +367,10 @@ def pick_events_for_day(
         append_list_completed_days(
                 file=day_hash_file, date=current_day_str, hash=settings_hash)
         return
+    
+    if (arch == 'precise' and
+            concurrency not in ['multiprocess', 'multithread']):
+        concurrency = 'multiprocess'
 
     # Check for erroneous detections of real signals (mostly caused by smaller
     # seismic events near one of the arrays). Solution: check whether templates
@@ -387,7 +391,7 @@ def pick_events_for_day(
                 daylong=daylong, ignore_length=True, min_chans=min_det_chans,
                 pre_processed=pre_processed,
                 parallel_process=parallel, cores=cores,
-                xcorr_func=xcorr_func, concurrency=concurrency, arch=arch,
+                xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
                 # xcorr_func='time_domain', concurrency='multiprocess',
                 group_size=n_templates_per_run, process_cores=cores,
                 time_difference_threshold=time_difference_threshold,

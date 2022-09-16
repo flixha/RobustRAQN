@@ -350,6 +350,14 @@ def pick_events_for_day(
         std_network_code="NS", std_location_code="00",
         std_channel_prefix="BH")
 
+    # If there is no data for the day, then continue on next day.
+    if not day_st.traces:
+        Logger.warning('No data for detection on %s, continuing'
+                       ' with next day.', current_day_str)
+        append_list_completed_days(
+                file=day_hash_file, date=current_day_str, hash=settings_hash)
+        return
+
     pre_processed = False
     if apply_agc and agc_window_sec:
         day_st, pre_processed = try_apply_agc(
@@ -360,14 +368,6 @@ def pick_events_for_day(
     # Update parties for picking
     dayparty = prepare_and_update_party(dayparty, tribe, day_st)
 
-    # If there is no data for the day, then continue on next day.
-    if not day_st.traces:
-        Logger.warning('No data for detection on %s, continuing'
-                       ' with next day.', current_day_str)
-        append_list_completed_days(
-                file=day_hash_file, date=current_day_str, hash=settings_hash)
-        return
-    
     if (arch == 'precise' and
             concurrency not in ['multiprocess', 'multithread']):
         concurrency = 'multiprocess'

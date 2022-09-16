@@ -1598,7 +1598,7 @@ def init_processing_wRotation(
     return st
 
 
-def mask_consecutive(data, value_to_mask=0, min_run_length=5, axis=-1):
+def _mask_consecutive(data, value_to_mask=0, min_run_length=5, axis=-1):
     """
     from user https://stackoverflow.com/users/2988730/mad-physicist posted at
     https://stackoverflow.com/questions/63741396/how-to-build-a-mask-true-or-
@@ -1623,12 +1623,17 @@ def mask_consecutive(data, value_to_mask=0, min_run_length=5, axis=-1):
     return np.cumsum(result, axis=axis, out=result).view(bool)
 
 
-def mask_consecutive_zeros(st, min_run_length=5):
+def mask_consecutive_zeros(st, min_run_length=5, min_data_percentage=80,
+                           starttime=None, endtime=None):
     """
     Mask consecutive Zeros in trace
     """
+    if starttime is None:
+        starttime = min([tr.stats.starttime for tr in st])
+    if endtime is None:
+        endtime = min([tr.stats.endtime for tr in st])
     for tr in st:
-        consecutive_zeros_mask = mask_consecutive(
+        consecutive_zeros_mask = _mask_consecutive(
             tr.data, value_to_mask=0, min_run_length=min_run_length, axis=-1)
         # Convert trace data to masked array if required
         if np.any(consecutive_zeros_mask):
@@ -1637,6 +1642,29 @@ def mask_consecutive_zeros(st, min_run_length=5):
                 'masking Zero data', tr, min_run_length)
             tr.data = np.ma.MaskedArray(
                 data=tr.data, mask=consecutive_zeros_mask, fill_value=None)
+    st = st.split()  # After splitting there should be no masks
+    removal_st = Stream()
+    for tr in st:
+        if hasattr(tr.data, 'mask'):
+            # Masked values indicate Zeros or missing data
+            n_masked_values = np.sum(tr.data.mask)
+            # Maximum 20 % should be masked
+            if n_masked_values / tr.stats.npts > (
+                    1 - min_data_percentage / 100):
+                removal_st += tr
+    # Once traces are split they should not have masks any more. So need to
+    # check length of data in trace again.
+    uniq_tr_ids = list(set([tr.id for tr in st]))
+    for uniq_tr_id in uniq_tr_ids:
+        trace_len_in_seconds = np.sum(
+            [tr.stats.npts / tr.stats.sampling_rate for tr in st])
+        if trace_len_in_seconds < (endtime - starttime) * min_data_percentage:
+            for tr in st:
+                if tr not in removal_st and tr.id == uniq_tr_id:
+                    removal_st += tr
+    # Remove trace if not enough real data (not masked, not Zero)
+    for tr in removal_st:
+        st.remove(tr)
     return st
 
 
@@ -1655,8 +1683,10 @@ def _init_processing_per_channel(
 
     # First check if there are consecutive Zeros in the data (happens for
     # example in Norsar data; this should be gaps rather than Zeros)
-    st = mask_consecutive_zeros(st, min_run_length=5)
-    st = st.split()
+    st = mask_consecutive_zeros(
+        st, min_run_length=5, starttime=starttime, endtime=endtime)
+    if len(st) == 0:
+        return st
 
     # Second check trace segments for strange sampling rates and segments that
     # are too short:
@@ -1745,18 +1775,9 @@ def _init_processing_per_channel_wRotation(
     # First check if there are consecutive Zeros in the data (happens for
     # example in Norsar data; this should be gaps rather than Zeros)
     st = mask_consecutive_zeros(st, min_run_length=5)
-    st = st.split()
-    removal_st = Stream()
-    for tr in st:
-        if hasattr(tr.data, 'mask'):
-            # Masked values indicate Zeros or missing data
-            n_masked_values = np.sum(tr.data.mask)
-            # Maximum 20 % should be masked
-            if n_masked_values / tr.stats.npts > 0.2:
-                removal_st += tr
-    # Remove trace if not enough real data (not masked, not Zero)
-    for tr in removal_st:
-        st.remove(tr)
+    if len(st) == 0:
+        return st
+
 
     # Second, check trace segments for strange sampling rates and segments that
     # are too short:

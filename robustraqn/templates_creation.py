@@ -72,7 +72,7 @@ def listdir_fullpath(d):
 
 
 def _shorten_tribe_streams(
-        tribe, tribe_len_pct=0.2, max_tribe_len=None,
+        tribe, trace_offset=0, tribe_len_pct=0.2, max_tribe_len=None,
         min_n_traces=0, write_out=False, make_pretty_plot=False,
         prefix='short', noise_balancing=False, apply_agc=False,
         write_individual_templates=False, check_len_strict=True):
@@ -88,9 +88,10 @@ def _shorten_tribe_streams(
         new_templ_len = max_tribe_len
     short_tribe = tribe.copy()
     for templ in short_tribe:
+        templ.trace_offset = trace_offset
         for tr in templ.st:
-            tr.trim(starttime=tr.stats.starttime,
-                    endtime=tr.stats.starttime + new_templ_len)
+            tr.trim(starttime=tr.stats.starttime + trace_offset,
+                    endtime=tr.stats.starttime + new_templ_len + trace_offset)
         if len(templ.st) >= min_n_traces:
             templ_name = templ.name
             # orig = templ.event.preferred_origin() or templ.event.origins[0]

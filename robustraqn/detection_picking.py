@@ -162,8 +162,9 @@ def prepare_and_update_party(dayparty, tribe, day_st):
 # @processify
 def pick_events_for_day(
         date, det_folder, template_path, ispaq, clients, tribe, dayparty=None,
-        short_tribe=Tribe(), det_tribe=Tribe(), stations_df=None,
-        only_request_detection_stations=True, apply_array_lag_calc=False,
+        short_tribe=Tribe(), short_tribe2=Tribe(), det_tribe=Tribe(),
+        stations_df=None, only_request_detection_stations=True,
+        apply_array_lag_calc=False,
         relevant_stations=[], sta_translation_file='', let_days_overlap=True,
         noise_balancing=False, balance_power_coefficient=2,
         remove_response=False, inv=Inventory(),
@@ -172,7 +173,7 @@ def pick_events_for_day(
         check_array_misdetections=False, xcorr_func='fmf', arch='precise',
         re_eval_thresh_factor=0.6, min_n_station_sites=4, use_weights=False,
         concurrency='concurrent', trig_int=12, minimum_sample_rate=20,
-        time_difference_threshold=8, detect_value_allowed_error=60,
+        time_difference_threshold=1, detect_value_allowed_error=60,
         threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
         archives=[], request_fdsn=False, min_det_chans=1, shift_len=0.8,
         min_cc=0.4, min_cc_from_mean_cc_factor=0.6, extract_len=240,
@@ -262,8 +263,9 @@ def pick_events_for_day(
         Logger.info('No detections left after re-thresholding for %s '
                     + 'families on %s', str(len(dayparty)),
                     current_day_str)
-        append_list_completed_days(
-            file=day_hash_file, date=current_day_str, hash=settings_hash)
+        if day_hash_file is not None:
+            append_list_completed_days(
+                file=day_hash_file, date=current_day_str, hash=settings_hash)
         return
 
     Logger.info('Starting to pick events with party of %s families for %s',
@@ -293,8 +295,10 @@ def pick_events_for_day(
         stations=required_stations, **kwargs)
     if not bulk_request:
         Logger.warning('No waveforms requested for %s', current_day_str)
-        append_list_completed_days(
-                file=day_hash_file, date=current_day_str, hash=settings_hash)
+        if day_hash_file is not None:
+            append_list_completed_days(
+                file=day_hash_file, date=current_day_str,
+                hash=settings_hash)
         return
 
     # Read in continuous data and prepare for processing
@@ -354,7 +358,8 @@ def pick_events_for_day(
     if not day_st.traces:
         Logger.warning('No data for detection on %s, continuing'
                        ' with next day.', current_day_str)
-        append_list_completed_days(
+        if day_hash_file is not None:
+            append_list_completed_days(
                 file=day_hash_file, date=current_day_str, hash=settings_hash)
         return
 
@@ -383,7 +388,25 @@ def pick_events_for_day(
         else:
             dayparty, short_party = reevaluate_detections(
                 dayparty, short_tribe, stream=day_st,
-                threshold=new_threshold-2, trig_int=trig_int/4,
+                threshold=new_threshold-1, trig_int=trig_int/4,
+                threshold_type=threshold_type,
+                re_eval_thresh_factor=re_eval_thresh_factor,
+                overlap='calculate', plotDir='ReDetectionPlots',
+                plot=False, fill_gaps=True, ignore_bad_data=True,
+                daylong=daylong, ignore_length=True, min_chans=min_det_chans,
+                pre_processed=pre_processed,
+                parallel_process=parallel, cores=cores,
+                xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
+                # xcorr_func='time_domain', concurrency='multiprocess',
+                group_size=n_templates_per_run, process_cores=cores,
+                time_difference_threshold=time_difference_threshold,
+                detect_value_allowed_error=detect_value_allowed_error,
+                return_party_with_short_templates=True,
+                min_n_station_sites=min_n_station_sites,
+                use_weights=use_weights, copy_data=copy_data, **kwargs)
+            dayparty, short_party = reevaluate_detections(
+                dayparty, short_tribe2, stream=day_st,
+                threshold=new_threshold-1, trig_int=trig_int/4,
                 threshold_type=threshold_type,
                 re_eval_thresh_factor=re_eval_thresh_factor,
                 overlap='calculate', plotDir='ReDetectionPlots',
@@ -401,8 +424,10 @@ def pick_events_for_day(
                 use_weights=use_weights, copy_data=copy_data, **kwargs)
         if not dayparty:
             Logger.warning('Party of families of detections is empty.')
-            append_list_completed_days(
-                file=day_hash_file, date=current_day_str, hash=settings_hash)
+            if day_hash_file is not None:
+                append_list_completed_days(
+                    file=day_hash_file, date=current_day_str,
+                    hash=settings_hash)
             return
         if write_party:
             if not os.path.exists('Re' + det_folder):
@@ -477,8 +502,9 @@ def pick_events_for_day(
         write_to_year_month_folders=write_to_year_month_folders,
         parallel=parallel, cores=io_cores, **kwargs)
 
-    append_list_completed_days(
-        file=day_hash_file, date=current_day_str, hash=settings_hash)
+    if day_hash_file is not None:
+        append_list_completed_days(
+            file=day_hash_file, date=current_day_str, hash=settings_hash)
 
     return export_catalog
 

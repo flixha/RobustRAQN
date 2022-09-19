@@ -2849,6 +2849,15 @@ def reevaluate_detections(
             continue
         short_det_times_np = np.array(
             [np.datetime64(d.detect_time.ns, 'ns') for d in short_fam])
+        # Adjust by trace-offset when checking with an offset short tribe
+        # (e.g., to check whether there is still significant correlation 
+        # outside the time window for the first short tribe/templates)
+        if hasattr(short_fam.template, 'trace_offset'):
+            Logger.debug(
+                'Template %s: Adjusting detection times with trace offset',
+                short_fam.template.name)
+            short_det_times_np += - np.timedelta64(
+                int(short_fam.template.trace_offset * 1e9), 'ns')
 
         # Allow to return either partys with the original templates or the
         # short templates

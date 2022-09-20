@@ -168,7 +168,7 @@ def pick_events_for_day(
         relevant_stations=[], sta_translation_file='', let_days_overlap=True,
         noise_balancing=False, balance_power_coefficient=2,
         remove_response=False, inv=Inventory(),
-        apply_agc=False, agc_window_sec=5,
+        apply_agc=False, agc_window_sec=5, blacklisted_templates=[],
         parallel=False, cores=None, io_cores=1,
         check_array_misdetections=False, xcorr_func='fmf', arch='precise',
         re_eval_thresh_factor=0.6, min_n_station_sites=4, use_weights=False,
@@ -233,6 +233,16 @@ def pick_events_for_day(
         Logger.info(
             'Read in party of %s families, %s detections, for %s from %s.',
             len(dayparty.families), len(dayparty), current_day_str, party_file)
+        # Exclude detections for templates that are blacklisted
+        if len(blacklisted_templates) > 0:
+            remove_family_list = [
+                family for family in dayparty
+                if family.template.name in blacklisted_templates]
+            #for family in dayparty:
+            #    if family.template.name in blacklisted_templates:
+            #        remove_family_list.append(family)
+        for family in remove_family_list:
+            dayparty.remove(family)
         # replace the old templates in the detection-families with those for
         # dayparty = Party([f for f in dayparty if f.template.name == '2021_10_07t19_59_36_80_templ'])
         # dayparty = Party([f for f in dayparty if f.template.name == '2018_02_23t21_15_51_38_templ'])

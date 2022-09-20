@@ -238,11 +238,8 @@ def pick_events_for_day(
             remove_family_list = [
                 family for family in dayparty
                 if family.template.name in blacklisted_templates]
-            #for family in dayparty:
-            #    if family.template.name in blacklisted_templates:
-            #        remove_family_list.append(family)
-        for family in remove_family_list:
-            dayparty.remove(family)
+            for family in remove_family_list:
+                dayparty.remove(family)
         # replace the old templates in the detection-families with those for
         # dayparty = Party([f for f in dayparty if f.template.name == '2021_10_07t19_59_36_80_templ'])
         # dayparty = Party([f for f in dayparty if f.template.name == '2018_02_23t21_15_51_38_templ'])

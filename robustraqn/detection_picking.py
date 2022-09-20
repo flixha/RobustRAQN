@@ -416,7 +416,7 @@ def pick_events_for_day(
                 dayparty, short_tribe2, stream=day_st,
                 threshold=new_threshold-1, trig_int=trig_int/4,
                 threshold_type=threshold_type,
-                re_eval_thresh_factor=re_eval_thresh_factor*0.8,
+                re_eval_thresh_factor=re_eval_thresh_factor*0.9,
                 overlap='calculate', plotDir='ReDetectionPlots',
                 plot=False, fill_gaps=True, ignore_bad_data=True,
                 daylong=daylong, ignore_length=True, min_chans=min_det_chans,

@@ -101,8 +101,8 @@ def append_list_completed_days(file, date, hash):
 
 
 def prepare_day_overlap(
-        tribe, short_tribe, stream, starttime_req, endtime_req,
-        overlap_length=600, **kwargs):
+        tribes, stream, starttime_req, endtime_req, overlap_length=600,
+        **kwargs):
     """
     set processing parameters to take care of 10 minutes overlap between days
     """
@@ -110,12 +110,11 @@ def prepare_day_overlap(
     starttime_overlap = starttime_req + 5 * 60
     endtime_overlap = endtime_req - 5 * 60
     process_length = endtime_overlap - starttime_overlap
-    for templ in tribe:
-        templ.process_length = process_length
-    for templ in short_tribe:
-        templ.process_length = process_length
+    for tribe in tribes:
+        for templ in tribe:
+            templ.process_length = process_length
     stream.trim(starttime=starttime_overlap, endtime=endtime_overlap)
-    return tribe, short_tribe, stream
+    return tribes, stream
 
 
 def get_multi_obj_hash(hash_object_list):
@@ -169,10 +168,11 @@ def run_day_detection(
         absolute_values=True, minimum_sample_rate=20,
         time_difference_threshold=3, detect_value_allowed_error=60,
         multiplot=False, day_st=Stream(), check_array_misdetections=False,
-        min_n_station_sites=4, short_tribe=Tribe(), write_party=False,
-        detection_path='Detections', redetection_path=None, copy_data=True,
-        return_stream=False, dump_stream_to_disk=False, day_hash_file=None,
-        use_weights=False, sta_translation_file=os.path.expanduser(
+        min_n_station_sites=4, short_tribe=Tribe(), short_tribe2=Tribe(),
+        write_party=False, detection_path='Detections', redetection_path=None,
+        copy_data=True, return_stream=False, dump_stream_to_disk=False,
+        day_hash_file=None, use_weights=False,
+        sta_translation_file=os.path.expanduser(
             "~/Documents2/ArrayWork/Inventory/station_code_translation.txt"),
         **kwargs):
     """
@@ -186,6 +186,7 @@ def run_day_detection(
     if not copy_data:
         tribe = tribe.copy()
         short_tribe = short_tribe.copy()
+        short_tribe2 = short_tribe2.copy()
     # Set the path to the folders with continuous data:
     # archive_path2 = '/data/seismo-wav/EIDA/archive'
     # client2 = Client(archive_path2)
@@ -218,7 +219,7 @@ def run_day_detection(
             [tribe.templates, selected_stations, remove_response, inv, ispaq,
             noise_balancing, balance_power_coefficient, xcorr_func, arch,
             trig_int, threshold, re_eval_thresh_factor, min_chans, multiplot,
-            check_array_misdetections, short_tribe, write_party,
+            check_array_misdetections, short_tribe, short_tribe2, write_party,
             detection_path, redetection_path, time_difference_threshold,
             minimum_sample_rate, min_n_station_sites, apply_agc,
             agc_window_sec, use_weights])
@@ -369,8 +370,10 @@ def run_day_detection(
     daylong = True
     if let_days_overlap:
         daylong = False
-        tribe, short_tribe, day_st = prepare_day_overlap(
-            tribe, short_tribe, day_st, starttime_req, endtime_req)
+        tribes, day_st = prepare_day_overlap(
+            [tribe, short_tribe, short_tribe2], day_st, starttime_req,
+            endtime_req)
+        tribe, short_tribe, short_tribe2 = tribes
 
     pre_processed = False
     if apply_agc and agc_window_sec:
@@ -473,6 +476,25 @@ def run_day_detection(
                 return_party_with_short_templates=True,
                 min_n_station_sites=min_n_station_sites,
                 use_weights=use_weights, copy_data=copy_data, **kwargs)
+            if len(short_tribe2) > 0:
+                dayparty, short_party = reevaluate_detections(
+                    dayparty, short_tribe2, stream=day_st,
+                    threshold=threshold, trig_int=trig_int,
+                    threshold_type=threshold_type,
+                    re_eval_thresh_factor=re_eval_thresh_factor*0.8,
+                    overlap='calculate', plotDir='ReDetectionPlots',
+                    plot=False, fill_gaps=True, ignore_bad_data=True,
+                    daylong=daylong, ignore_length=True,
+                    min_chans=min_det_chans, pre_processed=pre_processed,
+                    parallel_process=parallel, cores=cores,
+                    xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
+                    # xcorr_func='time_domain', concurrency='multiprocess',
+                    group_size=n_templates_per_run, process_cores=cores,
+                    time_difference_threshold=time_difference_threshold,
+                    detect_value_allowed_error=detect_value_allowed_error,
+                    return_party_with_short_templates=True,
+                    min_n_station_sites=min_n_station_sites,
+                    use_weights=use_weights, copy_data=copy_data, **kwargs)
 
             append_list_completed_days(
                 file=day_hash_file, date=current_day_str, hash=settings_hash)

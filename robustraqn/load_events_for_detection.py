@@ -2916,7 +2916,7 @@ def reevaluate_detections(
         n_detections = len(long_return_party)
         n_families = len(long_return_party.families)
     Logger.info(
-        'Re-evaluation of %s detections (%s families) finished , remaining are'
+        'Re-evaluation of %s detections (%s families) finished, remaining are'
         ' %s detections (%s families).', n_detections_in, n_families_in,
         n_detections, n_families)
 

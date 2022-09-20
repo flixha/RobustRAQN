@@ -230,8 +230,9 @@ def pick_events_for_day(
             return
         if not dayparty:
             return
-        Logger.info('Read in party of %s families for %s from %s.',
-                    str(len(dayparty)), current_day_str, party_file)
+        Logger.info(
+            'Read in party of %s families, %s detections, for %s from %s.',
+            len(dayparty.families), len(dayparty), current_day_str, party_file)
         # replace the old templates in the detection-families with those for
         # dayparty = Party([f for f in dayparty if f.template.name == '2021_10_07t19_59_36_80_templ'])
         # dayparty = Party([f for f in dayparty if f.template.name == '2018_02_23t21_15_51_38_templ'])
@@ -404,7 +405,7 @@ def pick_events_for_day(
                 return_party_with_short_templates=True,
                 min_n_station_sites=min_n_station_sites,
                 use_weights=use_weights, copy_data=copy_data, **kwargs)
-            dayparty, short_party = reevaluate_detections(
+            dayparty, short_party2 = reevaluate_detections(
                 dayparty, short_tribe2, stream=day_st,
                 threshold=new_threshold-1, trig_int=trig_int/4,
                 threshold_type=threshold_type,

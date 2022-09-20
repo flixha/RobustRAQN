@@ -2755,6 +2755,8 @@ def reevaluate_detections(
     # TODO: function should always return both the party for the long templates
     #       that have a short-template detection, and the party for the short
     #       templates.
+    n_families_in = len(party.families)
+    n_detections_in = len(party)
     checked_party = Party()
     for family in party:
         checked_family = family.copy()
@@ -2905,14 +2907,18 @@ def reevaluate_detections(
             short_return_party += short_family
 
     if len(long_return_party) == 0:
-        n_det = 0
+        n_detections = 0
+        n_families = 0
     else:
     #     return_party = return_party.decluster(
     #         trig_int=trig_int, timing='detect', metric='thresh_exc',
     #         min_chans=min_chans, absolute_values=True)
-        n_det = len([d for f in long_return_party for d in f])
-    Logger.info('Re-evaluation finished, remaining are %s detections.',
-                str(n_det))
+        n_detections = len(long_return_party)
+        n_families = len(long_return_party.families)
+    Logger.info(
+        'Re-evaluation of %s detections (%s families) finished , remaining are'
+        ' %s detections (%s families).', n_detections_in, n_families_in,
+        n_detections, n_families)
 
     return long_return_party, short_return_party
 

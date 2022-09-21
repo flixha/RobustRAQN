@@ -41,14 +41,14 @@ SEISARRAY_PREFIXES = [
     '@(NAO|NAO0[0-6])', '@(NBO|NBO0[0-6])', '@(NB2|NB20[0-6]|NOA)',
     '@(NC2|NC20[0-6])', '@(NC3|NC30[0-6])', '@(NC4|NC40[0-6])',
     '@(NC6|NC60[0-6])', 'NR[ABCD][0-9]',
-    '@(ASK|ASK[1-5])', '@(MOR|MOR[1-8])', '@(KTK|KTK[1-6])',
+    # '@(ASK|ASK[1-5])', '@(MOR|MOR[1-8])', '@(KTK|KTK[1-6])',
     '@(ARCES|AR[ABCDE][0-9])', '@(SPITS|SP[ABC][0-5])',
     '@(BEAR|BJO|BJO1|BEA[1-6])', '@(EKO[0-9]|EKO[0-9][0-9])',
     'OSE[0-9][0-9]', 'GRA[0-9][0-9]', 'SNO[0-9][0-9]',
     '@(HNAR|HN[AB][0-6]|BAS02)',
     '@(EKA|ESK|EKB*|EKR*)', '@(ILAR|IL[0-3][0-9])',
     '@(YKA|YKA[BRW][0-9]|YK[BRW]*[0-9])',
-    '@(OBS[0-6]|OBS1[1-2])'  # OBS
+    # '@(OBS[0-6]|OBS1[1-2])'  # OBS
 ]
 
 LARGE_APERTURE_SEISARRAY_PREFIXES = [

@@ -216,10 +216,10 @@ def postprocess_picked_events(
     export_catalog = Catalog()
     for event in picked_catalog:
         # Correct Picks by the pre-Template time
-        num_pPicks = 0
-        num_sPicks = 0
-        num_pPicks_onDetSta = 0
-        num_sPicks_onDetSta = 0
+        num_p_picks = 0
+        num_s_picks = 0
+        num_p_picks_on_det_sta = 0
+        num_s_picks_on_det_sta = 0
         pick_stations = []
         s_pick_stations = []
         pick_and_detect_stations = []
@@ -272,11 +272,11 @@ def postprocess_picked_events(
 
             # pick.time = pick.time + 0.2
             if pick.phase_hint[0] == 'P':
-                num_pPicks += 1
+                num_p_picks += 1
             elif pick.phase_hint[0] == 'S':
                 sPick_Station = pick.waveform_id.station_code
                 if sPick_Station not in s_pick_stations:
-                    num_sPicks += 1
+                    num_s_picks += 1
                     s_pick_stations.append(sPick_Station)
             # Count the number of picks on stations used
             # during match-filter detection
@@ -285,9 +285,9 @@ def postprocess_picked_events(
                 if pick_station not in pick_and_detect_stations:
                     pick_and_detect_stations.append(pick_station)
                 if pick.phase_hint[0] == 'P':
-                    num_pPicks_onDetSta += 1
+                    num_p_picks_on_det_sta += 1
                 elif pick.phase_hint[0] == 'S':
-                    num_sPicks_onDetSta += 1
+                    num_s_picks_on_det_sta += 1
             # Put the original (non-normalized) channel information back into
             # the pick's stats.
             # Make sure to check for [1,2,etc]-channels if the data were
@@ -345,9 +345,9 @@ def postprocess_picked_events(
         # event.origins.append(orig)
         # event.preferred_origin_id = orig.resource_id
         Logger.info(
-            'PickCheck: ' + str(event.origins[0].time) + ' P_d: ' +
-            str(num_pPicks_onDetSta) + ' S_d ' + str(num_sPicks_onDetSta) +
-            ' P: ' + str(num_pPicks) + ' S: ' + str(num_sPicks))
+            'PickCheck: %s P_d: %s S_d: %s, P: %s, S: %s',
+            str(event.origins[0].time), num_p_picks_on_det_sta,
+            num_s_picks_on_det_sta, num_p_picks, num_s_picks)
 
         # Add comment to event to save detection-id
         event.comments.append(Comment(
@@ -369,16 +369,16 @@ def postprocess_picked_events(
         # TODO: nordic write function may not prop. translate type uncertainty
         event.event_descriptions = family.template.event.event_descriptions
         # if (len(pick_stations) >= 3\
-        #     and num_pPicks_onDetSta >= 2\
-        #     and num_pPicks_onDetSta + num_sPicks_onDetSta >= 6)\
+        #     and num_p_picks_on_det_sta >= 2\
+        #     and num_p_picks_on_det_sta + num_s_picks_on_det_sta >= 6)\
         #     or (len(pick_stations) >= 4\
-        #     and num_sPicks_onDetSta >= 5):
+        #     and num_s_picks_on_det_sta >= 5):
         unique_stations = list(set([
             p.waveform_id.station_code for p in event.picks]))
         n_station_sites = len(list(set(get_station_sites(unique_stations))))
         if ((len(pick_stations) >= min_pick_stations) and 
                 n_station_sites >= min_n_station_sites and (
-                num_pPicks_onDetSta + num_sPicks_onDetSta >=
+                num_p_picks_on_det_sta + num_s_picks_on_det_sta >=
                 min_picks_on_detection_stations)):
             export_catalog += event
 

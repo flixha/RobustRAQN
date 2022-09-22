@@ -2886,10 +2886,10 @@ def reevaluate_detections(
                 # get the matching short-detection
                 sdi = np.argmin(time_diffs)
                 short_det = short_fam[sdi]
-                # If detection-value is now better within error, only then keep
-                # the original detection.
+                # If detection-value is now better or at least not a lot worse
+                # within allowed error, only then keep the original detection.
                 if (abs(short_det.detect_val) >= abs(
-                  det.detect_val * (1 - detect_value_allowed_error/100))):
+                  det.detect_val * (1 - detect_value_allowed_error / 100))):
                     # if return_party_with_short_templates:
                     #     return_family += short_det
                     # else:

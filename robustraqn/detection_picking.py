@@ -429,7 +429,7 @@ def pick_events_for_day(
                 # xcorr_func='time_domain', concurrency='multiprocess',
                 group_size=n_templates_per_run, process_cores=cores,
                 time_difference_threshold=time_difference_threshold,
-                detect_value_allowed_error=detect_value_allowed_error,
+                detect_value_allowed_error=detect_value_allowed_error*2,
                 return_party_with_short_templates=True,
                 min_n_station_sites=min_n_station_sites,
                 use_weights=use_weights, copy_data=copy_data, **kwargs)

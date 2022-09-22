@@ -858,8 +858,8 @@ def add_array_station_picks(
                     phase_hint, str(baz), str(horizontal_slowness_spkm),
                     event.short_str())
                 continue
-            sll_x = math.cos(math.radians(baz)) * horizontal_slowness_spkm
-            sll_y = math.sin(math.radians(baz)) * horizontal_slowness_spkm
+            sll_x = math.sin(math.radians(baz)) * horizontal_slowness_spkm
+            sll_y = math.cos(math.radians(baz)) * horizontal_slowness_spkm
             # timeshifts2 = -array_geometry[:,2] / 1000 * 1/3
             pick_time_list = []
             pick_time_list_ns = []

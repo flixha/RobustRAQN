@@ -171,7 +171,8 @@ def pick_events_for_day(
         apply_agc=False, agc_window_sec=5, blacklisted_templates=[],
         parallel=False, cores=None, io_cores=1,
         check_array_misdetections=False, xcorr_func='fmf', arch='precise',
-        re_eval_thresh_factor=0.6, min_n_station_sites=4, use_weights=False,
+        re_eval_thresh_factor=0.6, min_pick_stations=5,
+        min_picks_on_detection_stations=4, min_n_station_sites=4, use_weights=False,
         concurrency='concurrent', trig_int=12, minimum_sample_rate=20,
         time_difference_threshold=1, detect_value_allowed_error=60,
         threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
@@ -508,7 +509,9 @@ def pick_events_for_day(
         operator=operator, all_channels_for_stations=relevant_stations,
         extract_len=extract_len, write_waveforms=True, archives=archives,
         request_fdsn=request_fdsn, template_path=template_path,
-        min_pick_stations=8, min_picks_on_detection_stations=3,
+        min_n_station_sites=min_n_station_sites,
+        min_pick_stations=min_pick_stations, 
+        min_picks_on_detection_stations=min_picks_on_detection_stations,
         write_to_year_month_folders=write_to_year_month_folders,
         parallel=parallel, cores=io_cores, **kwargs)
 

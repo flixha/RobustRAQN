@@ -346,13 +346,15 @@ def pick_events_for_day(
         balance_power_coefficient=balance_power_coefficient, **kwargs)
 
     daylong = True
+    tribes = [tribe, short_tribe, short_tribe2]
     if let_days_overlap:
         daylong = False
-        tribe, short_tribe, day_st = prepare_day_overlap(
-            tribe, short_tribe, day_st, starttime_req, endtime_req, **kwargs)
+        tribes, day_st = prepare_day_overlap(
+            tribes, day_st, starttime_req, endtime_req, **kwargs)
     else:
-        tribe, short_tribe, day_st = prepare_day_overlap(
-            tribe, short_tribe, day_st, starttime, endtime, overlap_length=0)
+        tribes, day_st = prepare_day_overlap(
+            tribes, day_st, starttime, endtime, overlap_length=0)
+    tribe, short_tribe, short_tribe2 = tribes
 
     # WHY NEEDED HERE????
     # day_st.merge(method=0, fill_value=0, interpolation_samples=0)

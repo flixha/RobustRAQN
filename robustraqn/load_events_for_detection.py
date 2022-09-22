@@ -1665,7 +1665,7 @@ def mask_consecutive_zeros(st, min_run_length=5, min_data_percentage=80,
     # Remove trace if not enough real data (not masked, not Zero)
     for tr in removal_st:
         Logger.info(
-            'After masking consecutive zeros, there is  less than %s "%" data '
+            'After masking consecutive zeros, there is less than %s %% data '
             'for trace %s - removing.', min_data_percentage, tr.id)
         st.remove(tr)
     return st

@@ -183,6 +183,11 @@ def run_day_detection(
     #  - - - - Probably not needed if it is also done in EQcorrscan, else COPY!
     #  - - - - It looks like it's quicker to copy each batch itself within
     #          EQcorrscan rather than copy the full tribe
+    if (arch == 'precise' and
+            concurrency not in ['multiprocess', 'multithread']):
+        concurrency = 'multiprocess'
+
+    
     if not copy_data:
         tribe = tribe.copy()
         short_tribe = short_tribe.copy()

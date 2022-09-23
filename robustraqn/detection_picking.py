@@ -174,8 +174,8 @@ def pick_events_for_day(
         apply_agc=False, agc_window_sec=5, blacklisted_templates=[],
         parallel=False, cores=None, io_cores=1,
         check_array_misdetections=False, xcorr_func='fmf', arch='precise',
-        re_eval_thresh_factor=0.6, min_pick_stations=5,
-        min_picks_on_detection_stations=4, min_n_station_sites=4, use_weights=False,
+        re_eval_thresh_factor=0.6, use_weights=False, min_pick_stations=5,
+        min_picks_on_detection_stations=4, min_n_station_sites=4,
         concurrency='concurrent', trig_int=12, minimum_sample_rate=20,
         time_difference_threshold=1, detect_value_allowed_reduction=2.5,
         threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
@@ -204,11 +204,14 @@ def pick_events_for_day(
             trig_int, new_threshold, threshold_type, min_det_chans,
             minimum_sample_rate, archives, request_fdsn, shift_len, min_cc,
             min_cc_from_mean_cc_factor, extract_len, all_vert, all_horiz,
-            check_array_misdetections, short_tribe, write_party,
+            check_array_misdetections, short_tribe, short_tribe2,
+            re_eval_thresh_factor, detect_value_allowed_reduction,
+            time_difference_threshold,
             vertical_chans, horizontal_chans, det_folder, template_path,
             time_difference_threshold, minimum_sample_rate, apply_agc,
             agc_window_sec, interpolate, use_new_resamp_method,
-            ignore_cccsum_comparison])
+            ignore_cccsum_comparison, min_pick_stations,
+            min_picks_on_detection_stations, min_n_station_sites])
         # Check hash against existing list
         try:
             day_hash_df = pd.read_csv(day_hash_file, names=["date", "hash"])

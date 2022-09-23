@@ -1834,13 +1834,6 @@ def _init_processing_per_channel_wRotation(
             sta_translation_file=sta_translation_file)
         st = st.taper(0.005, type='hann', max_length=None, side='both')
 
-    # TODO: agc needs to be moved to after filtering
-    # if apply_agc and agc_window_sec and agc_method:
-    #     Logger.info('Applying AGC...')
-    #     # Using the "newest" Stream below (copied within the AGC function)
-    #     # st = _automatic_gain_control(st, agc_window_sec=, agc_method=agc_method)
-    #     st = st.agc(agc_window_sec=agc_window_sec, agc_method=agc_method)
-
     # Put masked array into response-corrected stream st:
     for j, tr in enumerate(st):
         if isinstance(masked_st[j].data, np.ma.MaskedArray):
@@ -2057,9 +2050,9 @@ def check_normalize_sampling_rate(
                         # TODO: can this be done quicker with resample?
                         # tr.interpolate(sampling_rate=def_channel_sample_rate,
                         #               method=interpolation_method, a=25)
-                        tr.resample(sampling_rate=def_channel_sample_rate,
-                                    window='hanning', no_filter=True,
-                                    strict_length=False)
+                        tr.resample(
+                            sampling_rate=def_channel_sample_rate,
+                            window='hann', no_filter=True, strict_length=False)
 
                         # Make sure data have the same datatype as before
                         if tr.data.dtype is not raw_datatype:
@@ -2733,7 +2726,7 @@ def reevaluate_detections(
         parallel_process=False, cores=None, xcorr_func='fftw',
         concurrency=None, arch='precise', group_size=1, full_peaks=False,
         save_progress=False, process_cores=None, spike_test=False, min_chans=4,
-        time_difference_threshold=1, detect_value_allowed_error=60,
+        time_difference_threshold=3, detect_value_allowed_reduction=2.5,
         return_party_with_short_templates=False, min_n_station_sites=4,
         use_weights=False, copy_data=True, **kwargs):
     """
@@ -2747,7 +2740,7 @@ def reevaluate_detections(
     """
     # Maybe do some checks to see if tribe and short_tribe have somewhat of the
     # same templates?
-    
+
     # Check there's enough individual station sites for detection - otherwise
     # don't bother with the detection. This should avoid spurious picks that
     # are only due to one array.
@@ -2826,7 +2819,7 @@ def reevaluate_detections(
         ignore_length=ignore_length,
         parallel_process=parallel_process, cores=cores,
         concurrency=concurrency, xcorr_func=xcorr_func, arch=arch,
-        group_size=group_size,
+        group_size=group_size, output_event=False,
         full_peaks=full_peaks, save_progress=save_progress,
         process_cores=process_cores, spike_test=spike_test,
         use_weights=use_weights, copy_data=copy_data, **kwargs)
@@ -2878,28 +2871,62 @@ def reevaluate_detections(
                 int(time_difference_threshold * 1E9), 'ns')
             # If there is a short-detection close enough in time to the
             # original detection, then check detection values:
+            # TODO: here I should pick the detection with the best detection-
+            #       value within the time_difference_threshold, so I don't 
+            #       pick a spurious value right next to it.
             if not any(time_diffs <= time_diff_thresh):
                 Logger.debug('No detections within time-threshold found during '
                              + 're-evaluation of %s at %s', det.template_name,
                              det.detect_time)
             else:
+                # Filter short-detections within time error threshold:
+                t_diff_ind = np.arange(0, len(time_diffs))  # make index array
+                # candidate_time_diffs = time_diffs[
+                #     time_diffs <= time_diff_thresh]
+                # Filter index array for detections within time threshold
+                candidate_indices = t_diff_ind[time_diffs <= time_diff_thresh]
+                # Find best detection within time threshold
+                detection_values = [
+                    detec.detect_val for id, detec in enumerate(short_fam)
+                    if id in candidate_indices]
+                cand_index = np.argmax(abs(np.array(detection_values)))
+                sdi = candidate_indices[cand_index]
                 # get the matching short-detection
-                sdi = np.argmin(time_diffs)
+                # sdi = np.argmin(time_diffs)
                 short_det = short_fam[sdi]
                 # If detection-value is now better or at least not a lot worse
                 # within allowed error, only then keep the original detection.
-                if (abs(short_det.detect_val) >= abs(
-                  det.detect_val * (1 - detect_value_allowed_error / 100))):
+                det_value_deviation_limit = abs(
+                    det.detect_val / detect_value_allowed_reduction)
+                # Compare MAD exceedance: If channels in templates have changed
+                # between detection and picking, then detect_val may have
+                # changed more than allowed, but as long as MAD is just a bit
+                # the short-template detection should also be accepted.
+                if threshold_type == 'MAD':
+                    long_det_mad_exc = abs(det.detect_val / det.threshold)
+                    mad_det_value_deviation_limit = (
+                        long_det_mad_exc / detect_value_allowed_reduction)
+                    short_det_mad_exc = abs(
+                        short_det.detect_val / short_det.threshold)
+                # Compare detection value for short vs long template
+                if (abs(short_det.detect_val) >= det_value_deviation_limit):
                     # if return_party_with_short_templates:
                     #     return_family += short_det
                     # else:
                     #     return_family += det
                     long_family += det
                     short_family += short_det
+                elif (threshold_type == 'MAD' and
+                      short_det_mad_exc >= mad_det_value_deviation_limit):
+                    long_family += det
+                    short_family += short_det
                 else:
-                    Logger.info('Re-evaluation detections did not meet '
-                                + 'detection-value criterion for %s at %s',
-                                det.template_name, det.detect_time)
+                    Logger.info(
+                        'Re-evaluation detections did not meet detection-value'
+                        ' criterion for %s at %s (orig det. value: %s, new '
+                        'det. value: %s, limit: %s', det.template_name,
+                        det.detect_time, det.detect_val,
+                        abs(short_det.detect_val), det_value_deviation_limit)
         # if len(return_family) >= 0:
         #     return_party += return_family
         if len(long_family) >= 0:

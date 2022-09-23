@@ -59,7 +59,8 @@ EQCS_logger.setLevel(logging.ERROR)
 def prepare_and_update_party(dayparty, tribe, day_st):
     """
     If the template was updated since the detection run, then the party and its
-    detections need to be updated with some information (pick-times, channels)
+    detections need to be updated with some information (pick-times, channels,
+    template name)
     """
     if len(tribe) == 0:
         return dayparty
@@ -156,6 +157,8 @@ def prepare_and_update_party(dayparty, tribe, day_st):
             detection.chans = sorted(
                 day_st_chans.intersection(templ_st_chans))
         family.template = pick_template
+        for detection in family:
+            detection.template_name = pick_template.name
     return dayparty
 
 
@@ -174,7 +177,7 @@ def pick_events_for_day(
         re_eval_thresh_factor=0.6, min_pick_stations=5,
         min_picks_on_detection_stations=4, min_n_station_sites=4, use_weights=False,
         concurrency='concurrent', trig_int=12, minimum_sample_rate=20,
-        time_difference_threshold=1, detect_value_allowed_error=60,
+        time_difference_threshold=1, detect_value_allowed_reduction=2.5,
         threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
         archives=[], request_fdsn=False, min_det_chans=1, shift_len=0.8,
         min_cc=0.4, min_cc_from_mean_cc_factor=0.6, extract_len=240,
@@ -248,7 +251,7 @@ def pick_events_for_day(
         # dayparty = Party([f for f in dayparty if f.template.name == '2004_10_14t10_17_46_70_templ'])
         # 2004_10_14t10_17_46_70_templ_20190501_181532100000
         # dayparty = Party([f for f in dayparty if f.template.name == '2019_06_04t13_41_43_80_templ'])
-        # dayparty = Party([f for f in dayparty if f.template.name == '2005_02_26t15_41_57_20_templ'])
+        dayparty = Party([f for f in dayparty if f.template.name.startswith('2001_08_08t09_56_1')])
         # dayparty[0].detections = [dayparty[0].detections[0]]
 
         # 2019_10_15t02_43_11_50_templ_20190802_072130169538
@@ -278,7 +281,7 @@ def pick_events_for_day(
         return
 
     Logger.info('Starting to pick events with party of %s families for %s',
-                str(len(dayparty)), current_day_str)
+                len(dayparty.families), current_day_str)
     # Choose only stations that are relevant for any detection on that day.
     required_stations = relevant_stations
     if only_request_detection_stations:
@@ -411,7 +414,7 @@ def pick_events_for_day(
                 # xcorr_func='time_domain', concurrency='multiprocess',
                 group_size=n_templates_per_run, process_cores=cores,
                 time_difference_threshold=time_difference_threshold,
-                detect_value_allowed_error=detect_value_allowed_error,
+                detect_value_allowed_reduction=detect_value_allowed_reduction,
                 return_party_with_short_templates=True,
                 min_n_station_sites=min_n_station_sites,
                 use_weights=use_weights, copy_data=copy_data, **kwargs)
@@ -429,7 +432,8 @@ def pick_events_for_day(
                 # xcorr_func='time_domain', concurrency='multiprocess',
                 group_size=n_templates_per_run, process_cores=cores,
                 time_difference_threshold=time_difference_threshold,
-                detect_value_allowed_error=detect_value_allowed_error*2,
+                detect_value_allowed_reduction=(
+                    detect_value_allowed_reduction * 1.2),
                 return_party_with_short_templates=True,
                 min_n_station_sites=min_n_station_sites,
                 use_weights=use_weights, copy_data=copy_data, **kwargs)

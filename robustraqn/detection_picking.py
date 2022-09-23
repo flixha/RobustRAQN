@@ -254,7 +254,7 @@ def pick_events_for_day(
         # dayparty = Party([f for f in dayparty if f.template.name == '2004_10_14t10_17_46_70_templ'])
         # 2004_10_14t10_17_46_70_templ_20190501_181532100000
         # dayparty = Party([f for f in dayparty if f.template.name == '2019_06_04t13_41_43_80_templ'])
-        dayparty = Party([f for f in dayparty if f.template.name.startswith('2001_08_08t09_56_1')])
+        # dayparty = Party([f for f in dayparty if f.template.name.startswith('2001_08_08t09_56_1')])
         # dayparty[0].detections = [dayparty[0].detections[0]]
 
         # 2019_10_15t02_43_11_50_templ_20190802_072130169538

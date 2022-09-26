@@ -162,7 +162,7 @@ def prepare_and_update_party(dayparty, tribe, day_st):
     return dayparty
 
 
-# @processify
+#@fancy_processify
 def pick_events_for_day(
         date, det_folder, template_path, ispaq, clients, tribe, dayparty=None,
         short_tribe=Tribe(), short_tribe2=Tribe(), det_tribe=Tribe(),
@@ -186,7 +186,10 @@ def pick_events_for_day(
         all_vert=True, all_horiz=True, vertical_chans=['Z', 'H'],
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
         sfile_path='Sfiles', write_to_year_month_folders=False,
-        operator='EQC', day_hash_file=None, copy_data=True, **kwargs):
+        operator='EQC', day_hash_file=None, copy_data=True,
+        redecluster=False, clust_trig_int=30, timing='detect',
+        decluster_metric='thresh_exc', hypocentral_separation=False,
+        min_chans=13, absolute_values=True, **kwargs):
     """
     Day-loop for picker
     """
@@ -282,6 +285,21 @@ def pick_events_for_day(
             append_list_completed_days(
                 file=day_hash_file, date=current_day_str, hash=settings_hash)
         return
+
+    if redecluster:
+        dayparty = dayparty.decluster(
+            trig_int=clust_trig_int, timing='detect', metric=decluster_metric,
+            hypocentral_separation=hypocentral_separation,
+            min_chans=min_chans, absolute_values=absolute_values)
+        n_det1 = len([d for f in dayparty for d in f])
+        # 2nd pass to decluster based on origin times
+        dayparty = dayparty.decluster(
+            trig_int=clust_trig_int, timing='origin', metric=decluster_metric,
+            hypocentral_separation=hypocentral_separation,
+            min_chans=min_chans, absolute_values=absolute_values)
+        n_det2 = len([d for f in dayparty for d in f])
+        Logger.info('Short party: After two-stage declustering, %s '
+                    '(%s on 1st round) detections are left',  n_det2, n_det1)
 
     Logger.info('Starting to pick events with party of %s families for %s',
                 len(dayparty.families), current_day_str)

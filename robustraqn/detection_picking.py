@@ -187,9 +187,8 @@ def pick_events_for_day(
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
         sfile_path='Sfiles', write_to_year_month_folders=False,
         operator='EQC', day_hash_file=None, copy_data=True,
-        redecluster=False, clust_trig_int=30, timing='detect',
-        decluster_metric='thresh_exc', hypocentral_separation=False,
-        min_chans=13, absolute_values=True, **kwargs):
+        redecluster=False, clust_trig_int=30, decluster_metric='thresh_exc',
+        hypocentral_separation=False, min_chans=13, absolute_values=True, **kwargs):
     """
     Day-loop for picker
     """
@@ -287,6 +286,7 @@ def pick_events_for_day(
         return
 
     if redecluster:
+        n_det_init = len([d for f in dayparty for d in f])
         dayparty = dayparty.decluster(
             trig_int=clust_trig_int, timing='detect', metric=decluster_metric,
             hypocentral_separation=hypocentral_separation,
@@ -298,8 +298,10 @@ def pick_events_for_day(
             hypocentral_separation=hypocentral_separation,
             min_chans=min_chans, absolute_values=absolute_values)
         n_det2 = len([d for f in dayparty for d in f])
-        Logger.info('Short party: After two-stage declustering, %s '
-                    '(%s on 1st round) detections are left',  n_det2, n_det1)
+        Logger.info(
+            'Re-declustering party: Out of %s initial detections, after two-'
+            'stage declustering, %s (%s on 1st round) detections are left',
+            n_det_init, n_det2, n_det1)
 
     Logger.info('Starting to pick events with party of %s families for %s',
                 len(dayparty.families), current_day_str)

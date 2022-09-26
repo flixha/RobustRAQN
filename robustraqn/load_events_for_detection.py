@@ -2948,6 +2948,12 @@ def reevaluate_detections(
                         'det. value: %s, limit: %s', det.template_name,
                         det.detect_time, det.detect_val,
                         abs(short_det.detect_val), det_value_deviation_limit)
+                    if threshold_type == 'MAD':
+                        Logger.info(
+                        'MAD values change for %s at %s (orig MAD exceedance '
+                        '%s, new MAD exc. %s, limit: %s', det.template_name,
+                        det.detect_time, long_det_mad_exc, short_det_mad_exc,
+                        mad_det_value_deviation_limit)
         # if len(return_family) >= 0:
         #     return_party += return_family
         if len(long_family) >= 0:

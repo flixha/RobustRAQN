@@ -200,18 +200,18 @@ def pick_events_for_day(
                     'performed before...')
         settings_hash = get_multi_obj_hash(
             [tribe.templates, relevant_stations, remove_response, inv, ispaq,
-            noise_balancing, balance_power_coefficient, xcorr_func, arch,
-            trig_int, new_threshold, threshold_type, min_det_chans,
-            minimum_sample_rate, archives, request_fdsn, shift_len, min_cc,
-            min_cc_from_mean_cc_factor, extract_len, all_vert, all_horiz,
-            check_array_misdetections, short_tribe, short_tribe2,
-            re_eval_thresh_factor, detect_value_allowed_reduction,
-            time_difference_threshold,
-            vertical_chans, horizontal_chans, det_folder, template_path,
-            time_difference_threshold, minimum_sample_rate, apply_agc,
-            agc_window_sec, interpolate, use_new_resamp_method,
-            ignore_cccsum_comparison, min_pick_stations,
-            min_picks_on_detection_stations, min_n_station_sites])
+             noise_balancing, balance_power_coefficient, xcorr_func, arch,
+             trig_int, new_threshold, threshold_type, min_det_chans,
+             minimum_sample_rate, archives, request_fdsn, shift_len, min_cc,
+             min_cc_from_mean_cc_factor, extract_len, all_vert, all_horiz,
+             check_array_misdetections, short_tribe.templates,
+             short_tribe2.templates, re_eval_thresh_factor,
+             detect_value_allowed_reduction, time_difference_threshold,
+             vertical_chans, horizontal_chans, det_folder, template_path,
+             time_difference_threshold, minimum_sample_rate, apply_agc,
+             agc_window_sec, interpolate, use_new_resamp_method,
+             ignore_cccsum_comparison, min_pick_stations,
+             min_picks_on_detection_stations, min_n_station_sites])
         # Check hash against existing list
         try:
             day_hash_df = pd.read_csv(day_hash_file, names=["date", "hash"])

@@ -1632,21 +1632,25 @@ def mask_consecutive_zeros(st, min_run_length=5, min_data_percentage=80,
         starttime = min([tr.stats.starttime for tr in st])
     if endtime is None:
         endtime = min([tr.stats.endtime for tr in st])
-    for tr in st:
-        consecutive_zeros_mask = _mask_consecutive(
-            tr.data, value_to_mask=0, min_run_length=min_run_length, axis=-1)
-        # Convert trace data to masked array if required
-        if np.any(consecutive_zeros_mask):
-            Logger.info(
-                'Trace %s contains more than %s consecutive zeros, '
-                'masking Zero data', tr, min_run_length)
-            tr.data = np.ma.MaskedArray(
-                data=tr.data, mask=consecutive_zeros_mask, fill_value=None)
-    st = st.split()  # After splitting there should be no masks
+    if min_run_length is not None:
+        for tr in st:
+            consecutive_zeros_mask = _mask_consecutive(
+                tr.data, value_to_mask=0, min_run_length=min_run_length,
+                axis=-1)
+            # Convert trace data to masked array if required
+            if np.any(consecutive_zeros_mask):
+                Logger.info(
+                    'Trace %s contains more than %s consecutive zeros, '
+                    'masking Zero data', tr, min_run_length)
+                tr.data = np.ma.MaskedArray(
+                    data=tr.data, mask=consecutive_zeros_mask, fill_value=None)
+        st = st.split()  # After splitting there should be no masks
     removal_st = Stream()
     min_data_fraction = min_data_percentage / 100
+    streams_are_masked = False
     for tr in st:
         if hasattr(tr.data, 'mask'):
+            streams_are_masked = True
             # Masked values indicate Zeros or missing data
             n_masked_values = np.sum(tr.data.mask)
             # Maximum 20 % should be masked
@@ -1654,14 +1658,15 @@ def mask_consecutive_zeros(st, min_run_length=5, min_data_percentage=80,
                 removal_st += tr
     # Once traces are split they should not have masks any more. So need to
     # check length of data in trace again.
-    uniq_tr_ids = list(set([tr.id for tr in st]))
-    for uniq_tr_id in uniq_tr_ids:
-        trace_len_in_seconds = np.sum(
-            [tr.stats.npts / tr.stats.sampling_rate for tr in st])
-        if trace_len_in_seconds < (endtime - starttime) * min_data_fraction:
-            for tr in st:
-                if tr not in removal_st and tr.id == uniq_tr_id:
-                    removal_st += tr
+    if not streams_are_masked:
+        uniq_tr_ids = list(set([tr.id for tr in st]))
+        for uniq_tr_id in uniq_tr_ids:
+            trace_len_in_seconds = np.sum(
+                [tr.stats.npts / tr.stats.sampling_rate for tr in st])
+            if trace_len_in_seconds < (endtime - starttime) * min_data_fraction:
+                for tr in st:
+                    if tr not in removal_st and tr.id == uniq_tr_id:
+                        removal_st += tr
     # Remove trace if not enough real data (not masked, not Zero)
     for tr in removal_st:
         Logger.info(
@@ -1748,6 +1753,13 @@ def _init_processing_per_channel(
     for j, tr in enumerate(st):
         if isinstance(masked_st[j].data, np.ma.MaskedArray):
             tr.data = np.ma.masked_array(tr.data, mask=masked_st[j].data.mask)
+    
+    # Check that at least 80 (x) % of data are not masked:
+    # TODO: Don't do consecutive Zero checks here, just the other checks 
+    st = mask_consecutive_zeros(
+        st, min_run_length=None, starttime=starttime, endtime=endtime)
+    if len(st) == 0:
+        return st
 
     # Downsample if necessary
     if downsampled_max_rate is not None:
@@ -1853,6 +1865,13 @@ def _init_processing_per_channel_wRotation(
             if tr.stats.sampling_rate > downsampled_max_rate:
                 tr.resample(sampling_rate=downsampled_max_rate,
                             no_filter=False)
+
+    # Check that at least 80 (x) % of data are not masked:
+    # TODO: Don't do consecutive Zero checks here, just the other checks 
+    st = mask_consecutive_zeros(
+        st, min_run_length=None, starttime=starttime, endtime=endtime)
+    if len(st) == 0:
+        return st
 
     outtoc = default_timer()
     try:
@@ -2823,6 +2842,8 @@ def reevaluate_detections(
         full_peaks=full_peaks, save_progress=save_progress,
         process_cores=process_cores, spike_test=spike_test,
         use_weights=use_weights, copy_data=copy_data, **kwargs)
+    # TODO: Sanity check: if there are ca. 1000 times or more detections
+    #       for each long template, then rerun with higher threshold.
 
     # Check detections from short templates again the original set of
     # detections. If there is no short-detection for an original detection,

@@ -19,12 +19,13 @@ import difflib
 from obspy.core.event import Catalog, Event, Origin
 from obspy.core.utcdatetime import UTCDateTime
 from obspy import read_inventory, Inventory, Stream
+from obspy.geodetics.base import degrees2kilometers, locations2degrees
 # from obspy.clients.filesystem.sds import Client
 from robustraqn.obspy.clients.filesystem.sds import Client
 
 from eqcorrscan.core.match_filter import (Tribe, Party)
 from eqcorrscan.core.lag_calc import LagCalcError
-from eqcorrscan.utils.pre_processing import dayproc
+from eqcorrscan.utils.pre_processing import dayproc, shortproc
 
 # import quality_metrics, spectral_tools, load_events_for_detection
 # reload(quality_metrics)
@@ -36,6 +37,7 @@ from robustraqn.load_events_for_detection import (
     prepare_detection_stream, init_processing, init_processing_wRotation,
     get_all_relevant_stations, normalize_NSLC_codes, reevaluate_detections,
     try_apply_agc)
+from robustraqn.templates_creation import (_shorten_tribe_streams)
 from robustraqn.event_detection import (
     prepare_day_overlap, get_multi_obj_hash, append_list_completed_days)
 from robustraqn.spectral_tools import (
@@ -56,7 +58,9 @@ EQCS_logger = logging.getLogger('EQcorrscan')
 EQCS_logger.setLevel(logging.ERROR)
 
 
-def prepare_and_update_party(dayparty, tribe, day_st):
+def prepare_and_update_party(dayparty, tribe, day_st,
+                             max_template_origin_shift_seconds=10,
+                             max_template_origin_shift_km=50):
     """
     If the template was updated since the detection run, then the party and its
     detections need to be updated with some information (pick-times, channels,
@@ -72,15 +76,35 @@ def prepare_and_update_party(dayparty, tribe, day_st):
                 'Could not find picking-template %s for detection family',
                 family.template.name)
             template_names = [templ.name for templ in tribe]
-            template_name_match = difflib.get_close_matches(
-                family.template.name, template_names)
-            if len(template_name_match) >= 1:
-                template_name_match = template_name_match[0]
-            else:
+            template_name_matches = difflib.get_close_matches(
+                family.template.name, template_names, n=100)
+            if len(template_name_matches) >= 1:
+                found_ok_match = False
+                choose_index = 0
+                while (not found_ok_match and
+                       choose_index < len(template_name_matches) - 1):
+                    template_name_match = template_name_matches[choose_index]
+                    pick_template = tribe.select(template_name_match)
+                    p_origin = pick_template.event.origins[0]
+                    d_origin = family.template.event.origins[0]
+                    time_difference = abs(p_origin.time - d_origin.time)
+                    if time_difference > max_template_origin_shift_seconds:
+                        choose_index += 1
+                        continue
+                    dist_deg = locations2degrees(
+                        p_origin.latitude, p_origin.longitude,
+                        d_origin.latitude, d_origin.longitude)
+                    location_difference_km = degrees2kilometers(dist_deg)
+                    if location_difference_km > max_template_origin_shift_km:
+                        choose_index += 1
+                    else:
+                        found_ok_match = True
+            if not found_ok_match:
                 Logger.warning(
                     'Did not find corresponding picking template for %s, '
                     + 'using original detection template instead.',
                     family.template.name)
+                tribe += family.template
                 continue
             Logger.warning(
                 'Found template with name %s, using instead of %s',
@@ -419,47 +443,67 @@ def pick_events_for_day(
     # with shorter length increase detection value - if not; it's not a
     # desriable detection.
     if check_array_misdetections:
-        if len(short_tribe) < len(tribe):
-            Logger.error(
-                'Missing short templates for detection-reevaluation.')
-        else:
-            dayparty, short_party = reevaluate_detections(
-                dayparty, short_tribe, stream=day_st,
-                threshold=new_threshold-1, trig_int=trig_int/4,
-                threshold_type=threshold_type,
-                re_eval_thresh_factor=re_eval_thresh_factor,
-                overlap='calculate', plotDir='ReDetectionPlots',
-                plot=False, fill_gaps=True, ignore_bad_data=True,
-                daylong=daylong, ignore_length=True, min_chans=min_det_chans,
-                pre_processed=pre_processed,
-                parallel_process=parallel, cores=cores,
-                xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
-                # xcorr_func='time_domain', concurrency='multiprocess',
-                group_size=n_templates_per_run, process_cores=cores,
-                time_difference_threshold=time_difference_threshold,
-                detect_value_allowed_reduction=detect_value_allowed_reduction,
-                return_party_with_short_templates=True,
-                min_n_station_sites=min_n_station_sites,
-                use_weights=use_weights, copy_data=copy_data, **kwargs)
-            dayparty, short_party2 = reevaluate_detections(
-                dayparty, short_tribe2, stream=day_st,
-                threshold=new_threshold-1, trig_int=trig_int/4,
-                threshold_type=threshold_type,
-                re_eval_thresh_factor=re_eval_thresh_factor*0.9,
-                overlap='calculate', plotDir='ReDetectionPlots',
-                plot=False, fill_gaps=True, ignore_bad_data=True,
-                daylong=daylong, ignore_length=True, min_chans=min_det_chans,
-                pre_processed=pre_processed,
-                parallel_process=parallel, cores=cores,
-                xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
-                # xcorr_func='time_domain', concurrency='multiprocess',
-                group_size=n_templates_per_run, process_cores=cores,
-                time_difference_threshold=time_difference_threshold,
-                detect_value_allowed_reduction=(
-                    detect_value_allowed_reduction * 1.2),
-                return_party_with_short_templates=True,
-                min_n_station_sites=min_n_station_sites,
-                use_weights=use_weights, copy_data=copy_data, **kwargs)
+        for shortt in [short_tribe, short_tribe2]:
+            if len(shortt) < len(tribe) and len(shortt) > 0:
+                Logger.error(
+                    'Missing %s short templates for detection-reevaluation in '
+                    'picking-tribe, adding them from the detect-templates.',
+                    (len(tribe) - len(shortt)))
+                # may need to shorten extra templates that were not part of the
+                # short_tribe for picking, but that we can retrieve from detections
+                tribe_tr = tribe[0].st[0]
+                if len(shortt) > 0:
+                    s_tribe_tr = shortt[0].st[0]
+                    tribe_len_pct = (
+                        (s_tribe_tr.stats.endtime - s_tribe_tr.stats.starttime)
+                        / (tribe_tr.stats.endtime - tribe_tr.stats.starttime))
+                    existing_templ_names = [templ.name for templ in shortt]
+                    extra_tribe = Tribe(
+                        [templ for templ in tribe
+                        if templ.name not in existing_templ_names])
+                    shortt += _shorten_tribe_streams(
+                        extra_tribe, tribe_len_pct=tribe_len_pct,
+                        min_n_traces=min_chans)
+            elif len(shortt) == 0:
+                Logger.error('Missing all short templates,cannot do detection-'
+                             'reevaluation')
+        dayparty, short_party = reevaluate_detections(
+            dayparty, short_tribe, stream=day_st,
+            threshold=new_threshold-1, trig_int=trig_int/4,
+            threshold_type=threshold_type,
+            re_eval_thresh_factor=re_eval_thresh_factor,
+            overlap='calculate', plotDir='ReDetectionPlots',
+            plot=False, fill_gaps=True, ignore_bad_data=True,
+            daylong=daylong, ignore_length=True, min_chans=min_det_chans,
+            pre_processed=pre_processed,
+            parallel_process=parallel, cores=cores,
+            xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
+            # xcorr_func='time_domain', concurrency='multiprocess',
+            group_size=n_templates_per_run, process_cores=cores,
+            time_difference_threshold=time_difference_threshold,
+            detect_value_allowed_reduction=detect_value_allowed_reduction,
+            return_party_with_short_templates=True,
+            min_n_station_sites=min_n_station_sites,
+            use_weights=use_weights, copy_data=copy_data, **kwargs)
+        dayparty, short_party2 = reevaluate_detections(
+            dayparty, short_tribe2, stream=day_st,
+            threshold=new_threshold-1, trig_int=trig_int/4,
+            threshold_type=threshold_type,
+            re_eval_thresh_factor=re_eval_thresh_factor*0.9,
+            overlap='calculate', plotDir='ReDetectionPlots',
+            plot=False, fill_gaps=True, ignore_bad_data=True,
+            daylong=daylong, ignore_length=True, min_chans=min_det_chans,
+            pre_processed=pre_processed,
+            parallel_process=parallel, cores=cores,
+            xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
+            # xcorr_func='time_domain', concurrency='multiprocess',
+            group_size=n_templates_per_run, process_cores=cores,
+            time_difference_threshold=time_difference_threshold,
+            detect_value_allowed_reduction=(
+                detect_value_allowed_reduction * 1.2),
+            return_party_with_short_templates=True,
+            min_n_station_sites=min_n_station_sites,
+            use_weights=use_weights, copy_data=copy_data, **kwargs)
         if not dayparty:
             Logger.warning('Party of families of detections is empty.')
             if day_hash_file is not None:
@@ -488,7 +532,7 @@ def pick_events_for_day(
             Logger.info(
                 'All templates have the same trace-processing parameters. '
                 'Preprocessing data once for lag-calc and array-lag-calc.')
-            day_st = dayproc(
+            day_st = shortproc(
                 day_st, lowcut=lowcuts[0], highcut=highcuts[0],
                 filt_order=filt_orders[0], samp_rate=samp_rates[0],
                 starttime=starttime, parallel=parallel, num_cores=cores,

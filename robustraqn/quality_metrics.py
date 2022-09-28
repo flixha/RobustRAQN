@@ -963,7 +963,7 @@ def same_comp_requested(bulk, station, component):
 def read_ispaq_stats(folder, networks=['??'], stations=['*'],
                      ispaq_prefixes=['all'], ispaq_suffixes=['simpleMetrics'],
                      file_type='csv', startyear=1970, endyear=2030,
-                     starttime=None, endtime=None):
+                     starttime=None, endtime=None, max_ispaq_files_read=300):
     """
     function to read in Mustang-style data metrics from an ispaq-"csv"-output
     folder.
@@ -1009,7 +1009,7 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
     # file that contains all metrics from the databse (saves concat-time).
     load_all_files = True
     if (file_type == 'parquet' and
-            len(stations) * (endyear + 1 - startyear) > 300):
+            len(stations) * (endyear + 1 - startyear) > max_ispaq_files_read):
         merged_metrics_file = glob.glob(os.path.join(os.path.split(
             os.path.expanduser(folder))[0], 'all_csv_metrics_merged.parquet'))
         merged_file_age_days = np.nan

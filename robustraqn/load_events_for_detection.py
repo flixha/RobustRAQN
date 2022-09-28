@@ -2896,8 +2896,8 @@ def reevaluate_detections(
             #       value within the time_difference_threshold, so I don't 
             #       pick a spurious value right next to it.
             if not any(time_diffs <= time_diff_thresh):
-                Logger.debug('No detections within time-threshold found during '
-                             + 're-evaluation of %s at %s', det.template_name,
+                Logger.debug('No detections within time-threshold found during'
+                             ' re-evaluation of %s at %s', det.template_name,
                              det.detect_time)
             else:
                 # Filter short-detections within time error threshold:
@@ -2950,10 +2950,11 @@ def reevaluate_detections(
                         abs(short_det.detect_val), det_value_deviation_limit)
                     if threshold_type == 'MAD':
                         Logger.info(
-                        'MAD values change for %s at %s (orig MAD exceedance '
-                        '%s, new MAD exc. %s, limit: %s', det.template_name,
-                        det.detect_time, long_det_mad_exc, short_det_mad_exc,
-                        mad_det_value_deviation_limit)
+                            'MAD values change for %s at %s (orig MAD exceedan'
+                            'ce %s, new MAD exc. %s, limit: %s',
+                            det.template_name, det.detect_time,
+                            long_det_mad_exc, short_det_mad_exc,
+                            mad_det_value_deviation_limit)
         # if len(return_family) >= 0:
         #     return_party += return_family
         if len(long_family) >= 0:

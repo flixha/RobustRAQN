@@ -458,15 +458,20 @@ def pick_events_for_day(
                         (s_tribe_tr.stats.endtime - s_tribe_tr.stats.starttime)
                         / (tribe_tr.stats.endtime - tribe_tr.stats.starttime))
                     existing_templ_names = [templ.name for templ in shortt]
+                    # Find templates that need to be added to picking-tribe
                     extra_tribe = Tribe(
                         [templ for templ in tribe
                         if templ.name not in existing_templ_names])
+                    # Check that there are no duplicate channels in template
+                    extra_tribe = check_duplicate_template_channels(
+                        extra_tribe, all_vert=all_vert, all_horiz=all_horiz,
+                        parallel=parallel, cores=cores)
                     shortt += _shorten_tribe_streams(
                         extra_tribe, tribe_len_pct=tribe_len_pct,
                         min_n_traces=min_chans)
             elif len(shortt) == 0:
-                Logger.error('Missing all short templates,cannot do detection-'
-                             'reevaluation')
+                Logger.error('Missing all short templates, cannot do detection'
+                             '-reevaluation')
         dayparty, short_party = reevaluate_detections(
             dayparty, short_tribe, stream=day_st,
             threshold=new_threshold-1, trig_int=trig_int/4,

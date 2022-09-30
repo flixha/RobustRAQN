@@ -345,6 +345,20 @@ def _create_template_objects(
         #       is less trace overlap and trace duplication (affects memory
         #       usage!)
 
+        # Load picks and normalize
+        tmp_catalog = filter_picks(
+            Catalog([event]), stations=relevant_stations)
+        if not tmp_catalog:
+            Logger.info('Rejected template: no event for %s after filtering',
+                        event_str)
+            continue
+        event = tmp_catalog[0]
+        if not event.picks:
+            Logger.info('Rejected template: event %s has no picks after '
+                        'filtering', event.short_str())
+            continue
+        catalog += event
+
         # Add picks at array stations if requested
         if add_array_picks:
             # need to fix phase hints once alreay here
@@ -364,19 +378,6 @@ def _create_template_objects(
                     seisarray_prefixes=LARGE_APERTURE_SEISARRAY_PREFIXES,
                     **kwargs)
 
-        # Load picks and normalize
-        tmp_catalog = filter_picks(
-            Catalog([event]), stations=relevant_stations)
-        if not tmp_catalog:
-            Logger.info('Rejected template: no event for %s after filtering',
-                        event_str)
-            continue
-        event = tmp_catalog[0]
-        if not event.picks:
-            Logger.info('Rejected template: event %s has no picks after '
-                        'filtering', event.short_str())
-            continue
-        catalog += event
         #######################################################################
         # Load and quality-control stream and picks for event
         wavef = load_event_stream(

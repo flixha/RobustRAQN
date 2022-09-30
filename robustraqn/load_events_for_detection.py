@@ -1084,7 +1084,8 @@ def prepare_picks(
     stations_w_timing_issue = []
     for pick in event.picks:
         try:
-            if pick.extra.nordic_pick_weight.value == 9:
+            # if pick.extra.nordic_pick_weight.value == 9:
+            if pick.extra['nordic_pick_weight']['value'] == '9':
                 stations_w_timing_issue.append(pick.waveform_id.station_code)
         except AttributeError:
             pass
@@ -1094,6 +1095,12 @@ def prepare_picks(
     new_event.picks = list()
     # Remove all picks for amplitudes etc: keep only P and S
     for j, pick in enumerate(event.picks):
+        # Don't allow picks with weight 4:
+        try:
+            if pick.extra['nordic_pick_weight']['value'] == '4':
+                continue
+        except (AttributeError, KeyError):
+            pass
         # Don't allow picks without phase_hint
         if len(pick.phase_hint) == 0:
             continue

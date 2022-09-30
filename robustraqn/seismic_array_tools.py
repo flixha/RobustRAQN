@@ -269,6 +269,11 @@ def extract_array_picks(event, seisarray_prefixes=SEISARRAY_PREFIXES):
     for seisarray_prefix in seisarray_prefixes:
         array_picks_list = list()
         for pick in event.picks:
+            try:
+                if pick.extra['nordic_pick_weight']['value'] in ['4', '9']:
+                    continue
+            except (AttributeError, KeyError):
+                pass
             station = pick.waveform_id.station_code
             if fnmatch.fnmatch(station, seisarray_prefix,
                                flags=fnmatch.EXTMATCH):

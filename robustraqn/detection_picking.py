@@ -104,7 +104,10 @@ def prepare_and_update_party(dayparty, tribe, day_st,
                     'Did not find corresponding picking template for %s, '
                     + 'using original detection template instead.',
                     family.template.name)
-                tribe += family.template
+                # Check that there are no duplicate channels in template
+                tribe += check_duplicate_template_channels(
+                    Tribe(family.template), all_vert=all_vert,
+                    all_horiz=all_horiz, parallel=False)
                 continue
             Logger.warning(
                 'Found template with name %s, using instead of %s',
@@ -447,7 +450,7 @@ def pick_events_for_day(
             if len(shortt) < len(tribe) and len(shortt) > 0:
                 Logger.error(
                     'Missing %s short templates for detection-reevaluation in '
-                    'picking-tribe, adding them from the detect-templates.',
+                    'picking-tribe, adding them from the detection-templates.',
                     (len(tribe) - len(shortt)))
                 # may need to shorten extra templates that were not part of the
                 # short_tribe for picking, but that we can retrieve from detections

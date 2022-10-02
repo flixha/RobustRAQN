@@ -2774,22 +2774,35 @@ def reevaluate_detections(
     # TODO: function should always return both the party for the long templates
     #       that have a short-template detection, and the party for the short
     #       templates.
+    Logger.info('Start reevaluation of detections.')
     n_families_in = len(party.families)
     n_detections_in = len(party)
-    checked_party = Party()
-    for family in party:
-        checked_family = family.copy()
-        checked_family.detections = []
-        for detection in family:
-            # unique_stations = list(set([
-            #     p.waveform_id.station_code for p in detection.event.picks]))
-            unique_stations = list(set([chan[0] for chan in detection.chans]))
-            n_station_sites = len(list(set(
-                get_station_sites(unique_stations))))
-            if n_station_sites >= min_n_station_sites:
-                checked_family.detections.append(detection)
-        if len(family.detections) > 0:
-            checked_party += checked_family
+    if min_n_station_sites > 1:
+        checked_party = Party()
+        for family in party:
+            # family.copy()
+            # checked_family.detections = []
+            checked_family = Family(template=family.template, detections=[],
+                                    catalog=None)
+            for detection in family:
+                # unique_stations = list(set([
+                #     p.waveform_id.station_code
+                #     for p in detection.event.picks]))
+                # TODO: is there a way to speed up the checks on number of 
+                #       station sites?
+                unique_stations = list(set([chan[0]
+                                            for chan in detection.chans]))
+                n_station_sites = len(list(set(
+                    get_station_sites(unique_stations))))
+                if n_station_sites >= min_n_station_sites:
+                    checked_family.detections.append(detection)
+            if len(family.detections) > 0:
+                checked_party += checked_family
+        Logger.info(
+            'Checked party, %s detections fulfill minimum sites criterion.',
+            len([det for fam in checked_party for det in fam]))
+    else:
+        checked_party = party
     long_party = checked_party
 
     # Need to scale factor slightly for fftw vs time-domain
@@ -2857,6 +2870,9 @@ def reevaluate_detections(
     # detections. If there is no short-detection for an original detection,
     # or if the detect_value is a lot worse, then remove original detection
     # from party.
+    Logger.info(
+        'Compare %s detections for short templates against %s existing detect'
+        'ions', len([d for fam in short_party for d in fam]), n_detections_in)
     return_party = Party()
     long_return_party = Party()
     short_return_party = Party()

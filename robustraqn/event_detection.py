@@ -486,6 +486,8 @@ def run_day_detection(
                     for family in party]
         party = Party(
             families=[family for family in families if len(family) > 0])
+    Logger.info('Got a party of %s families with %s detections on %s.',
+                 str(n_families), str(n_detections), str(starttime)[0:10])
 
     if not party:
         Logger.warning('Party of families of detections is empty')
@@ -548,7 +550,7 @@ def run_day_detection(
                     detect_value_allowed_reduction=(
                         detect_value_allowed_reduction * 2),
                     return_party_with_short_templates=True,
-                    min_n_station_sites=min_n_station_sites,
+                    min_n_station_sites=1,
                     use_weights=use_weights, copy_data=copy_data, **kwargs)
 
             append_list_completed_days(
@@ -585,9 +587,10 @@ def run_day_detection(
             if write_party:
                 detection_file_name = os.path.join(
                     redetection_path, 'UniqueDet_short_' + current_day_str)
-                short_party.write(detection_file_name, format='tar', overwrite=True)
-                short_party.write(detection_file_name + '.csv', format='csv',
-                            overwrite=True)
+                short_party.write(
+                    detection_file_name, format='tar', overwrite=True)
+                short_party.write(
+                    detection_file_name + '.csv', format='csv', overwrite=True)
 
     # Add origins to detections  ## THIS happens already in .detect() ??
     party = calculate_events_for_party(party, parallel=parallel, cores=cores)

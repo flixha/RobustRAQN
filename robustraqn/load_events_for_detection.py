@@ -2781,8 +2781,9 @@ def reevaluate_detections(
         checked_family = family.copy()
         checked_family.detections = []
         for detection in family:
-            unique_stations = list(set([
-                p.waveform_id.station_code for p in detection.event.picks]))
+            # unique_stations = list(set([
+            #     p.waveform_id.station_code for p in detection.event.picks]))
+            unique_stations = list(set([chan[0] for chan in detection.chans]))
             n_station_sites = len(list(set(
                 get_station_sites(unique_stations))))
             if n_station_sites >= min_n_station_sites:

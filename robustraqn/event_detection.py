@@ -155,6 +155,53 @@ def get_multi_obj_hash(hash_object_list):
     return settings_hash
 
 
+def calculate_events_for_party(party, parallel=False, cores=None):
+    """
+    Calculate events for each detection in party, allows for parallel
+    execution.
+    """
+    if parallel:
+        Logger.info(
+            'Adding origins to remaining %s short detections in '
+            'parallel.', len([d for fam in party for d in fam]))
+        # with parallel_backend('multiprocessing', n_jobs=cores):
+        detections = [det for family in party for det in family]
+        simplified_templates = []  # Just keep headers plus tiny part of data
+        for family in party:
+            simple_template = family.template
+            new_template_st = Stream(
+                [Trace(header=tr.stats, data=tr.data[:1])
+                 for tr in simple_template.st])
+            simple_template.st = new_template_st
+            # template_streams.append(new_template_st)
+            for detection in family:
+                simplified_templates.append(simple_template)
+        detections = Parallel(n_jobs=cores)(
+            delayed(detection._calculate_event)(
+                template=simplified_templates[i], template_st=None,
+                estimate_origin=True, correct_prepick=True,
+                use_simplified_origin=True)
+            for i, detection in enumerate(detections))
+        # Sort in detections with events and origins
+        jdet = 0
+        for jf, family in enumerate(party):
+            new_detections = []
+            for jd, detection in enumerate(family):
+                # detection = detections[jd]
+                new_detections.append(detections[jdet])
+                jdet += 1
+            family.detections = new_detections
+    else:
+        Logger.info('Adding origins to %s remaining short detections.',
+                    len([d for fam in party for d in fam]))
+        for family in party:
+            for detection in family:
+                _ = detection._calculate_event(
+                    template=family.template, template_st=None,
+                    estimate_origin=True, correct_prepick=True)
+    return party
+
+
 # @processify
 def run_day_detection(
         clients, tribe, date, ispaq, selected_stations,
@@ -393,7 +440,7 @@ def run_day_detection(
                 current_day_str, str(cores))
     try:
         party = tribe.detect(
-            stream=day_st, threshold=threshold, trig_int=trig_int / 10,
+            stream=day_st, threshold=threshold, trig_int=trig_int,
             threshold_type=threshold_type, overlap='calculate', plot=False,
             plotDir='DetectionPlots', daylong=daylong,
             fill_gaps=True, ignore_bad_data=False, ignore_length=True, 
@@ -405,6 +452,7 @@ def run_day_detection(
             # xcorr_func='fftw', concurrency='multithread',
             # parallel_process=False, #concurrency=None,
             group_size=n_templates_per_run, full_peaks=False,
+            extract_detections=False, estimate_origin=True, output_event=False,
             save_progress=False, process_cores=cores, spike_test=False,
             use_weights=use_weights, copy_data=copy_data, **kwargs)
         # xcorr_func='fftw', concurrency=None, cores=1,
@@ -482,8 +530,8 @@ def run_day_detection(
                 min_n_station_sites=min_n_station_sites,
                 use_weights=use_weights, copy_data=copy_data, **kwargs)
             if len(short_tribe2) > 0:
-                dayparty, short_party = reevaluate_detections(
-                    dayparty, short_tribe2, stream=day_st,
+                party, short_party = reevaluate_detections(
+                    party, short_tribe2, stream=day_st,
                     threshold=threshold, trig_int=trig_int,
                     threshold_type=threshold_type,
                     re_eval_thresh_factor=re_eval_thresh_factor*0.9,
@@ -515,13 +563,10 @@ def run_day_detection(
                     return
                 else:
                     return [party, return_st]
-            
-            for family in short_party:
-                for detection in family:
-                    _ = detection._calculate_event(
-                        template=family.template, template_st=None,
-                         estimate_origin=True, correct_prepick=True)
-                
+
+            short_party = calculate_events_for_party(
+                short_party, parallel=parallel, cores=cores)
+
             short_party = short_party.decluster(
                 trig_int=trig_int, timing='detect', metric=decluster_metric,
                 hypocentral_separation=hypocentral_separation,
@@ -544,12 +589,14 @@ def run_day_detection(
                 short_party.write(detection_file_name + '.csv', format='csv',
                             overwrite=True)
 
-    # Add origins to detections
-    for family in party:
-        for detection in family:
-            _ = detection._calculate_event(
-                template=family.template, template_st=None,
-                    estimate_origin=True, correct_prepick=True)
+    # Add origins to detections  ## THIS happens already in .detect() ??
+    party = calculate_events_for_party(party, parallel=parallel, cores=cores)
+    # for family in party:
+    #     for detection in family:
+    #         _ = detection._calculate_event(
+    #             template=family.template, template_st=None,
+    #                 estimate_origin=True, correct_prepick=True,
+    #                 use_simplified_origin=True)
 
     # Decluster detection and save them to filesf
     # metric='avg_cor' isn't optimal when one detection may only be good on

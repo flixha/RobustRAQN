@@ -166,13 +166,21 @@ def calculate_events_for_party(party, parallel=False, cores=None):
             'parallel.', len([d for fam in party for d in fam]))
         # with parallel_backend('multiprocessing', n_jobs=cores):
         detections = [det for family in party for det in family]
-        simplified_templates = []  # Just keep headers plus tiny part of data
+        # Make simplified templates that contain only trace headers, no data,
+        # to speed up copying of templates to workers:
+        simplified_templates = []
         for family in party:
-            simple_template = family.template
+            full_templ = family.template
             new_template_st = Stream(
                 [Trace(header=tr.stats, data=tr.data[:1])
-                 for tr in simple_template.st])
-            simple_template.st = new_template_st
+                 for tr in full_templ.st])
+            simple_template = Template(
+                name=full_templ.name, st=new_template_st,
+                lowcut=full_templ.lowcut, highcut=full_templ.highcut,
+                samp_rate=full_templ.samp_rate,
+                filt_order=full_templ.filt_order,
+                process_length=full_templ.process_length,
+                prepick=full_templ.prepick, event=full_templ.event)
             # template_streams.append(new_template_st)
             for detection in family:
                 simplified_templates.append(simple_template)

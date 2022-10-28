@@ -653,13 +653,19 @@ def check_duplicate_template_channels(
     Logger.info('Checking templates in %s for duplicate channels', tribe)
     if not parallel:
         for template in tribe:
-            template = _check_duplicate_template_channels(template)
+            template = _check_duplicate_template_channels(
+                template, all_vert=all_vert, all_horiz=all_horiz,
+                vertical_chans=vertical_chans,
+                horizontal_chans=horizontal_chans)
     else:
         if cores is None:
-            n_cores = cpu_count()
+            cores = cpu_count()
         cores = min(cores, len(tribe))
         out_lists = Parallel(n_jobs=cores)(
-            delayed(_check_duplicate_template_channels)(template)
+            delayed(_check_duplicate_template_channels)(
+                template, all_vert=all_vert, all_horiz=all_horiz,
+                vertical_chans=vertical_chans,
+                horizontal_chans=horizontal_chans)
             for template in tribe)
         tribe = Tribe([out for out in out_lists
                        if out is not None and len(out.st) > 0])

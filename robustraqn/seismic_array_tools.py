@@ -1161,6 +1161,9 @@ def array_lag_calc(
             Logger.info('Preparing traces for array %s, for picking phase %s'
                         ' with lag-calc. CC relax factor is %s',
                         seisarray_prefix, phase_hint, str(cc_relax_factor))
+            # Check that there still is stream for array
+            if len(array_st_dict[seisarray_prefix]) == 0:
+                continue
             # From (preprocessed?) stream select only traces for current array
             array_catalog = Catalog()
             array_catalog = array_party.lag_calc(
@@ -1299,13 +1302,20 @@ def array_lag_calc(
                     msg = ('Need dataframe of station locations to compute '
                            + 'array beam pick')
                     raise ValueError(msg)
+                try:
+                    baz = array_baz_dict[seisarray_prefix][phase_hint]
+                    array_app_vel_dict[seisarray_prefix][phase_hint]
+                except KeyError:
+                    Logger.error(
+                        'No information on BAZ or apparent velocity for array '
+                        '%s, phase %s', seisarray_prefix, phase_hint)
+                    continue
                 event_with_array_picks = add_array_station_picks(
                     event, stations_df=stations_df, array_picks_dict=None,
                     array_baz_dict=array_baz_dict,
                     array_app_vel_dict=array_app_vel_dict,
                     seisarray_prefixes=[seisarray_prefix],
-                    baz=array_baz_dict[seisarray_prefix][phase_hint],
-                    app_vel=array_app_vel_dict[seisarray_prefix][phase_hint])
+                    baz=baz, app_vel=app_vel)
                 ref_station = SEISARRAY_REF_STATIONS[seisarray_prefix]
                 ref_picks = [pick for pick in event_with_array_picks.picks
                             if pick.waveform_id.station_code == ref_station

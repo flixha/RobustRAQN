@@ -58,9 +58,11 @@ EQCS_logger = logging.getLogger('EQcorrscan')
 EQCS_logger.setLevel(logging.ERROR)
 
 
-def prepare_and_update_party(dayparty, tribe, day_st,
-                             max_template_origin_shift_seconds=10,
-                             max_template_origin_shift_km=50):
+def prepare_and_update_party(
+        dayparty, tribe, day_st, max_template_origin_shift_seconds=10,
+        max_template_origin_shift_km=50, all_vert=True, all_horiz=True,
+        vertical_chans=['Z', 'H'],
+        horizontal_chans=['E', 'N', '1', '2', 'X', 'Y']):
     """
     If the template was updated since the detection run, then the party and its
     detections need to be updated with some information (pick-times, channels,
@@ -107,7 +109,8 @@ def prepare_and_update_party(dayparty, tribe, day_st,
                 # Check that there are no duplicate channels in template
                 tribe += check_duplicate_template_channels(
                     Tribe(family.template), all_vert=all_vert,
-                    all_horiz=all_horiz, parallel=False)
+                    all_horiz=all_horiz, vertical_chans=vertical_chans,
+                    horizontal_chans=horizontal_chans, parallel=False)
                 continue
             Logger.warning(
                 'Found template with name %s, using instead of %s',
@@ -435,7 +438,8 @@ def pick_events_for_day(
             **kwargs)
 
     # Update parties for picking
-    dayparty = prepare_and_update_party(dayparty, tribe, day_st)
+    dayparty = prepare_and_update_party(
+        dayparty, tribe, day_st, all_horiz=all_horiz, all_vert=all_vert)
 
     if (arch == 'precise' and
             concurrency not in ['multiprocess', 'multithread']):

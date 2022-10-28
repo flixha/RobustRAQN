@@ -170,6 +170,8 @@ def calculate_events_for_party(party, parallel=False, cores=None):
         # to speed up copying of templates to workers:
         simplified_templates = []
         for family in party:
+            if len(family) == 0:
+                continue
             full_templ = family.template
             new_template_st = Stream(
                 [Trace(header=tr.stats, data=tr.data[:1])

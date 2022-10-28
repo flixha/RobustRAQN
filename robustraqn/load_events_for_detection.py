@@ -1773,7 +1773,7 @@ def _init_processing_per_channel(
         for tr in st:
             if tr.stats.sampling_rate > downsampled_max_rate:
                 tr.resample(sampling_rate=downsampled_max_rate,
-                            no_filter=False)
+                            no_filter=False, window='hann')
 
     return st
 
@@ -1871,7 +1871,7 @@ def _init_processing_per_channel_wRotation(
         for tr in st:
             if tr.stats.sampling_rate > downsampled_max_rate:
                 tr.resample(sampling_rate=downsampled_max_rate,
-                            no_filter=False)
+                            no_filter=False, window='hann')
 
     # Check that at least 80 (x) % of data are not masked:
     # TODO: Don't do consecutive Zero checks here, just the other checks 
@@ -2729,7 +2729,7 @@ def multiplot_detection(party, tribe, st, out_folder='DetectionPlots'):
             dst = dst.detrend().taper(0.1).filter(
                 'bandpass', freqmin=tribe[0].lowcut, freqmax=tribe[0].highcut,
                 zerophase=True, corners=tribe[0].filt_order
-                ).resample(tribe[0].samp_rate, no_filter=True)
+                ).resample(tribe[0].samp_rate, no_filter=True, window='hann')
             dst = dst.trim(starttime=stt-30, endtime=stt+240)
             filename = str(detection.detect_time)[0:19] + '_'\
                 + family.template.name + '.png'

@@ -18,6 +18,7 @@ def run_from_ipython():
 
 
 import os, glob, gc, math, calendar, matplotlib, platform, sys
+from xml.dom.minidom import Attr
 from numpy.core.numeric import True_
 # sys.path.insert(1, os.path.expanduser(
 #   "~/Documents2/NorthSea/Elgin/Detection"))
@@ -42,6 +43,7 @@ from obspy import read_inventory
 from obspy.core.inventory.inventory import Inventory
 #from obspy import read as obspyread
 from obspy import UTCDateTime
+from obspy.core.util.attribdict import AttribDict
 # from obspy.io.mseed import InternalMSEEDError
 # from obspy.clients.filesystem.sds import Client
 from robustraqn.obspy.clients.filesystem.sds import Client
@@ -409,16 +411,21 @@ def run_day_detection(
                     station_weight_factor = (
                         tr.stats.extra.station_weight_factor)
                 except AttributeError as e:
-                    Logger.warning(e)
                     station_weight_factor = 1
+                try:
+                    trace_rms_snr = tr.stats.extra.rms_snr
+                except AttributeError:
+                    trace_rms_snr = 1
                 # look up noise on this day /trace
                 # weight = trace_snr * trace_noise_level
                 # TODO: use cube root??? - difference may be very small,
                 #       but should be tested on Snorre events
+                if not hasattr(tr.stats, 'extra'):
+                    tr.stats.extra = AttribDict()
                 tr.stats.extra.weight = (
                     # Higher weight with higher SNR
-                    np.sqrt(tr.stats.extra.rms_snr) *
-                    # tr.stats.extra.rms_snr ** (1/3) *
+                    np.sqrt(trace_rms_snr) *
+                    # trace_rms_snr ** (1/3) *
                     # Lower weight with more traces per station
                     1 / (station_trace_counter[tr.stats.station] ** (1/3)) *
                     # Extra weight factor, e.g. for arrays vs single stations

@@ -391,49 +391,36 @@ def run_day_detection(
     # Figure out weights to take difference in template trace SNR and channel
     # noise into account:
     if use_weights:
-        for templ in tribe:
-            station_trace_counter = Counter(
-                [tr.stats.station for tr in templ.st])
-            for tr in templ.st:
-                # This happens in match_filter:
-                    # tr.stats.extra.weight = (
-                    #     tr.stats.extra.weight * tr.stats.extra.noise_rms_amp /
-                    #     cont_noise_rms_amp)
-                # Get trace snr from ispaq-stats  - need to calc noise-amp in
-                # relevant frequency band?
-                # -- this is not needed when response is removed, then it's
-                # easier and happens in match_filter now.
-                #if day_stats is not None:
-                #    # day_stats[tr.id]
-                #    # maybe get noise level in a smarter way,
-                #    det_day_noise_level = 1
-                try:
-                    station_weight_factor = (
-                        tr.stats.extra.station_weight_factor)
-                except AttributeError as e:
-                    station_weight_factor = 1
-                try:
-                    trace_rms_snr = tr.stats.extra.rms_snr
-                except AttributeError:
-                    trace_rms_snr = 1
-                # look up noise on this day /trace
-                # weight = trace_snr * trace_noise_level
-                # TODO: use cube root??? - difference may be very small,
-                #       but should be tested on Snorre events
-                if not hasattr(tr.stats, 'extra'):
-                    tr.stats.extra = AttribDict()
-                tr.stats.extra.weight = (
-                    # Higher weight with higher SNR
-                    np.sqrt(trace_rms_snr) *
-                    # trace_rms_snr ** (1/3) *
-                    # Lower weight with more traces per station
-                    1 / (station_trace_counter[tr.stats.station] ** (1/3)) *
-                    # Extra weight factor, e.g. for arrays vs single stations
-                    station_weight_factor)
-                # Not needed, right?... (happens in match_filter, after pre-
-                # processing):
-                    # * np.sqrt(
-                    #     tr.stats.extra.day_noise_level / det_day_noise_level))
+        # Do updates for all relevant tribes (also the short ones)
+        for xtribe in [tribe, short_tribe, short_tribe2]:
+            if len(xtribe) > 0:
+                for templ in xtribe:
+                    station_trace_counter = Counter(
+                        [tr.stats.station for tr in templ.st])
+                    for tr in templ.st:
+                        # Get trace snr from ispaq-stats - need to calc noise-
+                        # amp in relevant frequency band? - when resp removed,
+                        # just compare total rms amp in matched_filter
+                        try:
+                            station_weight_factor = (
+                                tr.stats.extra.station_weight_factor)
+                        except AttributeError as e:
+                            station_weight_factor = 1
+                        try:
+                            trace_rms_snr = tr.stats.extra.rms_snr
+                        except AttributeError:
+                            trace_rms_snr = 1
+                        if not hasattr(tr.stats, 'extra'):
+                            tr.stats.extra = AttribDict()
+                        # Higher weight with higher SNR
+                        tr.stats.extra.weight = (
+                            np.sqrt(trace_rms_snr) *
+                            # trace_rms_snr ** (1/3) *
+                            # Lower weight with more traces per station
+                            1 / (station_trace_counter[
+                                tr.stats.station] ** (1/3)) *
+                            # Extra weight factor, e.g. for array stations
+                            station_weight_factor)
 
     # tmp adjust process_lenght parameters
     daylong = True

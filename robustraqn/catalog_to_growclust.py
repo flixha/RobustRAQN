@@ -1,5 +1,4 @@
 
-from defusedxml import NotSupportedError
 import pandas as pd
 import csv
 

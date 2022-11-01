@@ -27,6 +27,7 @@ from obspy import UTCDateTime
 from obspy.geodetics.base import degrees2kilometers, locations2degrees
 from obspy.io.mseed import InternalMSEEDError, InternalMSEEDWarning
 from obspy.io.segy.segy import SEGYTraceReadingError
+from obspy.core.util.attribdict import AttribDict
 
 import warnings
 warnings.filterwarnings("ignore", category=InternalMSEEDWarning)
@@ -122,8 +123,11 @@ def read_seisan_database(database_path, cores=1, nordic_format='UKN',
     cat = Catalog([cat[0] for cat in cats if cat])
     for event, sfile in zip(cat, sfiles):
         event.comments.append(Comment(text='Sfile-name: ' + sfile))
-        extra = {'sfile_name': {'value': sfile, 'namespace': 'Seisan'}}
-        event.extra = extra
+        if not hasattr(event, 'extra'):
+            event.extra = AttribDict()
+        event.extra.update(
+            {'sfile_name': {'value': sfile, 'namespace': 'Seisan'}})
+
         if check_resource_ids:
             attach_all_resource_ids(event)
     # attach_all_resource_ids(cat)

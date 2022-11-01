@@ -1,8 +1,6 @@
 
 # %%
 import os
-from xml.dom.minidom import Attr
-from attr import Attribute
 import numpy as np
 import matplotlib
 
@@ -13,6 +11,7 @@ import time
 import textwrap
 from datetime import datetime
 from joblib.parallel import Parallel, delayed
+from wcmatch import fnmatch
 
 from obspy.core.event import (
     Catalog, Event, QuantityError, OriginQuality, OriginUncertainty)
@@ -84,7 +83,9 @@ def readSTATION0(path, stations):
     stalist = []
     f = open(path + '/STATION0.HYP', 'r')
     for line in f:
-        if line[1:6].strip() in stations:
+        line_sta = line[1:6].strip()
+        if (line_sta in stations or
+                fnmatch(line_sta, stations, flags=fnmatch.EXTMATCH)):
             station = line[1:6].strip()
             # Format is either ddmm.mmS/N or ddmm(.)mmmS/N
             lat = line[6:14].replace(' ', '0')

@@ -1,5 +1,5 @@
 import os
-from setuptools import setup
+from setuptools import setup, find_packages
 
 # Utility function to read the README file.
 # Used for the long_description.  It's nice, because now 1) we have a top level
@@ -16,9 +16,13 @@ setup(
     description = ("Demonstration of robust request and seismic data quality "
                    " metrics negotiation."),
     license = "GPL3",
-    keywords = "example documentation tutorial",
-    # url = "http://packages.python.org/an_example_pypi_project",
-    packages=['robustraqn'],
+    keywords = "Template matching",
+    url = "https://github.com/flixha/RobustRAQN",
+    # packages=['robustraqn', 'robustraqn.models', 'robustraqn.obspy'],
+    packages=find_packages(),
+    # packages=find_packages(exclude=['ez_setup', 'tests', 'tests.*']),
+    # package_data={'': ['license.txt']},
+    # include_package_data=True,
     long_description=read('README.md'),
     classifiers=[
         "Development Status :: 3 - Alpha",

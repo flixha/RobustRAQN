@@ -1,17 +1,15 @@
-# -*- coding: utf-8 -*-
-# -----------------------------------------------------------------------------
-#  Purpose: Extend Core classes of ObsPy: Python for Seismological Observatories
-#   Author: Felix Halpaap
-# -----------------------------------------------------------------------------
+#!/usr/bin/python
 """
-robustraqn.obspy.core - Extended Core classes of ObsPy
-==================================
+:copyright:
+    RobustRAQN developers.
+
+:license:
+    GNU General Public License, Version 3
+    (https://www.gnu.org/licenses/gpl-3.0)
 """
+import importlib
+import sys
+import warnings
 
-from robustraqn.obspy.core.trace import Trace  # NOQA
-from robustraqn.obspy.core.stream import Stream  # NOQA
 
-
-#if __name__ == '__main__':
-#    import doctest
-#    doctest.testmod(exclude_empty=True)
+# from robustraqn import quality_metrics

@@ -1,0 +1,2 @@
+include robustraqn/models/*.npz  
+include robustraqn/models/*.tvel

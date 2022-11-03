@@ -1,2 +1,4 @@
 include robustraqn/models/*.npz  
 include robustraqn/models/*.tvel
+include robustraqn/models/NNSN1D_plusAK135.tvel
+include models/NNSN1D_plusAK135.tvel

@@ -22,9 +22,8 @@ setup(
     packages=find_packages(),
     # packages=find_packages(exclude=['ez_setup', 'tests', 'tests.*']),
     package_data={'': ['license.txt',
-                       'robustraqn/models/*.tvel',
-                       'robustraqn/models/*.npz',
-                       'models/NNSN1D_plusAK135.tvel']},
+                       'models/*.tvel',
+                       'models/*.npz']},
     # data_files=[
     #     ('velocity_models', ['robustraqn/models/NNSN1D_plusAK135.tvel'])],
     # include_package_data=True,

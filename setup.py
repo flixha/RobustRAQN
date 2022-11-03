@@ -21,7 +21,8 @@ setup(
     # packages=['robustraqn', 'robustraqn.models', 'robustraqn.obspy'],
     packages=find_packages(),
     # packages=find_packages(exclude=['ez_setup', 'tests', 'tests.*']),
-    # package_data={'': ['license.txt']},
+    package_data={'': ['license.txt',
+                       'robustraqn/models/NNSN1D_plusAK135.tvel' ]},
     # include_package_data=True,
     long_description=read('README.md'),
     classifiers=[

@@ -21,9 +21,11 @@ setup(
     # packages=['robustraqn', 'robustraqn.models', 'robustraqn.obspy'],
     packages=find_packages(),
     # packages=find_packages(exclude=['ez_setup', 'tests', 'tests.*']),
-    package_data={'': ['license.txt']},
-    data_files=[
-        ('velocity_models', ['robustraqn/models/NNSN1D_plusAK135.tvel'])],
+    package_data={'project': ['license.txt',
+                              'robustraqn/models/NNSN1D_plusAK135.tvel',
+                              'models/NNSN1D_plusAK135.tvel']},
+    # data_files=[
+    #     ('velocity_models', ['robustraqn/models/NNSN1D_plusAK135.tvel'])],
     # include_package_data=True,
     long_description=read('README.md'),
     classifiers=[

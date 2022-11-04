@@ -1306,7 +1306,7 @@ def array_lag_calc(
                 app_vel = None
                 try:
                     baz = array_baz_dict[seisarray_prefix][phase_hint]
-                    array_app_vel_dict[seisarray_prefix][phase_hint]
+                    app_vel = array_app_vel_dict[seisarray_prefix][phase_hint]
                 except (KeyError, AttributeError):
                     Logger.error(
                         'No information on BAZ or apparent velocity for array '

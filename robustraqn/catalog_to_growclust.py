@@ -4,7 +4,8 @@ import csv
 
 from obspy.core import UTCDateTime
 from obspy.core.event import (
-    Origin, OriginUncertainty, CreationInfo, QuantityError, OriginQuality)
+    Catalog, Origin, OriginUncertainty, CreationInfo, QuantityError,
+    OriginQuality)
 from obspy.geodetics.base import degrees2kilometers, kilometers2degrees
 from eqcorrscan.utils.catalog_to_dd import _generate_event_id_mapper
 
@@ -141,7 +142,8 @@ def read_gc_cat_to_df(gc_cat_file, gc_header_list=GC_HEADER_LIST):
         num_cols = len(first_row)
     if num_cols == 25:
         pass
-    elif num_cols == 26:  # Custom Growclust outputs origin time change
+    elif num_cols == 26 and 'timeC' not in gc_header_list:
+        # Custom Growclust outputs origin time change
         gc_header_list.append('timeC')
     if num_cols != len(gc_header_list):
         raise ValueError('Number of column headers for growclust cat-file does'
@@ -150,6 +152,17 @@ def read_gc_cat_to_df(gc_cat_file, gc_header_list=GC_HEADER_LIST):
     gc_df = pd.read_csv(gc_cat_file, delim_whitespace=True,
                         names=gc_header_list)
     return gc_df
+
+
+def update_tribe_from_gc_file(tribe, gc_cat_file, max_diff_seconds=3):
+    """
+    """
+    cat = Catalog([t.event for t in tribe])
+    cat = update_cat_from_gc_file(cat, gc_cat_file,
+                                  max_diff_seconds=max_diff_seconds)
+    for ne, event in enumerate(cat):
+        tribe[ne].event = event
+    return tribe
 
 
 def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):

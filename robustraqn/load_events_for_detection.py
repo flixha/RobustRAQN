@@ -390,8 +390,8 @@ def load_event_stream(
             wave_alrdy_at_sel_station = wave_at_sel_stations.select(
                 station=station)
             if not wave_alrdy_at_sel_station:
-                addWaves = st.select(station=station, channel=channel_priority)
-                wave_at_sel_stations += addWaves
+                add_wavs = st.select(station=station, channel=channel_priority)
+                wave_at_sel_stations += add_wavs
     # If there are more than one traces for the same station-component-
     # combination, then choose the "best" trace
     wave_at_sel_stations_copy = wave_at_sel_stations.copy()
@@ -400,8 +400,8 @@ def load_event_stream(
             station=tr.stats.station, channel='*'+tr.stats.channel[-1])
         remove_tr_st = Stream()
         keep_tr_st = Stream()
-        nSameStaChanW = len(same_sta_chan_st)
-        if nSameStaChanW > 1:
+        n_same_sta_chan_wav = len(same_sta_chan_st)
+        if n_same_sta_chan_wav > 1:
             # 1. best trace: highest sample rate
             samp_rates = [t.stats.sampling_rate for t in same_sta_chan_st]
             keep_tr_st = same_sta_chan_st.select(sampling_rate=max(samp_rates))

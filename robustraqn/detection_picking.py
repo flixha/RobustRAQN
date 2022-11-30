@@ -430,7 +430,28 @@ def pick_events_for_day(
                 file=day_hash_file, date=current_day_str, hash=settings_hash)
         return
 
+    # Check if I can do pre-processing just once:
     pre_processed = False
+    if ((apply_array_lag_calc or apply_agc or check_array_misdetections)
+            and not pre_processed):
+        lowcuts = list(set([tp.lowcut for tp in tribe]))
+        highcuts = list(set([tp.highcut for tp in tribe]))
+        filt_orders = list(set([tp.filt_order for tp in tribe]))
+        samp_rates = list(set([tp.samp_rate for tp in tribe]))
+        if (len(lowcuts) == 1 and len(highcuts) == 1 and
+                len(filt_orders) == 1 and len(samp_rates) == 1):
+            Logger.info(
+                'All templates have the same trace-processing parameters. '
+                'Preprocessing data once for detection checking, agc, lag-calc'
+                ', and array-lag-calc.')
+            day_st = shortproc(
+                day_st, lowcut=lowcuts[0], highcut=highcuts[0],
+                filt_order=filt_orders[0], samp_rate=samp_rates[0],
+                starttime=starttime, parallel=parallel, num_cores=cores,
+                ignore_length=False, seisan_chan_names=False, fill_gaps=True,
+                ignore_bad_data=False, fft_threads=1)
+            pre_processed = True
+
     if apply_agc and agc_window_sec:
         day_st, pre_processed = try_apply_agc(
             day_st, tribe, agc_window_sec=agc_window_sec, starttime=None,
@@ -441,6 +462,8 @@ def pick_events_for_day(
     dayparty = prepare_and_update_party(
         dayparty, tribe, day_st, all_horiz=all_horiz, all_vert=all_vert)
 
+    # Check if the selection fmf / fmf2 backends for CPU makes sense (to not
+    # request GPU backends unintentionally)
     if (arch == 'precise' and
             concurrency not in ['multiprocess', 'multithread']):
         concurrency = 'multiprocess'
@@ -533,24 +556,6 @@ def pick_events_for_day(
             dayparty.write(
                 detection_file_name + '.csv', format='csv', overwrite=True)
 
-    # Check if I can do pre-processing just once:
-    if apply_array_lag_calc and not pre_processed:
-        lowcuts = list(set([tp.lowcut for tp in tribe]))
-        highcuts = list(set([tp.highcut for tp in tribe]))
-        filt_orders = list(set([tp.filt_order for tp in tribe]))
-        samp_rates = list(set([tp.samp_rate for tp in tribe]))
-        if (len(lowcuts) == 1 and len(highcuts) == 1 and
-                len(filt_orders) == 1 and len(samp_rates) == 1):
-            Logger.info(
-                'All templates have the same trace-processing parameters. '
-                'Preprocessing data once for lag-calc and array-lag-calc.')
-            day_st = shortproc(
-                day_st, lowcut=lowcuts[0], highcut=highcuts[0],
-                filt_order=filt_orders[0], samp_rate=samp_rates[0],
-                starttime=starttime, parallel=parallel, num_cores=cores,
-                ignore_length=False, seisan_chan_names=False, fill_gaps=True,
-                ignore_bad_data=False, fft_threads=1)
-            pre_processed = True
     picked_catalog = Catalog()
     picked_catalog = dayparty.copy().lag_calc(
         day_st, pre_processed=pre_processed, shift_len=shift_len,
@@ -605,7 +610,7 @@ def pick_events_for_day(
     return export_catalog
 
 
-# %% Now run the day-loop
+# %% Now run the day-loop    ### TEST ###
 if __name__ == "__main__":
     # Set the path to the folders with continuous data:
     archive_path = '/data/seismo-wav/SLARCHIVE'

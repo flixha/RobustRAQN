@@ -1074,11 +1074,11 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
                 Logger.error('file_type %s not supported', file_type)
                 return ispaq
             df_list.append(in_df)
-        ispaq = pd.concat(df_list, axis=0)
-        ispaq = ispaq.drop_duplicates(keep='last')
         try:
+            ispaq = pd.concat(df_list, axis=0)
+            ispaq = ispaq.drop_duplicates(keep='last')
             ispaq.sort_values(by=['target', 'start'])
-        except KeyError:
+        except (ValueError, KeyError):
             Logger.error('No data quality metrics available for years %s - %s',
                         startyear, endyear)
             return ispaq

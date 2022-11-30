@@ -2,7 +2,7 @@
 # %%
 import os
 from xml.dom.minidom import Attr
-from attr import Attribute
+# from attr import Attribute
 import numpy as np
 import matplotlib
 

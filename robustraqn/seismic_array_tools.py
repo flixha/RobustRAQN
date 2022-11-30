@@ -1015,9 +1015,9 @@ def _check_picks_within_shiftlen(party, event, detection_id, shift_len):
         if abs(detection_pick.time - pick.time) <= shift_len:
             keep_picks.append(pick)
         else:
-            Logger.info('Pick for phase %s for array station %s outside '
-                        'shift_len for detection %s', pick.phase_hint,
-                        pick.waveform_id.station_code, detection_id)
+            Logger.debug('Pick for phase %s for array station %s outside '
+                         'shift_len for detection %s', pick.phase_hint,
+                         pick.waveform_id.station_code, detection_id)
     event.picks = keep_picks
     return event
 

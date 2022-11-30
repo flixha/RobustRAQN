@@ -481,13 +481,13 @@ def _create_template_objects(
         # Make the templates from picks and waveforms
         catalogForTemplates += event
         ### TODO : this is where a lot of calculated picks are thrown out
-        templateSt = template_gen._template_gen(
+        template_st = template_gen._template_gen(
             picks=event.picks, st=wavef, length=template_length, swin='all',
             prepick=prepick, all_vert=True, all_horiz=True,
             delayed=True, min_snr=min_snr, horizontal_chans=horizontal_chans,
             vertical_chans=vertical_chans, **kwargs)
         # quality-control template
-        if len(templateSt) == 0:
+        if len(template_st) == 0:
             Logger.info('Rejected template: event %s (sfile %s): no traces '
                          'with matching picks that fulfill quality criteria.',
                          event.short_str(), sfile)
@@ -497,8 +497,8 @@ def _create_template_objects(
             Logger.info('Applying AGC to template stream')
             wavef = wavef.agc(agc_window_sec, **kwargs)
         if check_template_strict:
-            templateSt = check_template(
-                templateSt, template_length, remove_nan_strict=True,
+            template_st = check_template(
+                template_st, template_length, remove_nan_strict=True,
                 allow_channel_duplication=allow_channel_duplication,
                 max_perc_zeros=5)
 
@@ -506,12 +506,12 @@ def _create_template_objects(
         # Set station_weight_factor according to number of array stations
         if add_array_picks:
             unique_stations = list(set([tr.stats.station
-                                        for tr in templateSt]))
+                                        for tr in template_st]))
             station_sites = get_station_sites(unique_stations)
             # Get a list of the sites for each array
             n_station_sites_list = [station_sites.count(site)
                                     for site in station_sites]
-            for tr in templateSt:
+            for tr in template_st:
                 tr.stats.extra.station_weight_factor = 1
                 for u_sta, n_station_sites in zip(unique_stations,
                                                   n_station_sites_list):
@@ -547,12 +547,12 @@ def _create_template_objects(
         #    print("WARNING: There was an issue creating a template for " +
         # sfile)
         # t = Template().construct(
-        #     method=None,picks=event.picks, st=templateSt,length=7.0,
+        #     method=None,picks=event.picks, st=template_st,length=7.0,
         #     swin='all', prepick=0.2, all_horiz=True, plot=False,
         #     delayed=True, min_snr=1.2, name=templ_name, lowcut=2.5,
         #     highcut=8.0,samp_rate=20, filt_order=4,event=event,
         #     process_length=300.0)
-        t = Template(name=templ_name, event=event, st=templateSt,
+        t = Template(name=templ_name, event=event, st=template_st,
                      lowcut=lowcut, highcut=highcut, samp_rate=samp_rate,
                      filt_order=4, process_length=86400.0, prepick=prepick)
         # highcut=8.0, samp_rate=20, filt_order=4, process_length=86400.0,
@@ -576,7 +576,7 @@ def _create_template_objects(
                 image_name = os.path.join('TemplatePlots',
                                           prefix + '_' + templ_name)
                 pretty_template_plot(
-                    templateSt, background=wavef, event=event,
+                    template_st, background=wavef, event=event,
                     sort_by='distance', show=False, return_figure=False,
                     size=(12, 16), save=True, savefile=image_name)
             Logger.info("Made template %s for sfile %s", templ_name, sfile)
@@ -655,7 +655,7 @@ def create_template_objects(
         apply_agc=False, agc_window_sec=5,
         min_n_traces=8, write_out=False, write_individual_templates=False,
         templ_path='Templates', prefix='', make_pretty_plot=False,
-        check_template_strict=True, allow_channel_duplication=True,
+        check_rict=True, allow_channel_duplication=True,
         normalize_NSLC=True, ispaq=None,
         add_array_picks=False, add_large_aperture_array_picks=False,
         sta_translation_file="station_code_translation.txt",

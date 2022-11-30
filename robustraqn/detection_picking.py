@@ -23,9 +23,10 @@ from obspy.geodetics.base import degrees2kilometers, locations2degrees
 # from obspy.clients.filesystem.sds import Client
 from robustraqn.obspy.clients.filesystem.sds import Client
 
-from eqcorrscan.core.match_filter import (Tribe, Party)
+from eqcorrscan.core.match_filter import (Tribe, Party, Template)
 from eqcorrscan.core.lag_calc import LagCalcError
 from eqcorrscan.utils.pre_processing import dayproc, shortproc
+# from eqcorrscan.core.template_gen import _template_gen
 
 # import quality_metrics, spectral_tools, load_events_for_detection
 # reload(quality_metrics)
@@ -62,7 +63,8 @@ def prepare_and_update_party(
         dayparty, tribe, day_st, max_template_origin_shift_seconds=10,
         max_template_origin_shift_km=50, all_vert=True, all_horiz=True,
         vertical_chans=['Z', 'H'],
-        horizontal_chans=['E', 'N', '1', '2', 'X', 'Y']):
+        horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
+        parallel=False, cores=1):
     """
     If the template was updated since the detection run, then the party and its
     detections need to be updated with some information (pick-times, channels,
@@ -70,6 +72,26 @@ def prepare_and_update_party(
     """
     if len(tribe) == 0:
         return dayparty
+    # Check if all processing parameters of the full tribe are the same - then
+    # make sure the newly added templates have the same processing parameters
+    lowcuts = list(set([tp.lowcut for tp in tribe]))
+    highcuts = list(set([tp.highcut for tp in tribe]))
+    filt_orders = list(set([tp.filt_order for tp in tribe]))
+    samp_rates = list(set([tp.samp_rate for tp in tribe]))
+    process_lengths = list(set([tp.process_length for tp in tribe]))
+    prepicks = list(set([tp.prepick for tp in tribe]))
+    # trace_offset is not needed for the original tribe
+    re_process = False
+    if (len(lowcuts) == 1 and len(highcuts) == 1 and
+        len(filt_orders) == 1 and len(samp_rates) == 1):
+        re_process = True
+        lowcut = lowcuts[0]
+        highcut = highcuts[0]
+        filt_order = filt_orders[0]
+        samp_rate = samp_rates[0]
+        process_length = process_lengths[0]
+        prepick = prepicks[0]
+    # Loop through party and check if the templates are available for picking!
     for family in dayparty:
         try:
             pick_template = tribe.select(family.template.name)
@@ -83,6 +105,9 @@ def prepare_and_update_party(
             if len(template_name_matches) >= 1:
                 found_ok_match = False
                 choose_index = 0
+                # Loop through matches with similar template names, and check
+                # by how far their origin differs from detection template. Only
+                # accept alternative template within specific bounds.
                 while (not found_ok_match and
                        choose_index < len(template_name_matches) - 1):
                     template_name_match = template_name_matches[choose_index]
@@ -106,9 +131,30 @@ def prepare_and_update_party(
                     'Did not find corresponding picking template for %s, '
                     + 'using original detection template instead.',
                     family.template.name)
+                add_tribe = Tribe(family.template)
+                # Check if this template stream should be adjusted to fit rest
+                new_tribe = Tribe()
+                if re_process:
+                    for template in add_tribe:
+                        # Need to process stream and define template with the
+                        # corrected parameters
+                        template_st = shortproc(
+                            template.st, lowcut=lowcut, highcut=highcut,
+                            filt_order=filt_order, samp_rate=samp_rate,
+                            parallel=False, num_cores=cores,
+                            ignore_length=False, seisan_chan_names=False,
+                            fill_gaps=True, ignore_bad_data=False,
+                            fft_threads=1)
+                        add_templ = Template(
+                            name=template.name, event=template.event,
+                            st=template_st, lowcut=lowcut, highcut=highcut,
+                            samp_rate=samp_rate, filt_order=filt_order,
+                            process_length=process_length, prepick=prepick)
+                        new_tribe += add_templ
+                    add_tribe = new_tribe
                 # Check that there are no duplicate channels in template
                 tribe += check_duplicate_template_channels(
-                    Tribe(family.template), all_vert=all_vert,
+                    add_tribe, all_vert=all_vert,
                     all_horiz=all_horiz, vertical_chans=vertical_chans,
                     horizontal_chans=horizontal_chans, parallel=False)
                 continue
@@ -460,7 +506,8 @@ def pick_events_for_day(
 
     # Update parties for picking
     dayparty = prepare_and_update_party(
-        dayparty, tribe, day_st, all_horiz=all_horiz, all_vert=all_vert)
+        dayparty, tribe, day_st, all_horiz=all_horiz, all_vert=all_vert,
+        parallel=parallel, cores=cores)
 
     # Check if the selection fmf / fmf2 backends for CPU makes sense (to not
     # request GPU backends unintentionally)
@@ -480,13 +527,21 @@ def pick_events_for_day(
                     'picking-tribe, adding them from the detection-templates.',
                     (len(tribe) - len(shortt)))
                 # may need to shorten extra templates that were not part of the
-                # short_tribe for picking, but that we can retrieve from detections
+                # short_tribe for picking, but that we can retrieve from
+                # detections
                 tribe_tr = tribe[0].st[0]
                 if len(shortt) > 0:
                     s_tribe_tr = shortt[0].st[0]
+                    # TODO: here I assume that template are all the same length
+                    #       and same trace offset - do I need extra check?
                     tribe_len_pct = (
                         (s_tribe_tr.stats.endtime - s_tribe_tr.stats.starttime)
                         / (tribe_tr.stats.endtime - tribe_tr.stats.starttime))
+                    # Find trace_offset that is used as start of 2nd shorttribe
+                    try:
+                        trace_offset = shortt[0].trace_offset
+                    except AttributeError:
+                        trace_offset = 0
                     existing_templ_names = [templ.name for templ in shortt]
                     # Find templates that need to be added to picking-tribe
                     extra_tribe = Tribe(
@@ -498,7 +553,7 @@ def pick_events_for_day(
                         parallel=parallel, cores=cores)
                     shortt += _shorten_tribe_streams(
                         extra_tribe, tribe_len_pct=tribe_len_pct,
-                        min_n_traces=min_chans)
+                        min_n_traces=min_chans, trace_offset=trace_offset)
             elif len(shortt) == 0:
                 Logger.error('Missing all short templates, cannot do detection'
                              '-reevaluation')

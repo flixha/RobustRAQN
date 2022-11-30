@@ -27,6 +27,7 @@ from obspy import UTCDateTime
 from obspy.geodetics.base import degrees2kilometers, locations2degrees
 from obspy.io.mseed import InternalMSEEDError, InternalMSEEDWarning
 from obspy.io.segy.segy import SEGYTraceReadingError
+from obspy.core.util.attribdict import AttribDict
 
 import warnings
 warnings.filterwarnings("ignore", category=InternalMSEEDWarning)
@@ -122,8 +123,11 @@ def read_seisan_database(database_path, cores=1, nordic_format='UKN',
     cat = Catalog([cat[0] for cat in cats if cat])
     for event, sfile in zip(cat, sfiles):
         event.comments.append(Comment(text='Sfile-name: ' + sfile))
-        extra = {'sfile_name': {'value': sfile, 'namespace': 'Seisan'}}
-        event.extra = extra
+        if not hasattr(event, 'extra'):
+            event.extra = AttribDict()
+        event.extra.update(
+            {'sfile_name': {'value': sfile, 'namespace': 'Seisan'}})
+
         if check_resource_ids:
             attach_all_resource_ids(event)
     # attach_all_resource_ids(cat)
@@ -386,8 +390,8 @@ def load_event_stream(
             wave_alrdy_at_sel_station = wave_at_sel_stations.select(
                 station=station)
             if not wave_alrdy_at_sel_station:
-                addWaves = st.select(station=station, channel=channel_priority)
-                wave_at_sel_stations += addWaves
+                add_wavs = st.select(station=station, channel=channel_priority)
+                wave_at_sel_stations += add_wavs
     # If there are more than one traces for the same station-component-
     # combination, then choose the "best" trace
     wave_at_sel_stations_copy = wave_at_sel_stations.copy()
@@ -396,8 +400,8 @@ def load_event_stream(
             station=tr.stats.station, channel='*'+tr.stats.channel[-1])
         remove_tr_st = Stream()
         keep_tr_st = Stream()
-        nSameStaChanW = len(same_sta_chan_st)
-        if nSameStaChanW > 1:
+        n_same_sta_chan_wav = len(same_sta_chan_st)
+        if n_same_sta_chan_wav > 1:
             # 1. best trace: highest sample rate
             samp_rates = [t.stats.sampling_rate for t in same_sta_chan_st]
             keep_tr_st = same_sta_chan_st.select(sampling_rate=max(samp_rates))
@@ -1329,12 +1333,12 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
     seed_id_list = [tr.id for tr in day_st]
     unique_seed_id_list = sorted(set(seed_id_list))
 
+    streams = []
     if not parallel:
-        st = Stream()
         for id in unique_seed_id_list:
             Logger.debug('Starting initial processing of %s for %s - %s.',
                          id, str(starttime)[0:19], str(endtime)[0:19])
-            st += _init_processing_per_channel(
+            streams.append(_init_processing_per_channel(
                 day_st.select(id=id), starttime, endtime,
                 remove_response=remove_response, pre_filt=pre_filt,
                 inv=inv.select(station=id.split('.')[1]),
@@ -1348,7 +1352,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
                 downsampled_max_rate=downsampled_max_rate,
                 taper_fraction=taper_fraction,
                 noise_balancing=noise_balancing,
-                balance_power_coefficient=balance_power_coefficient)
+                balance_power_coefficient=balance_power_coefficient))
 
         # Make a copy of the day-stream to find the values that need to be
         # masked.
@@ -1428,7 +1432,8 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
                  noise_balancing=noise_balancing,
                  balance_power_coefficient=balance_power_coefficient)
                 for id in unique_seed_id_list)
-            st = Stream([tr for trace_st in streams for tr in trace_st])
+            # st = Stream([tr for trace_st in streams for tr in trace_st])
+    st = _merge_streams(streams)
 
     outtoc = default_timer()
     Logger.info(
@@ -1487,7 +1492,7 @@ def init_processing_wRotation(
         key=lambda y: (y[1], y[2]), reverse=True)]
 
     if not parallel:
-        st = Stream()
+        streams = []
         for nsl in unique_net_sta_loc_list:
             Logger.info(
                 'Starting initial processing of %s for %s - %s.',
@@ -1496,8 +1501,9 @@ def init_processing_wRotation(
                 Logger.info(
                     'Starting initial 3-component processing with 1 process '
                     'with up to %s threads.', str(n_threads))
-                st += _init_processing_per_channel_wRotation(
-                    day_st.select(network=nsl[0], station=nsl[1], location=nsl[2]),
+                streams.append(_init_processing_per_channel_wRotation(
+                    day_st.select(
+                        network=nsl[0], station=nsl[1], location=nsl[2]),
                     starttime, endtime, remove_response=remove_response,
                     pre_filt=pre_filt,
                     inv=inv.select(station=nsl[1], starttime=starttime,
@@ -1517,7 +1523,7 @@ def init_processing_wRotation(
                     taper_fraction=taper_fraction,
                     noise_balancing=noise_balancing,
                     balance_power_coefficient=balance_power_coefficient,
-                    **kwargs)
+                    **kwargs))
     # elif thread_parallel and n_threads:
 
     else:
@@ -1597,12 +1603,38 @@ def init_processing_wRotation(
                     balance_power_coefficient=balance_power_coefficient,
                     parallel=False, cores=None, **kwargs)
                 for nsl in unique_net_sta_loc_list)
-        st = Stream([tr for trace_st in streams for tr in trace_st])
+    st = _merge_streams(streams)
+    # st = Stream([tr for trace_st in streams for tr in trace_st])
 
     outtoc = default_timer()
     Logger.info('Initial processing of streams took: {0:.4f}s'.format(
         outtoc - outtic))
     return st
+
+
+def _merge_streams(streams):
+    """
+    Helper function to merge many processed streams into one stream, but only
+    if traces with same ID are not part of the aggregated stream yet.
+
+    This fixes rare case where data at the same site were recorded on two 
+    different instruments / sampling rates and with different station codes,
+    so they cannot be merged.
+    """
+    stream = Stream()
+    for trace_st in streams:
+        new_trace_st = Stream()
+        st_ids = [etr.id for etr in stream]
+        for tr in trace_st:
+            if tr.id in st_ids:
+                Logger.info(
+                    'Cannot add trace %s after initial processing, trace %s '
+                    'with same ID is already in stream.',
+                    tr, stream.select(id=tr.id)[0])
+            else:
+                new_trace_st += tr
+        stream += new_trace_st
+    return stream
 
 
 def _mask_consecutive(data, value_to_mask=0, min_run_length=5, axis=-1):
@@ -2473,9 +2505,27 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
         chn = tr.stats.channel
         if std_channel_prefix is not None:
             if len(chn) < 3:
-                tr.stats.channel = std_channel_prefix + chn[-1]
+                target_channel = std_channel_prefix + chn[-1]
             elif chn[1] in 'LH10V ':
-                tr.stats.channel = std_channel_prefix + chn[2]
+                target_channel = std_channel_prefix + chn[2]
+            # Check if there are traces for the target name that would be
+            # incompatible
+            existing_sta_chans = st.select(
+                station=tr.stats.station, channel=target_channel)
+            existing_sta_chans = Stream(
+                [etr for etr in existing_sta_chans
+                 if etr.stats.sampling_rate != tr.stats.sampling_rate])
+            try:  # Remove the trace itself from comparison
+                existing_sta_chans.remove(tr)
+            except ValueError:  # When trace itself not in existing stream
+                pass
+            if len(existing_sta_chans) == 0:
+                tr.stats.channel = target_channel
+            else:
+                Logger.info(
+                    'Cannot rename channel of trace %s to %s because there is '
+                    'already a trace with id %s', tr.id, target_channel,
+                    existing_sta_chans[0])
             # tr.stats.location = '00'
     # 2. Rotate to proper ZNE and rename channels to ZNE
     # for tr in st:

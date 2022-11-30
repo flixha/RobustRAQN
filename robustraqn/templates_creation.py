@@ -675,8 +675,9 @@ def create_template_objects(
         for sta in selected_stations:
             new_inv += inv.select(station=sta)
     stations_df = get_updated_stations_df(inv)
-    not_cat_or_sfiles_msg = ('Provide either sfiles with filepathsto events, '
-                             'or provide catalog with events')
+    not_cat_or_sfiles_msg = (
+        'Provide either sfiles with file paths to events, or provide catalog '
+        ' with events.')
 
     if parallel and ((sfiles and len(sfiles) > 1) or
                      (catalog and len(catalog) > 1)):
@@ -798,7 +799,7 @@ def create_template_objects(
                 #                     event.preferred_origin().time.day))[0:10]
                 #     for event in catalog])
         else:
-            NotImplementedError(not_cat_or_sfiles_msg)
+            raise NotImplementedError(not_cat_or_sfiles_msg)
 
         # Split ispaq-stats into batches if they exist
         if ispaq is not None:
@@ -873,7 +874,7 @@ def create_template_objects(
         elif catalog:
             events_files = catalog
         else:
-            NotImplementedError(not_cat_or_sfiles_msg)
+            raise NotImplementedError(not_cat_or_sfiles_msg)
         Logger.info('Start serial template creation.')
         (tribe, wavnames) = _create_template_objects(
             events_files=events_files,

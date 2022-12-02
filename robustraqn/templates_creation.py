@@ -41,6 +41,7 @@ from eqcorrscan.core.match_filter import Template, Tribe
 # from eqcorrscan.utils.stacking import linstack, PWS_stack
 from eqcorrscan.utils.plotting import pretty_template_plot
 from eqcorrscan.utils.correlate import pool_boy
+from eqcorrscan.utils.pre_processing import _quick_copy_stream
 
 # import load_events_for_detection
 # import spectral_tools
@@ -71,6 +72,23 @@ def listdir_fullpath(d):
     return [os.path.join(d, f) for f in os.listdir(d)]
 
 
+def _quick_tribe_copy(tribe):
+    """
+    """
+    new_template_list = []
+    for template in tribe:
+        new_template_st = _quick_copy_stream(template.st)
+        new_template = Template(
+            name=template.name, st=new_template_st, lowcut=template.lowcut,
+            highcut=template.highcut, samp_rate=template.samp_rate,
+            filt_order=template.filt_order,
+            process_length=template.process_length, prepick=template.prepick,
+            event=template.event)
+        new_template_list.append(new_template)
+    new_tribe = Tribe(new_template_list)
+    return new_tribe
+
+
 def _shorten_tribe_streams(
         tribe, trace_offset=0, tribe_len_pct=0.2, max_tribe_len=None,
         min_n_traces=0, write_out=False, make_pretty_plot=False,
@@ -86,7 +104,10 @@ def _shorten_tribe_streams(
                          tribe[0].st[0].stats.starttime) * tribe_len_pct
     else:
         new_templ_len = max_tribe_len
-    short_tribe = tribe.copy()
+
+    # short_tribe = tribe.copy()
+    short_tribe = _quick_tribe_copy(tribe)
+
     for templ in short_tribe:
         templ.trace_offset = trace_offset
         for tr in templ.st:

@@ -13,3 +13,5 @@ import warnings
 
 
 # from robustraqn import quality_metrics
+from obspy.core.trace import Trace
+from obspy.core.stream import Stream

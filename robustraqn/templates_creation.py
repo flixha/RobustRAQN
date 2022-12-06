@@ -675,6 +675,7 @@ def create_template_objects(
         balance_power_coefficient=2, ground_motion_input=[],
         apply_agc=False, agc_window_sec=5,
         min_n_traces=8, write_out=False, write_individual_templates=False,
+        check_template_strict=True,
         templ_path='Templates', prefix='', make_pretty_plot=False,
         check_rict=True, allow_channel_duplication=True,
         normalize_NSLC=True, ispaq=None,

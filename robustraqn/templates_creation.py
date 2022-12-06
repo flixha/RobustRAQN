@@ -41,7 +41,6 @@ from eqcorrscan.core.match_filter import Template, Tribe
 # from eqcorrscan.utils.stacking import linstack, PWS_stack
 from eqcorrscan.utils.plotting import pretty_template_plot
 from eqcorrscan.utils.correlate import pool_boy
-from eqcorrscan.utils.pre_processing import _quick_copy_stream
 
 # import load_events_for_detection
 # import spectral_tools
@@ -59,6 +58,7 @@ from robustraqn.seismic_array_tools import (
     LARGE_APERTURE_SEISARRAY_PREFIXES, get_updated_stations_df)
 from robustraqn.bayesloc_utils import update_cat_from_bayesloc
 from robustraqn.obspy.clients.filesystem.sds import Client
+from robustraqn.obspy_utils import _quick_copy_stream
 
 import logging
 Logger = logging.getLogger(__name__)

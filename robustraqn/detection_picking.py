@@ -49,6 +49,7 @@ from robustraqn.lag_calc_postprocessing import (
 from robustraqn.seismic_array_tools import array_lag_calc
 from robustraqn.processify import processify
 from robustraqn.fancy_processify import fancy_processify
+from robustraqn.obspy_utils import _quick_copy_stream
 
 import logging
 Logger = logging.getLogger(__name__)
@@ -192,6 +193,11 @@ def prepare_and_update_party(
                 templ_picks = [
                     pick for pick in pick_template.event.picks
                     if pick.waveform_id.id == det_pick.waveform_id.id]
+                if len(templ_picks) > 1:
+                    # Could happen when there are two picks with different phas
+                    # e hints at the same time, and both are earliest on trace.
+                    templ_picks = [pick for pick in templ_picks
+                                   if pick.phase_hint == det_pick.phase_hint]
                 if len(templ_picks) == 1:
                     _time_diff = det_pick.time - templ_picks[0].time
                     time_diffs.append(_time_diff)
@@ -308,7 +314,7 @@ def pick_events_for_day(
         party_file = os.path.join(
             det_folder, 'UniqueDet*' + current_day_str + '.tgz')
         try:
-            dayparty = dayparty.read(party_file)
+            dayparty = dayparty.read(party_file, cores=cores)
         except Exception as e:
             Logger.warning('Could not read in any parties for ' + party_file)
             Logger.warning(e)
@@ -428,7 +434,8 @@ def pick_events_for_day(
     day_st = prepare_detection_stream(
         day_st, tribe, parallel=parallel, cores=cores,
         try_despike=False)
-    original_stats_stream = day_st.copy()
+    # original_stats_stream = day_st.copy()
+    original_stats_stream = _quick_copy_stream(day_st)
     # daily_plot(day_st, year, month, day, data_unit="counts",
     #            suffix='resp_removed')
     # day_st = init_processing(

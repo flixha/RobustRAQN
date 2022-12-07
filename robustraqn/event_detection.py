@@ -77,6 +77,7 @@ from robustraqn.load_events_for_detection import (
 from robustraqn.spectral_tools import (Noise_model,
                                        get_updated_inventory_with_noise_models)
 from robustraqn.templates_creation import create_template_objects
+from robustraqn.obspy_utils import _quick_copy_stream
 
 Logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.INFO)
@@ -175,9 +176,14 @@ def calculate_events_for_party(party, parallel=False, cores=None):
             if len(family) == 0:
                 continue
             full_templ = family.template
-            new_template_st = Stream(
-                [Trace(header=tr.stats, data=tr.data[:1])
-                 for tr in full_templ.st])
+            # Use quick copy function for ~20 % speedup
+            new_template_st = _quick_copy_stream(
+                full_templ.st, deepcopy_data=False)
+            # Set data arrays to first element alone to save time when sending
+            # to workers
+            for trace in new_template_st:
+                trace.__dict__['data'] = trace.__dict__['data'][:1]
+
             simple_template = Template(
                 name=full_templ.name, st=new_template_st,
                 lowcut=full_templ.lowcut, highcut=full_templ.highcut,
@@ -246,7 +252,8 @@ def run_day_detection(
             concurrency not in ['multiprocess', 'multithread']):
         concurrency = 'multiprocess'
 
-    
+    # When copy_data=False selected for EQcorrscan, then we have to copy the 
+    # data here. TODO: use quicker tribe copy function.
     if not copy_data:
         tribe = tribe.copy()
         short_tribe = short_tribe.copy()
@@ -303,7 +310,8 @@ def run_day_detection(
             pass
 
     # keep input safe:
-    day_st = day_st.copy()
+    # day_st = day_st.copy()
+    day_st = _quick_copy_stream(day_st)
     if len(day_st) == 0:
         # # Differentiate between Echo and Delta (deadlocks here otherwise)
         # req_parallel = False
@@ -592,7 +600,8 @@ def run_day_detection(
                 detection_file_name = os.path.join(
                     redetection_path, 'UniqueDet_short_' + current_day_str)
                 short_party.write(
-                    detection_file_name, format='tar', overwrite=True)
+                    detection_file_name, format='tar', overwrite=True,
+                    max_events_per_file=20)
                 short_party.write(
                     detection_file_name + '.csv', format='csv', overwrite=True)
 
@@ -627,7 +636,8 @@ def run_day_detection(
     if write_party:
         detection_file_name = os.path.join(detection_path,
                                            'UniqueDet' + current_day_str)
-        party.write(detection_file_name, format='tar', overwrite=True)
+        party.write(detection_file_name, format='tar', overwrite=True,
+                    max_events_per_file=20)
         party.write(detection_file_name + '.csv', format='csv',
                     overwrite=True)
 

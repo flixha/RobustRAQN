@@ -897,7 +897,6 @@ def extract_detections(detections, templates, archive, arc_type,
         day_detections = [detection for detection in detections
                           if UTCDateTime(detection.detect_time.date) ==
                           detection_day]
-        del delays
 
         # Reuqest the whole day's stream plus 15 minutes before / after
         starttime = UTCDateTime(detection_day.date) - 15*60

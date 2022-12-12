@@ -1872,7 +1872,7 @@ def _init_processing_per_channel_wRotation(
         st, inv, sta_translation_file=sta_translation_file,
         std_network_code=std_network_code, std_location_code=std_location_code,
         std_channel_prefix=std_channel_prefix, parallel=False, cores=1,
-        thread_parallel=thread_parallel, n_threads=n_threads)
+        thread_parallel=thread_parallel, n_threads=n_threads, **kwargs)
 
     # Do noise-balancing by the station's PSDPDF average
     if noise_balancing:

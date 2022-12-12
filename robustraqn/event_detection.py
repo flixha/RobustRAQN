@@ -18,6 +18,8 @@ def run_from_ipython():
 
 
 import os, glob, gc, math, calendar, matplotlib, platform, sys
+import warnings
+
 from xml.dom.minidom import Attr
 from numpy.core.numeric import True_
 # sys.path.insert(1, os.path.expanduser(
@@ -44,6 +46,7 @@ from obspy.core.inventory.inventory import Inventory
 #from obspy import read as obspyread
 from obspy import UTCDateTime
 from obspy.core.util.attribdict import AttribDict
+from obspy.core.util.deprecation_helpers import ObsPyDeprecationWarning
 # from obspy.io.mseed import InternalMSEEDError
 # from obspy.clients.filesystem.sds import Client
 from robustraqn.obspy.clients.filesystem.sds import Client
@@ -84,6 +87,8 @@ Logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
+# Set up some warnings-filtering
+warnings.filterwarnings("ignore", category=ObsPyDeprecationWarning)
 
 
 def read_bulk_test(client, bulk, parallel=False, cores=None):
@@ -212,11 +217,12 @@ def calculate_events_for_party(party, parallel=False, cores=None):
     else:
         Logger.info('Adding origins to %s remaining short detections.',
                     len([d for fam in party for d in fam]))
-        for family in party:
-            for detection in family:
-                _ = detection._calculate_event(
-                    template=family.template, template_st=None,
-                    estimate_origin=True, correct_prepick=True)
+        with warnings.catch_warnings(category=ObsPyDeprecationWarning):
+            for family in party:
+                for detection in family:
+                    _ = detection._calculate_event(
+                        template=family.template, template_st=None,
+                        estimate_origin=True, correct_prepick=True)
     return party
 
 

@@ -49,7 +49,8 @@ from obsplus.stations.pd import stations_to_df
 from robustraqn.obspy.core.stream import Stream
 import robustraqn.spectral_tools  # absolute import to avoid circular import
 from robustraqn.quality_metrics import get_parallel_waveform_client
-from robustraqn.seismic_array_tools import get_station_sites
+from robustraqn.seismic_array_tools import (
+    get_station_sites, get_station_sites_dict)
 from robustraqn.obspy.clients.filesystem.sds import Client
 from timeit import default_timer
 import logging
@@ -2827,6 +2828,11 @@ def reevaluate_detections(
     Logger.info('Start reevaluation of detections.')
     n_families_in = len(party.families)
     n_detections_in = len(party)
+    # Get list of unique station names in party for station-site dict lookup
+    unique_stations = list(set(
+        [chan[0] for fam in party for det in fam for chan in det.chans]))
+    station_sites_dict = get_station_sites_dict(unique_stations)
+
     if min_n_station_sites > 1:
         checked_party = Party()
         for family in party:
@@ -2840,10 +2846,14 @@ def reevaluate_detections(
                 #     for p in detection.event.picks]))
                 # TODO: is there a way to speed up the checks on number of 
                 #       station sites?
-                unique_stations = list(set([chan[0]
+                unique_det_stations = list(set([chan[0]
                                             for chan in detection.chans]))
+                # n_station_sites = len(list(set(
+                #     get_station_sites(unique_stations))))
+                # Get the number of station sites
                 n_station_sites = len(list(set(
-                    get_station_sites(unique_stations))))
+                    station_sites_dict[uniq_station]
+                    for uniq_station in unique_det_stations)))
                 if n_station_sites >= min_n_station_sites:
                     checked_family.detections.append(detection)
             if len(family.detections) > 0:

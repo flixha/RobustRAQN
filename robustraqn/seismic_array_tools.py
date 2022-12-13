@@ -158,6 +158,18 @@ SEISARRAY_REF_EQUIVALENT_STATIONS = defaultdict(
 3. Picking
 """
 
+def get_station_sites_dict(stations, seisarray_prefixes=SEISARRAY_PREFIXES):
+    """
+    Return a dict of key: station name, value: station site name (i.e., station
+    name for single stations and array name for arrays)
+    """
+    station_sites = get_station_sites(
+        stations, seisarray_prefixes=seisarray_prefixes)
+    station_sites_dict = dict()
+    for station, station_site in zip(stations, station_sites):
+        station_sites_dict.update({station: station_site})
+    return station_sites_dict
+
 
 def get_station_sites(stations, seisarray_prefixes=SEISARRAY_PREFIXES):
     """

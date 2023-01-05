@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 # import matplotlib
 from threadpoolctl import threadpool_limits
+import pickle
 
 from multiprocessing import Pool, cpu_count, current_process, get_context
 # from multiprocessing.pool import ThreadPool
@@ -669,7 +670,7 @@ def parallel_detrend(st, parallel=True, cores=None, type='simple'):
 def parallel_merge(st, method=0, fill_value=None, interpolation_samples=0,
                    cores=1):
     seed_id_list = [tr.id for tr in st]
-    unique_seed_id_list = set(seed_id_list)
+    unique_seed_id_list = list(dict.fromkeys(seed_id_list))
 
     stream_list = [st.select(id=seed_id) for seed_id in unique_seed_id_list]
     # with pool_boy(
@@ -729,9 +730,9 @@ def parallel_rotate(st, inv, parallel=True, cores=None,
     # balancing).
     net_sta_loc = list(chain.from_iterable(repeat(item, count)
                        for item, count in Counter(net_sta_loc).most_common()))
+    unique_net_sta_loc_list = list(dict.fromkeys(net_sta_loc))
     # Need to sort list by original order after set()
-    unique_net_sta_loc_list = sorted(set(net_sta_loc),
-                                     key=lambda x: net_sta_loc.index(x))
+    # sorted(set(net_sta_loc), key=lambda x: net_sta_loc.index(x))
     # stream_list = [st.select(id=seed_id) for seed_id in unique_seed_id_list]
     if cores is None:
         cores = min(len(unique_net_sta_loc_list), cpu_count())
@@ -1094,7 +1095,7 @@ def prepare_picks(
                 stations_w_timing_issue.append(pick.waveform_id.station_code)
         except AttributeError:
             pass
-    stations_w_timing_issue = list(set(stations_w_timing_issue))
+    stations_w_timing_issue = list(dict.fromkeys(stations_w_timing_issue))
 
     new_event = event.copy()
     new_event.picks = list()
@@ -1280,6 +1281,7 @@ def try_apply_agc(st, tribe, agc_window_sec=5, pre_processed=False,
             starttime=starttime, parallel=parallel, num_cores=cores,
             ignore_length=False, seisan_chan_names=False, fill_gaps=True,
             ignore_bad_data=False, fft_threads=n_threads)
+
         # TODO: fix error eqcorrscan.core.match_filter.matched_filter:315
         # _group_process() ERROR Data must be process_length or longer, not computing
         # when applying agc
@@ -1298,6 +1300,7 @@ def try_apply_agc(st, tribe, agc_window_sec=5, pre_processed=False,
             st = Stream(traces)
         else:
             st = st.agc(agc_window_sec=agc_window_sec, **kwargs)
+
         outtoc = default_timer()
         Logger.info('Applying AGC took: {0:.4f}s'.format(outtoc - outtic))
     else:
@@ -1332,7 +1335,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
     outtic = default_timer()
 
     seed_id_list = [tr.id for tr in day_st]
-    unique_seed_id_list = sorted(set(seed_id_list))
+    unique_seed_id_list = list(dict.fromkeys(seed_id_list))
 
     streams = []
     if not parallel:
@@ -1481,7 +1484,7 @@ def init_processing_wRotation(
     # Need to sort list by original order after set() ##
 
     # Better: Sort by: whether needs rotation; npts per 3-comp stream
-    unique_net_sta_loc_list = set(net_sta_loc)
+    unique_net_sta_loc_list = list(dict.fromkeys(net_sta_loc))
     three_comp_strs = [
         day_st.select(network=nsl[0], station=nsl[1], location=nsl[2])
         for nsl in unique_net_sta_loc_list]
@@ -1699,7 +1702,7 @@ def mask_consecutive_zeros(st, min_run_length=5, min_data_percentage=80,
     # Once traces are split they should not have masks any more. So need to
     # check length of data in trace again.
     if not streams_are_masked:
-        uniq_tr_ids = list(set([tr.id for tr in st]))
+        uniq_tr_ids = list(dict.fromkeys([tr.id for tr in st]))
         for uniq_tr_id in uniq_tr_ids:
             trace_len_in_seconds = np.sum(
                 [tr.stats.npts / tr.stats.sampling_rate for tr in st])
@@ -1996,7 +1999,7 @@ def check_normalize_sampling_rate(
 
     # Create list of unique Seed-identifiers (NLSC-objects)
     seed_id_list = [tr.id for tr in stream]
-    unique_seed_id_list = set(seed_id_list)
+    unique_seed_id_list = list(dict.fromkeys(seed_id_list))
 
     # Do a quick check: if all sampling rates are the same, and all values are
     # one of the allowed default values, then skip all the other tests.
@@ -2864,6 +2867,7 @@ def reevaluate_detections(
     else:
         checked_party = party
     long_party = checked_party
+    n_detections_ok = len(long_party)
 
     # Need to scale factor slightly for fftw vs time-domain
     # (based on empirical observation)
@@ -2872,7 +2876,8 @@ def reevaluate_detections(
     threshold = threshold * re_eval_thresh_factor
 
     # Select only the relevant templates
-    det_templ_names = set([d.template_name for f in long_party for d in f])
+    det_templ_names = list(dict.fromkeys(
+        [d.template_name for f in long_party for d in f]))
     short_tribe = Tribe(
         [short_tribe.select(templ_name) for templ_name in det_templ_names])
     # Find the relevant parts of the stream so as not to rerun the whole day:
@@ -2932,7 +2937,7 @@ def reevaluate_detections(
     # from party.
     Logger.info(
         'Compare %s detections for short templates against %s existing detect'
-        'ions', len([d for fam in short_party for d in fam]), n_detections_in)
+        'ions', len([d for fam in short_party for d in fam]), n_detections_ok)
     return_party = Party()
     long_return_party = Party()
     short_return_party = Party()

@@ -313,14 +313,15 @@ def check_request_for_wildcards(stats, pattern_list, pattern_position):
             # targets = stats[stats.index.str.startswith(station + '\.')]
             # pattern_position describes which part of the SLC-target should be
             # matched: 0: station, 1: location, 2: channel
-            matching_patterns = list(set(matching_patterns))
+            matching_patterns = list(dict.fromkeys(matching_patterns))
             if len(matching_patterns) > 0:
                 for mpattern in matching_patterns:
                     full_pattern_list.append(mpattern)
         else:
             full_pattern_list.append(pattern)
     if full_pattern_list:
-        pattern_list = list(set(full_pattern_list))
+        # Get unqiue patterns in original order
+        pattern_list = list(dict.fromkeys(full_pattern_list))
     return pattern_list
 
 
@@ -459,6 +460,7 @@ def create_bulk_request(
                 starttime, endtime, **kwargs)
             bulk_lists.append(bulk_new)
             rejected_bulk_lists.append(rejected_bulk)
+    Logger.debug('Bulk request is: %s', bulk_lists)
 
     # Merge the lists containted in bulk_lists
     bulk = list(itertools.chain.from_iterable(b for b in bulk_lists))

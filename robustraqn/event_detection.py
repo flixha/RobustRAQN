@@ -117,11 +117,13 @@ def prepare_day_overlap(
     # TODO: implement variable overlap
     starttime_overlap = starttime_req + 5 * 60
     endtime_overlap = endtime_req - 5 * 60
-    process_length = endtime_overlap - starttime_overlap
+    process_length = endtime_overlap - starttime_overlap  # in seconds
     for tribe in tribes:
         for templ in tribe:
             templ.process_length = process_length
     stream.trim(starttime=starttime_overlap, endtime=endtime_overlap)
+    Logger.info('Earliest trace start: %s',
+                 min([tr.stats.starttime for tr in stream]))
     return tribes, stream
 
 
@@ -330,6 +332,7 @@ def run_day_detection(
             starttime_req, endtime_req, stats=ispaq,
             parallel=False, cores=1, stations=selected_stations,
             minimum_sample_rate=minimum_sample_rate, **kwargs)
+        Logger.debug('Bulk request: %s', bulk_request)
         if not bulk_request:
             Logger.warning('No waveforms requested for %s - %s',
                            str(starttime)[0:19], str(endtime)[0:19])
@@ -359,7 +362,6 @@ def run_day_detection(
             day_st, tribe, parallel=parallel, cores=cores, try_despike=False,
             ispaq=day_stats)
         # daily_plot(day_st, year, month, day, data_unit="counts", suffix='')
-
         # Do initial processing (rotation, stats normalization, merging)
         # by parallelization across three-component seismogram sets.
         nyquist_f = minimum_sample_rate / 2
@@ -457,6 +459,7 @@ def run_day_detection(
     Logger.info('Start match_filter detection on %s with up to %s cores.',
                 current_day_str, str(cores))
     try:
+        pickle.dump([tribe, day_st], open('tribe_detect_input_03.pickle', "wb"), protocol=4)
         party = tribe.detect(
             stream=day_st, threshold=threshold, trig_int=trig_int,
             threshold_type=threshold_type, overlap='calculate', plot=False,
@@ -492,7 +495,7 @@ def run_day_detection(
     n_families = len([f for f in party if len(f) > 0])
     n_detections = len([d for f in party for d in f])
     Logger.info('Got a party of %s families with %s detections!',
-                 str(n_families), str(n_detections))
+                 n_families, n_detections)
 
     # check that detection occurred on request day, not during overlap time
     if let_days_overlap:
@@ -505,7 +508,7 @@ def run_day_detection(
         party = Party(
             families=[family for family in families if len(family) > 0])
     Logger.info('Got a party of %s families with %s detections on %s.',
-                 str(n_families), str(n_detections), str(starttime)[0:10])
+                 n_families, len(party), str(starttime)[0:10])
 
     if not party:
         Logger.warning('Party of families of detections is empty')

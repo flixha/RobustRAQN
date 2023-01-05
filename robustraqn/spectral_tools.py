@@ -332,7 +332,7 @@ def calcMegaPDF(freq_u, freq_u_str, db_u, pdffiles, outpdffile='megapdf.npy'):
     logfile.close()
 
     # Save PDF to a numpy file so we can read+plot it easily later
-    np.save(outpdffile, [pdf, freq_u, db_u])
+    np.savez(outpdffile, pdf=pdf, freq_u=freq_u, db_u=db_u)
 
     # outpdftext = open('megapdf.txt', 'w')
     # outpdftext.write('#freq db hits\n')
@@ -805,7 +805,7 @@ def attach_noise_models(inv, pdf_dir, outfile='inv.pickle',
     station_list = list()
     for sta_pdf_dir in all_station_pdf_dirs:
         station_list.append(sta_pdf_dir.split("/")[-1])
-    station_list = sorted(list(set(station_list)))
+    station_list = list(dict.fromkeys(station_list))
 
     # array_list is a list of tuples, with the first tuple element containing
     # the array-prefix and the 2nd tuple element containing a list of stations
@@ -824,7 +824,7 @@ def attach_noise_models(inv, pdf_dir, outfile='inv.pickle',
                 single_station_list.remove(station)
         seisarray_list.append((seisarray_prefix, seisarray_station_list))
 
-    single_station_list = sorted(list(set(single_station_list)))
+    single_station_list = list(dict.fromkeys(single_station_list))
 
     # For seismic arrays, build one megaPDF across all stations and attach the
     # same noise model to all stations.
@@ -849,7 +849,7 @@ def attach_noise_models(inv, pdf_dir, outfile='inv.pickle',
                 channel="[ESBHCDFNML]??", plot_station_pdf=plot_station_pdf)
         except Exception as e:
             Logger.warning('Cannot add noise model for station %s: %s',
-                           station, e)
+                            station, e)
 
     # inv.write('test_inv.xml', format="STATIONXML")
     pickle.dump(inv, open(outfile, "wb"), protocol=4)
@@ -919,7 +919,10 @@ def plot_all_station_pdfs():
 
     for file in glob.glob('StationPDFs/*.npy'):
         try:
-            pdf, freq_u, db_u = np.load(open(file, "rb"), allow_pickle=True)
+            data = np.load(open(file, "rb"), allow_pickle=True)
+            pdf = data['pdf']
+            freq_u = data['freq_u']
+            db_u = data['db_u']
             pdf_norm = normalize_pdf(pdf, freq_u)
             station_name = file.split(".")[1]
             plot_pdf(pdf_norm, freq_u, db_u, station_name, 'StationPDFs',

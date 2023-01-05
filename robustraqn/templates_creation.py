@@ -526,8 +526,8 @@ def _create_template_objects(
         # Reduce weights for the individual stations in an array:
         # Set station_weight_factor according to number of array stations
         if add_array_picks:
-            unique_stations = list(set([tr.stats.station
-                                        for tr in template_st]))
+            unique_stations = list(dict.fromkeys(
+                [tr.stats.station for tr in template_st]))
             station_sites = get_station_sites(unique_stations)
             # Get a list of the sites for each array
             n_station_sites_list = [station_sites.count(site)

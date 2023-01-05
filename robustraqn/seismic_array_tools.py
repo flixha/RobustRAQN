@@ -226,8 +226,9 @@ def get_array_stations_from_df(stations_df=pd.DataFrame(),
                 # single_station_list.remove(station)
         # seisarray_list.append((seisarray_prefix, seisarray_station_list))
         if len(seisarray_station_list) > 0:
+            # Get unique list of seisarray stations
             seisarray_dict[seisarray_prefix] = list(
-              set(seisarray_station_list))
+                dict.fromkeys(seisarray_station_list))
 
     return seisarray_dict
 
@@ -291,7 +292,7 @@ def extract_array_picks(event, seisarray_prefixes=SEISARRAY_PREFIXES):
                                flags=fnmatch.EXTMATCH):
                 array_picks_list.append(pick)
                 # single_station_list.remove(station)
-        phase_hints = list(set([
+        phase_hints = list(dict.fromkeys([
             pick.phase_hint for pick in array_picks_list
             if pick.phase_hint and pick.phase_hint[0] in 'PS']))
         pha_picks_dict = dict()
@@ -335,7 +336,7 @@ def extract_array_stream(st, seisarray_prefixes=SEISARRAY_PREFIXES):
                 array_st += tr
         # seisarray_list.append((seisarray_prefix, seisarray_station_list))
         # if there's only data for one station it doesn't need array handling
-        array_stas = set([tr.stats.station for tr in array_st])
+        array_stas = list(dict.fromkeys([tr.stats.station for tr in array_st]))
         if len(array_st) > 1 and len(array_stas) > 1:
             array_streams_dict[seisarray_prefix] = array_st
     return array_streams_dict
@@ -1142,7 +1143,7 @@ def array_lag_calc(
     for family in party:
         tribe_array_picks_dict[family.template.name] = extract_array_picks(
             event=family.template.event)
-    phase_hints = list(set([
+    phase_hints = list(dict.fromkeys([
         phase_hint
         for templ_name, array_picks_dict in tribe_array_picks_dict.items()
         for seisarray_prefix, phase_picks_dict in array_picks_dict.items()

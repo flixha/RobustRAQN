@@ -375,7 +375,7 @@ def postprocess_picked_events(
         #     and num_p_picks_on_det_sta + num_s_picks_on_det_sta >= 6)\
         #     or (len(pick_stations) >= 4\
         #     and num_s_picks_on_det_sta >= 5):
-        unique_stations = list(set([
+        unique_stations = list(dict.fromkeys([
             p.waveform_id.station_code for p in event.picks]))
         n_station_sites = len(list(set(get_station_sites(unique_stations))))
         if ((len(pick_stations) >= min_pick_stations) and 
@@ -580,7 +580,7 @@ def _check_duplicate_template_channels(
     """
     # Keep only the earliest trace for traces with same ID
     temp_st_new = Stream()
-    unique_trace_ids = sorted(list(set([tr.id for tr in template.st])))
+    unique_trace_ids = list(dict.fromkeys([tr.id for tr in template.st]))
     for trace_id in unique_trace_ids:
         trace_check_id = trace_id
         if (all_vert and len(vertical_chans) > 1
@@ -608,8 +608,8 @@ def _check_duplicate_template_channels(
     # Also throw away the later pick from the template's event
     new_pick_list = list()
     pick_tr_id_list = list()
-    uniq_pick_trace_ids = sorted(list(set(
-        [pick.waveform_id.id for pick in template.event.picks])))
+    uniq_pick_trace_ids = list(dict.fromkeys(
+        [pick.waveform_id.id for pick in template.event.picks]))
     for pick_tr_id in uniq_pick_trace_ids:
         pick_tr_check_id = [pick_tr_id]
         if (all_vert and len(vertical_chans) > 1
@@ -918,9 +918,10 @@ def extract_detections(detections, templates, archive, arc_type,
             # otherwise will run out of memory for multiple cuts.
             st = day_st.slice(starttime=t1, endtime=t2).copy()
             if request_fdsn:
-                existing_stations = list(set([tr.stats.station for tr in st]))
-                other_stations = list(
-                    set(all_stations).difference(existing_stations))
+                existing_stations = list(dict.fromkeys(
+                    [tr.stats.station for tr in st]))
+                other_stations = list(dict.fromkeys(
+                    all_stations).difference(existing_stations))
                 if len(other_stations) > 0:
                     Logger.info('Requesting %s additional stations from FDSN-'
                                 'routing client.', len(other_stations))

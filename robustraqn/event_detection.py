@@ -459,7 +459,6 @@ def run_day_detection(
     Logger.info('Start match_filter detection on %s with up to %s cores.',
                 current_day_str, str(cores))
     try:
-        pickle.dump([tribe, day_st], open('tribe_detect_input_03.pickle', "wb"), protocol=4)
         party = tribe.detect(
             stream=day_st, threshold=threshold, trig_int=trig_int,
             threshold_type=threshold_type, overlap='calculate', plot=False,

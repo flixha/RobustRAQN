@@ -84,9 +84,9 @@ from robustraqn.obspy_utils import _quick_copy_stream
 
 Logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.INFO)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 # Set up some warnings-filtering
 warnings.filterwarnings("ignore", category=ObsPyDeprecationWarning)
 

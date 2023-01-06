@@ -11,9 +11,9 @@ from eqcorrscan.utils.catalog_to_dd import _generate_event_id_mapper
 
 import logging
 Logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
+#logging.basicConfig(
+#    level=logging.INFO,
+#    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 
 
 GC_HEADER_LIST = [

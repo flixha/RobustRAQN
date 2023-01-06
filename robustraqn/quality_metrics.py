@@ -33,10 +33,10 @@ from eqcorrscan.utils.correlate import pool_boy
 
 import logging
 Logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t" +
-    "%(levelname)s\t%(message)s")
+#logging.basicConfig(
+#    level=logging.INFO,
+#    format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t" +
+#    "%(levelname)s\t%(message)s")
 
 
 def _get_waveforms_bulk(client, bulk):

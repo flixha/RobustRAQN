@@ -7,11 +7,10 @@ from robustraqn.obspy.core.trace import Trace
 
 import logging
 Logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format=("%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%" +
-            "(levelname)s\t%(message)s"))
-"[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
+#logging.basicConfig(
+#    level=logging.INFO,
+#    format=("%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%" +
+#            "(levelname)s\t%(message)s"))
 
 
 # class Stream(object):

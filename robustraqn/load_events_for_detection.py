@@ -56,9 +56,9 @@ from robustraqn.obspy.clients.filesystem.sds import Client
 from timeit import default_timer
 import logging
 Logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s")
+#logging.basicConfig(
+#    level=logging.INFO,
+#    format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s")
 
 
 MY_ENV = os.environ.copy()

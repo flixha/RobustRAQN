@@ -2860,7 +2860,8 @@ def reevaluate_detections(
                 if n_station_sites >= min_n_station_sites:
                     checked_family.detections.append(detection)
             if len(family.detections) > 0:
-                checked_party += checked_family
+                # checked_party += checked_family
+                checked_party.families.append(checked_family)
         Logger.info(
             'Checked party, %s detections fulfill minimum sites criterion.',
             len([det for fam in checked_party for det in fam]))
@@ -3047,8 +3048,11 @@ def reevaluate_detections(
         # if len(return_family) >= 0:
         #     return_party += return_family
         if len(long_family) >= 0:
-            long_return_party += long_family
-            short_return_party += short_family
+            # Quicker with append, to avoid checks between all templates:
+            # long_return_party += long_family
+            long_return_party.families.append(long_family)
+            # short_return_party += short_family
+            short_return_party.families.append(short_family)
 
     if len(long_return_party) == 0:
         n_detections = 0

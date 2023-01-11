@@ -289,34 +289,6 @@ def run_day_detection(
     if not os.path.exists(redetection_path):
         os.mkdir(redetection_path)
 
-    if day_hash_file is not None:
-        # Check if this date has already been processed with the same settings
-        # i.e., current date and a settings-based hash exist already in file
-        Logger.info('Checking if a run with the same parameters has been '
-                    'performed before...')
-        settings_hash = get_multi_obj_hash(
-            [tribe.templates, selected_stations, remove_response, inv, ispaq,
-            noise_balancing, balance_power_coefficient, xcorr_func, arch,
-            trig_int, threshold, re_eval_thresh_factor, min_chans, multiplot,
-            check_array_misdetections, short_tribe, short_tribe2, write_party,
-            detection_path, redetection_path, time_difference_threshold,
-            minimum_sample_rate, min_n_station_sites, apply_agc,
-            agc_window_sec, use_weights])
-        # Check hash against existing list
-        try:
-            day_hash_df = pd.read_csv(day_hash_file, names=["date", "hash"])
-            if ((day_hash_df['date'] == current_day_str) &
-                    (day_hash_df['hash'] == settings_hash)).any():
-                Logger.info(
-                    'Day %s already processed: Date and hash match entry in '
-                    'date-hash list, skipping this day.', current_day_str)
-                if not return_stream and dump_stream_to_disk:
-                    return
-                else:
-                    return [Party(), Stream()]
-        except FileNotFoundError:
-            pass
-
     # keep input safe:
     # day_st = day_st.copy()
     day_st = _quick_copy_stream(day_st)
@@ -340,6 +312,34 @@ def run_day_detection(
                 return
             else:
                 return [Party(), Stream()]
+
+    if day_hash_file is not None:
+        # Check if this date has already been processed with the same settings
+        # i.e., current date and a settings-based hash exist already in file
+        Logger.info('Checking if a run with the same parameters has been '
+                    'performed before...')
+        settings_hash = get_multi_obj_hash(
+            [tribe.templates, selected_stations, remove_response, inv,
+             day_stats, noise_balancing, balance_power_coefficient, xcorr_func,
+             arch, trig_int, threshold, re_eval_thresh_factor, min_chans,
+             multiplot, check_array_misdetections, short_tribe, short_tribe2,
+             write_party, detection_path, redetection_path,
+             time_difference_threshold, minimum_sample_rate,
+             min_n_station_sites, apply_agc, agc_window_sec, use_weights])
+        # Check hash against existing list
+        try:
+            day_hash_df = pd.read_csv(day_hash_file, names=["date", "hash"])
+            if ((day_hash_df['date'] == current_day_str) &
+                    (day_hash_df['hash'] == settings_hash)).any():
+                Logger.info(
+                    'Day %s already processed: Date and hash match entry in '
+                    'date-hash list, skipping this day.', current_day_str)
+                if not return_stream and dump_stream_to_disk:
+                    return
+                else:
+                    return [Party(), Stream()]
+        except FileNotFoundError:
+            pass
 
         # Read in continuous data and prepare for processing
         day_st = Stream()

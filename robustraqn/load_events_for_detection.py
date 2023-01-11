@@ -1794,8 +1794,9 @@ def _init_processing_per_channel(
 
     # Put masked array into response-corrected stream st:
     for j, tr in enumerate(st):
-        if isinstance(masked_st[j].data, np.ma.MaskedArray):
-            tr.data = np.ma.masked_array(tr.data, mask=masked_st[j].data.mask)
+        if isinstance(masked_st.traces[j].data, np.ma.MaskedArray):
+            tr.data = np.ma.masked_array(tr.data,
+                                         mask=masked_st.traces[j].data.mask)
     
     # Check that at least 80 (x) % of data are not masked:
     # TODO: Don't do consecutive Zero checks here, just the other checks 
@@ -1891,10 +1892,10 @@ def _init_processing_per_channel_wRotation(
 
     # Put masked array into response-corrected stream st:
     for j, tr in enumerate(st):
-        if isinstance(masked_st[j].data, np.ma.MaskedArray):
+        if isinstance(masked_st.traces[j].data, np.ma.MaskedArray):
             try:
                 tr.data = np.ma.masked_array(
-                    tr.data, mask=masked_st[j].data.mask)
+                    tr.data, mask=masked_st.traces[j].data.mask)
             except np.ma.MaskError as e:
                 Logger.error(e)
                 Logger.error(

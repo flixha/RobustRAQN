@@ -261,7 +261,8 @@ def pick_events_for_day(
         concurrency='concurrent', trig_int=12, minimum_sample_rate=20,
         time_difference_threshold=1, detect_value_allowed_reduction=2.5,
         threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
-        archives=[], request_fdsn=False, min_det_chans=1, shift_len=0.8,
+        archives=[], archive_types=[], request_fdsn=False,
+        min_det_chans=1, shift_len=0.8,
         min_cc=0.4, min_cc_from_mean_cc_factor=0.6, extract_len=240,
         interpolate=True, use_new_resamp_method=True,
         write_party=False, ignore_cccsum_comparison=True,
@@ -487,8 +488,8 @@ def pick_events_for_day(
 
     # Check if I can do pre-processing just once:
     pre_processed = False
-    if ((apply_array_lag_calc or apply_agc or check_array_misdetections)
-            and not pre_processed):
+    if ((apply_array_lag_calc or apply_agc or check_array_misdetections or
+            compute_relative_magnitudes) and not pre_processed):
         lowcuts = list(set([tp.lowcut for tp in tribe]))
         highcuts = list(set([tp.highcut for tp in tribe]))
         filt_orders = list(set([tp.filt_order for tp in tribe]))
@@ -498,7 +499,7 @@ def pick_events_for_day(
             Logger.info(
                 'All templates have the same trace-processing parameters. '
                 'Preprocessing data once for detection checking, agc, lag-calc'
-                ', and array-lag-calc.')
+                ', array-lag-calc, and relative magnitudes.')
             day_st = shortproc(
                 day_st, lowcut=lowcuts[0], highcut=highcuts[0],
                 filt_order=filt_orders[0], samp_rate=samp_rates[0],
@@ -628,7 +629,7 @@ def pick_events_for_day(
         all_vert=all_vert, all_horiz=all_horiz,
         horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
         interpolate=interpolate, use_new_resamp_method=use_new_resamp_method,
-        parallel=parallel, cores=cores, daylong=daylong,
+        xcorr_func=xcorr_func, parallel=parallel, cores=cores, daylong=daylong,
         ignore_cccsum_comparison=ignore_cccsum_comparison, **kwargs)
     # try:
     # except LagCalcError:
@@ -651,8 +652,8 @@ def pick_events_for_day(
             min_cc_from_mean_cc_factor=min(min_cc_from_mean_cc_factor, 0.999),
             all_vert=all_vert, all_horiz=all_horiz,
             horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
-            parallel=parallel, cores=cores, daylong=daylong,
-            interpolate=interpolate,
+            xcorr_func=xcorr_func, parallel=parallel, cores=cores,
+            daylong=daylong, interpolate=interpolate,
             use_new_resamp_method=use_new_resamp_method,
             ignore_cccsum_comparison=ignore_cccsum_comparison, **kwargs)
 
@@ -662,8 +663,8 @@ def pick_events_for_day(
         write_sfiles=True, sfile_path=sfile_path,
         operator=operator, all_channels_for_stations=relevant_stations,
         extract_len=extract_len, write_waveforms=True, archives=archives,
-        request_fdsn=request_fdsn, template_path=template_path,
-        min_n_station_sites=min_n_station_sites,
+        archive_types=archive_types, request_fdsn=request_fdsn,
+        template_path=template_path, min_n_station_sites=min_n_station_sites,
         min_pick_stations=min_pick_stations, 
         min_picks_on_detection_stations=min_picks_on_detection_stations,
         write_to_year_month_folders=write_to_year_month_folders,

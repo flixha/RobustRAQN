@@ -196,7 +196,8 @@ def compute_relative_event_magnitude(
         prev_mags = [
             m.mag for m in templ1.event.magnitudes
             if m.magnitude_type in accepted_magnitude_types
-            and m.creation_info.agency_id in accepted_magnitude_agencies]
+            and (m.creation_info.agency_id in accepted_magnitude_agencies
+                 if m.creation_info else True)]
     except Exception as e:
         Logger.warning(e)
         Logger.warning(

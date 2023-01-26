@@ -103,8 +103,8 @@ def prepare_and_update_party(
             template_names = [templ.name for templ in tribe]
             template_name_matches = difflib.get_close_matches(
                 family.template.name, template_names, n=100)
+            found_ok_match = False
             if len(template_name_matches) >= 1:
-                found_ok_match = False
                 choose_index = 0
                 # Loop through matches with similar template names, and check
                 # by how far their origin differs from detection template. Only
@@ -270,7 +270,9 @@ def pick_events_for_day(
         sfile_path='Sfiles', write_to_year_month_folders=False,
         operator='EQC', day_hash_file=None, copy_data=True,
         redecluster=False, clust_trig_int=30, decluster_metric='thresh_exc',
-        hypocentral_separation=False, min_chans=13, absolute_values=True, **kwargs):
+        hypocentral_separation=False, min_chans=13, absolute_values=True,
+        compute_relative_magnitudes=False,
+        **kwargs):
     """
     Day-loop for picker
     """
@@ -582,25 +584,26 @@ def pick_events_for_day(
             return_party_with_short_templates=True,
             min_n_station_sites=min_n_station_sites,
             use_weights=use_weights, copy_data=copy_data, **kwargs)
-        dayparty, short_party2 = reevaluate_detections(
-            dayparty, short_tribe2, stream=day_st,
-            threshold=new_threshold-1, trig_int=trig_int/4,
-            threshold_type=threshold_type,
-            re_eval_thresh_factor=re_eval_thresh_factor*0.9,
-            overlap='calculate', plotDir='ReDetectionPlots',
-            plot=False, fill_gaps=True, ignore_bad_data=True,
-            daylong=daylong, ignore_length=True, min_chans=min_det_chans,
-            pre_processed=pre_processed,
-            parallel_process=parallel, cores=cores,
-            xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
-            # xcorr_func='time_domain', concurrency='multiprocess',
-            group_size=n_templates_per_run, process_cores=cores,
-            time_difference_threshold=time_difference_threshold,
-            detect_value_allowed_reduction=(
-                detect_value_allowed_reduction * 1.2),
-            return_party_with_short_templates=True,
-            min_n_station_sites=min_n_station_sites,
-            use_weights=use_weights, copy_data=copy_data, **kwargs)
+        if len(short_tribe2) > 0:
+            dayparty, short_party2 = reevaluate_detections(
+                dayparty, short_tribe2, stream=day_st,
+                threshold=new_threshold-1, trig_int=trig_int/4,
+                threshold_type=threshold_type,
+                re_eval_thresh_factor=re_eval_thresh_factor*0.9,
+                overlap='calculate', plotDir='ReDetectionPlots',
+                plot=False, fill_gaps=True, ignore_bad_data=True,
+                daylong=daylong, ignore_length=True, min_chans=min_det_chans,
+                pre_processed=pre_processed,
+                parallel_process=parallel, cores=cores,
+                xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
+                # xcorr_func='time_domain', concurrency='multiprocess',
+                group_size=n_templates_per_run, process_cores=cores,
+                time_difference_threshold=time_difference_threshold,
+                detect_value_allowed_reduction=(
+                    detect_value_allowed_reduction * 1.2),
+                return_party_with_short_templates=True,
+                min_n_station_sites=min_n_station_sites,
+                use_weights=use_weights, copy_data=copy_data, **kwargs)
         if not dayparty:
             Logger.warning('Party of families of detections is empty.')
             if day_hash_file is not None:
@@ -655,7 +658,8 @@ def pick_events_for_day(
 
     export_catalog = postprocess_picked_events(
         picked_catalog, dayparty, tribe, original_stats_stream,
-        det_tribe=det_tribe, write_sfiles=True, sfile_path=sfile_path,
+        det_tribe=det_tribe, day_st=day_st, pre_processed=pre_processed,
+        write_sfiles=True, sfile_path=sfile_path,
         operator=operator, all_channels_for_stations=relevant_stations,
         extract_len=extract_len, write_waveforms=True, archives=archives,
         request_fdsn=request_fdsn, template_path=template_path,
@@ -663,6 +667,7 @@ def pick_events_for_day(
         min_pick_stations=min_pick_stations, 
         min_picks_on_detection_stations=min_picks_on_detection_stations,
         write_to_year_month_folders=write_to_year_month_folders,
+        compute_relative_magnitudes=compute_relative_magnitudes,
         parallel=parallel, cores=io_cores, **kwargs)
 
     if day_hash_file is not None:

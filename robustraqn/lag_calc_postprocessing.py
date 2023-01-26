@@ -25,6 +25,7 @@ from eqcorrscan.core.match_filter.party import Party
 from robustraqn.obspy.clients.filesystem.sds import Client
 from robustraqn.quality_metrics import (get_waveforms_bulk, read_ispaq_stats)
 from robustraqn.seismic_array_tools import get_station_sites
+from robustraqn.relative_magnitude_util import compute_relative_event_magnitude
 
 import logging
 Logger = logging.getLogger(__name__)
@@ -143,15 +144,17 @@ def add_origins_to_detected_events(
 
 def postprocess_picked_events(
         picked_catalog, party, tribe, original_stats_stream,
-        det_tribe=Tribe(), write_sfiles=False, sfile_path='Sfiles',
+        det_tribe=Tribe(), day_st=Stream(), pre_processed=False,
+        write_sfiles=False, sfile_path='Sfiles',
         write_to_year_month_folders=False,
         operator='feha', all_channels_for_stations=[], extract_len=300,
         min_pick_stations=4, min_n_station_sites=4,
         min_picks_on_detection_stations=6, write_waveforms=False,
-        archives=list(), request_fdsn=False, template_path=None,
+        archives=[], archive_types=[], request_fdsn=False, template_path=None,
         origin_longitude=None, origin_latitude=None, origin_depth=None,
         evtype='L', high_accuracy=False, do_not_rename_refracted_phases=False,
-        parallel=False, cores=1, **kwargs):
+        compute_relative_magnitudes=False, min_mag_cc=0.2,
+        parallel=False, cores=1, n_threads=1, **kwargs):
     """
     :type picked_catalog: :class:`obspy.core.Catalog`
     :param picked_catalog: Catalog of events picked, e.g., with lag_calc.
@@ -214,7 +217,10 @@ def postprocess_picked_events(
     :param return: Catalog with the exported events.
     """
     export_catalog = Catalog()
+    retained_detection_catalog = Catalog()
     for event in picked_catalog:
+        # Save unaltered event
+        detection_event = event.copy()
         # Correct Picks by the pre-Template time
         num_p_picks = 0
         num_s_picks = 0
@@ -383,10 +389,14 @@ def postprocess_picked_events(
                 num_p_picks_on_det_sta + num_s_picks_on_det_sta >=
                 min_picks_on_detection_stations)):
             export_catalog += event
+            retained_detection_catalog += detection_event
 
     # Sort catalog so that it's in correct order for output
     export_catalog.events = sorted(
         export_catalog.events,
+        key=lambda d: (d.preferred_origin() or d.origins[0]).time)
+    retained_detection_catalog.events = sorted(
+        retained_detection_catalog.events,
         key=lambda d: (d.preferred_origin() or d.origins[0]).time)
     #                                        d.origins[0].time
     # Output
@@ -396,14 +406,55 @@ def postprocess_picked_events(
         return None
     # get waveforms for events
     wavefiles = None
-    if write_waveforms:
-        wavefiles = extract_stream_for_picked_events(
-            export_catalog, party, template_path, archives,
-            request_fdsn=request_fdsn, wav_out_dir=sfile_path,
+    if write_waveforms or compute_relative_magnitudes:
+        wavefiles, detection_list = extract_stream_for_picked_events(
+            export_catalog, party, template_path, archives, archive_types,
+            day_st=day_st, request_fdsn=request_fdsn, wav_out_dir=sfile_path,
             extract_len=extract_len, det_tribe=det_tribe,
             all_chans_for_stations=all_channels_for_stations,
+            write_waveforms=write_waveforms,
             write_to_year_month_folders=write_to_year_month_folders,
             parallel=parallel, cores=cores)
+
+    # Compute relative magnitudes for events
+    if compute_relative_magnitudes:
+        for j_event, (event, detection_event) in enumerate(zip(
+                export_catalog, retained_detection_catalog)):
+            # Select detection
+            detection = None
+            found_det_fam = False
+            for fam in party:
+                family = fam
+                for det in fam:
+                    if det.id == detection_event.resource_id:
+                        detection = det
+                        found_det_fam = True
+                        break
+                if found_det_fam:
+                    break
+            # Alternative: (not working now)
+            # detection = party[event.resource_id.id[0:28]][0]
+            # SHOULD BE: ????
+            # detection = party[event.resource_id.id][0]
+            if not detection:
+                continue
+            detection_event, pre_processed = compute_relative_event_magnitude(
+                detection=detection, detected_event=detection_event,
+                j_ev=j_event, day_st=day_st, party=party, tribe=tribe,
+                templ2=None, detection_template_names=[], write_events=False,
+                accepted_magnitude_types=['ML', 'Mw', 'MW'],
+                accepted_magnitude_agencies=['BER', 'NAO'],
+                mag_out_dir=None, min_cc=min_mag_cc,
+                # min_snr=1.1, min_n_relative_amplitudes=3,
+                # noise_window_start=-40, noise_window_end=-29.5,
+                # signal_window_start=-0.5, signal_window_end=10,
+                # use_s_picks=True, correlations=None, shift=0.35,
+                return_correlations=True, correct_mag_bias=False,
+                pre_processed=pre_processed, parallel=parallel, cores=cores,
+                n_threads=n_threads, **kwargs)
+            # Copy over magnitudes from detection-event to export-event
+            event.magnitudes += detection_event.magnitudes
+            event.station_magnitudes += detection_event.station_magnitudes
 
     # Create Seisan-style Sfiles for the whole day
     # sfile_path = os.path.join(sfile_path, + str(orig.time.year)\
@@ -442,9 +493,11 @@ def postprocess_picked_events(
 
 
 def extract_stream_for_picked_events(
-        catalog, party, template_path, archives, det_tribe=Tribe(),
-        request_fdsn=False, wav_out_dir='.', write_to_year_month_folders=False,
-        extract_len=300, all_chans_for_stations=[], parallel=False, cores=1):
+        catalog, party, template_path, archives, archive_types,
+        day_st=Stream(), det_tribe=Tribe(), request_fdsn=False,
+        wav_out_dir='.', write_waveforms=False,
+        write_to_year_month_folders=False, extract_len=300,
+        all_chans_for_stations=[], parallel=False, cores=1):
     """
     Extracts a stream object with all channels from the SDS-archive.
     Allows the input of multiple archives as a list
@@ -495,13 +548,12 @@ def extract_stream_for_picked_events(
     additional_stations = all_chans_for_stations
 
     list_of_stream_lists = list()
-    for archive in archives:
-        stream_list = extract_detections(
-            detection_list, templ_tuple, archive, "SDS",
-            request_fdsn=request_fdsn, extract_len=extract_len,
-            outdir=None, additional_stations=additional_stations,
-            cores=cores, parallel=parallel)
-        list_of_stream_lists.append(stream_list)
+    stream_list = extract_detections(
+        detection_list, templ_tuple, archives, archive_types=archive_types,
+        day_st=day_st, request_fdsn=request_fdsn, extract_len=extract_len,
+        outdir=None, additional_stations=additional_stations,
+        cores=cores, parallel=parallel)
+    list_of_stream_lists.append(stream_list)
 
     stream_list = list()
     # put enough empty stream in stream_list
@@ -517,8 +569,12 @@ def extract_stream_for_picked_events(
 
     wavefiles = list()
     for event, detection, stream in zip(catalog, detection_list, stream_list):
+        # Attach stream to detection
+        detection.st = stream
         # 2019_09_24t13_38_14
         # 2019-12-15-0323-41S.NNSN__008
+        if not write_waveforms:
+            continue
         utc_str = str(stream[0].stats.starttime)
         utc_str = utc_str.lower().replace(':', '-').replace('t', '-')
         # Define waveform filename based on starttime of stream
@@ -532,6 +588,13 @@ def extract_stream_for_picked_events(
             # orig_time = (
             #     stream[0].stats.starttime +
             #     (stream[0].stats.endtime - stream[0].stats.starttime) * 1/4)
+        # Convert to 32 bit data so that Seisan can read waveforms
+        for trace in stream:
+            trace.data = trace.data.astype("float32")
+            try:
+                tr.stats.mseed.encoding = 'FLOAT32'
+            except (KeyError, AttributeError):
+                pass
         if write_to_year_month_folders:
             wav_folder_path = os.path.join(wav_out_dir,
                                            '{:04}'.format(orig_time.year),
@@ -546,7 +609,7 @@ def extract_stream_for_picked_events(
             wavefiles.append(waveform_filename)
             stream.write(waveform_filename, format='MSEED')
 
-    return wavefiles
+    return wavefiles, detection_list
 
 
 def replace_templates_for_picking(party, tribe, set_sample_rate=100.0):
@@ -750,9 +813,9 @@ def check_duplicate_template_channels(
         #         pick_ids.append(pick.waveform_id.id)
 
 
-def extract_detections(detections, templates, archive, arc_type,
-                       request_fdsn=False, extract_len=90.0, outdir=None,
-                       extract_Z=True, additional_stations=[],
+def extract_detections(detections, templates, archives, archive_types,
+                       day_st=Stream(), request_fdsn=False, extract_len=90.0,
+                       outdir=None, extract_Z=True, additional_stations=[],
                        parallel=False, cores=None):
     """
     Extract waveforms associated with detections
@@ -880,9 +943,11 @@ def extract_detections(detections, templates, archive, arc_type,
     all_stations = sorted(list(set(stations + additional_stations)))
 
     # Define client
-    if arc_type == 'SDS':
-        from obspy.clients.filesystem.sds import Client
-        client = Client(archive)
+    clients = []
+    for archive, arc_type in zip(archives, archive_types):
+        if arc_type == 'SDS':
+            from obspy.clients.filesystem.sds import Client
+            clients.append(Client(archive))
 
     if request_fdsn:
         routing_client = RoutingClient('iris-federator')
@@ -905,8 +970,9 @@ def extract_detections(detections, templates, archive, arc_type,
                 for sta in all_stations]
         # day_st = get_waveforms_bulk(
         #         client, bulk, parallel=parallel, cores=cores)
-        day_st = client.get_waveforms_bulk(
-            bulk, parallel=parallel, cores=cores)
+        for client in clients:  # Append to existing day_st (can be empty)
+            day_st += client.get_waveforms_bulk(
+                bulk, parallel=parallel, cores=cores)
         for detection in day_detections:
             Logger.info(
                 'Cutting for detections at: ' +
@@ -916,7 +982,10 @@ def extract_detections(detections, templates, archive, arc_type,
             t2 = UTCDateTime(detection.detect_time) + extract_len * 0.8
             # Slice instead of trim allows stream to first cut, then copied - 
             # otherwise will run out of memory for multiple cuts.
-            st = day_st.slice(starttime=t1, endtime=t2).copy()
+            st = day_st.slice(starttime=t1, endtime=t2) # .copy()
+
+            # Request extra channels from fdsn webservices if required, but
+            # only request the exact data segments required to spare services.
             if request_fdsn:
                 existing_stations = list(dict.fromkeys(
                     [tr.stats.station for tr in st]))
@@ -929,8 +998,8 @@ def extract_detections(detections, templates, archive, arc_type,
                         ('*', sta, '*', '*', t1, t2) for sta in other_stations]
                     add_st = routing_client.get_waveforms_bulk(bulk)
                     if add_st:
-                        add_st = add_st.select(
-                            channel='[NDSEHBM]??').trim(t1, t2)
+                        add_st = add_st.select(channel='[NDSEHBM]??').select(
+                            starttime=t1, endtime=t2)
                         st += add_st
                     else:
                         Logger.info('FDSN-request did not return data.')
@@ -939,6 +1008,12 @@ def extract_detections(detections, templates, archive, arc_type,
                 if not os.path.isdir(os.path.join(outdir,
                                                   detection.template_name)):
                     os.makedirs(os.path.join(outdir, detection.template_name))
+                for trace in st:
+                    trace.data = trace.data.astype("float32")
+                    try:
+                        tr.stats.mseed.encoding = 'FLOAT32'
+                    except (KeyError, AttributeError):
+                        pass
                 st.write(os.path.join(
                     outdir, detection.template_name,
                     detection.detect_time.strftime(

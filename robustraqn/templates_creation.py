@@ -245,7 +245,7 @@ def _create_template_objects(
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         vertical_chans=['Z', 'H'],
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
-        bayesloc_event_solutions=None,
+        bayesloc_event_solutions=None, erase_mags=False,
         wavetool_path='/home/felix/Software/SEISANrick/PRO/linux64/wavetool',
         parallel=False, cores=1, thread_parallel=False, n_threads=1,
         unused_kwargs=True, *args, **kwargs):
@@ -346,6 +346,8 @@ def _create_template_objects(
             Logger.info('Working on event: ' + event_str)
             sfile = ''
             event = event_file
+        if erase_mags:
+            event.magnitudes = []
         relevant_stations = get_all_relevant_stations(
             selected_stations, sta_translation_file=sta_translation_file)
         # Test if there are any comments on the event that tell me to skip it:
@@ -683,7 +685,7 @@ def create_template_objects(
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         vertical_chans=['Z', 'H'],
         wavetool_path='/home/felix/Software/SEISANrick/PRO/linux64/wavetool',
-        horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
+        horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'], erase_mags=False,
         parallel=False, cores=1, thread_parallel=False, n_threads=1,
         max_events_per_file=200, task_id=None,
         *args, **kwargs):
@@ -880,6 +882,7 @@ def create_template_objects(
                 vertical_chans=vertical_chans,
                 horizontal_chans=horizontal_chans,
                 wavetool_path=wavetool_path,
+                erase_mags=erase_mags,
                 parallel=False, cores=1,
                 thread_parallel=thread_parallel, n_threads=n_threads,
                 *args, **kwargs)
@@ -920,7 +923,7 @@ def create_template_objects(
             std_location_code=std_location_code,
             std_channel_prefix=std_channel_prefix,
             vertical_chans=vertical_chans, horizontal_chans=horizontal_chans,
-            wavetool_path=wavetool_path,
+            wavetool_path=wavetool_path, erase_mags=erase_mags,
             thread_parallel=thread_parallel, n_threads=n_threads,
             *args, **kwargs)
 

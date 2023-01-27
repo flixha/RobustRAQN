@@ -192,7 +192,9 @@ def prepare_and_update_party(
             for det_pick in detections_earliest_tr_picks:
                 templ_picks = [
                     pick for pick in pick_template.event.picks
-                    if pick.waveform_id.id == det_pick.waveform_id.id]
+                    if pick.waveform_id.id == det_pick.waveform_id.id
+                    and (pick.phase_hint[0] == det_pick.phase_hint[0]
+                         if pick.phase_hint and det_pick.phase_hint else True)]
                 if len(templ_picks) > 1:
                     # Could happen when there are two picks with different phas
                     # e hints at the same time, and both are earliest on trace.
@@ -222,12 +224,16 @@ def prepare_and_update_party(
                 # Do a sanity check in case incorrect picks (e.g., P
                 # instead of S) were fixed for a new template
                 if abs(time_diff - np.nanmedian(time_diffs)) > 1:
+                    two_sigma_td = 2 * stats.stdev(time_diffs)
+                    time_outliers = [tdiff for tdiff in time_diffs
+                                     if abs(tdiff - time_diff) > two_sigma_td]
                     Logger.error(
-                        'Template used for detection of and picking of %s '
-                        'differ. Adjusting the pick times resulted in '
-                        'unexpectedly large differences between channels. '
-                        'This may point to problematic picks in one of the'
-                        ' templates.', detection.id)
+                        'Template used for detection and picking of %s differ.'
+                        ' Adjusting pick times resulted in unexpectedly large '
+                        'differences between %s channels with time-differences'
+                        ' greater 2xStdDev. This may point to problematic '
+                        'picks in one of the templates. (hope the new one is '
+                        'right!)', detection.id, len(time_outliers))
             detection.event = pick_template.event.copy()
             for pick in detection.event.picks:
                 pick.time = pick.time + time_diff  # add template prepick

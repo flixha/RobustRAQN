@@ -409,7 +409,8 @@ def postprocess_picked_events(
     if write_waveforms or compute_relative_magnitudes:
         wavefiles, detection_list = extract_stream_for_picked_events(
             export_catalog, party, template_path, archives, archive_types,
-            day_st=day_st, request_fdsn=request_fdsn, wav_out_dir=sfile_path,
+            original_stats_stream=original_stats_stream,
+            request_fdsn=request_fdsn, wav_out_dir=sfile_path,
             extract_len=extract_len, det_tribe=det_tribe,
             all_chans_for_stations=all_channels_for_stations,
             write_waveforms=write_waveforms,
@@ -494,8 +495,8 @@ def postprocess_picked_events(
 
 def extract_stream_for_picked_events(
         catalog, party, template_path, archives, archive_types,
-        day_st=Stream(), det_tribe=Tribe(), request_fdsn=False,
-        wav_out_dir='.', write_waveforms=False,
+        original_stats_stream=Stream(), det_tribe=Tribe(),
+        request_fdsn=False, wav_out_dir='.', write_waveforms=False,
         write_to_year_month_folders=False, extract_len=300,
         all_chans_for_stations=[], parallel=False, cores=1):
     """
@@ -550,8 +551,9 @@ def extract_stream_for_picked_events(
     list_of_stream_lists = list()
     stream_list = extract_detections(
         detection_list, templ_tuple, archives, archive_types=archive_types,
-        day_st=day_st, request_fdsn=request_fdsn, extract_len=extract_len,
-        outdir=None, additional_stations=additional_stations,
+        day_st=original_stats_stream, request_fdsn=request_fdsn,
+        extract_len=extract_len, outdir=None,
+        additional_stations=additional_stations,
         cores=cores, parallel=parallel)
     list_of_stream_lists.append(stream_list)
 
@@ -592,7 +594,7 @@ def extract_stream_for_picked_events(
         for trace in stream:
             trace.data = trace.data.astype("float32")
             try:
-                tr.stats.mseed.encoding = 'FLOAT32'
+                trace.stats.mseed.encoding = 'FLOAT32'
             except (KeyError, AttributeError):
                 pass
         if write_to_year_month_folders:
@@ -1011,7 +1013,7 @@ def extract_detections(detections, templates, archives, archive_types,
                 for trace in st:
                     trace.data = trace.data.astype("float32")
                     try:
-                        tr.stats.mseed.encoding = 'FLOAT32'
+                        trace.stats.mseed.encoding = 'FLOAT32'
                     except (KeyError, AttributeError):
                         pass
                 st.write(os.path.join(

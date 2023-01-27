@@ -158,7 +158,6 @@ def compute_relative_event_magnitude(
     Logger.debug(
         'Measure relative magnitude from streams with %s and %s traces',
         len(templ1.st), len(detection_st))
-
     delta_mag, correlations = relative_magnitude(
         _quick_copy_stream(templ1.st), detection_st,
         templ1.event, detected_event,
@@ -279,9 +278,10 @@ def compute_relative_event_magnitude(
             creation_info=CreationInfo(
                 agency_id='EQC', author="EQcorrscan",
                 creation_time=UTCDateTime())))
-        Logger.debug(
-            'Event no. %s, %s: added average magnitude %s', str(j_ev),
-            detected_event.short_str(), detected_event.magnitudes[-1].mag)
+        Logger.info(
+            'Event no. %s, %s: added average magnitude %s for %s station '
+            'magnitudes.', str(j_ev), detected_event.short_str(),
+            len(sta_contrib), detected_event.magnitudes[-1].mag)
 
     # Write out Nordic files:
     if write_events:

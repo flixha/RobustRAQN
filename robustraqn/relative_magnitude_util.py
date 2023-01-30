@@ -41,7 +41,7 @@ def compute_relative_event_magnitude(
         detection_template_names=[], write_events=False, mag_out_dir=None,
         accepted_magnitude_types=['ML', 'Mw', 'MW'],
         accepted_magnitude_agencies=['BER', 'NOA'],
-        min_snr=1.1, min_cc=0.2, min_n_relative_amplitudes=2,
+        min_snr=1.1, min_cc=0.15, min_n_relative_amplitudes=2,
         noise_window_start=-40, noise_window_end=-29.5,
         signal_window_start=-0.5, signal_window_end=10,
         use_s_picks=True, correlations=None, shift=0.35,
@@ -211,8 +211,8 @@ def compute_relative_event_magnitude(
             "computed for %s", str(j_ev), detected_event.short_str())
         return detected_event, pre_processed
 
-    Logger.debug('Event %s: found %s previous template-magnitudes', str(j_ev),
-                 len(prev_mags))
+    Logger.debug('Event %s: found %s previous template-magnitudes (%s)',
+                 str(j_ev), len(prev_mags), str(prev_mags))
     # new_mags_rel = [delta_mag[key] for key in delta_mag]
     # new_mag = prev_mag + np.mean(new_mags_rel)
     
@@ -251,8 +251,10 @@ def compute_relative_event_magnitude(
             station_magnitude_id=sta_mag.resource_id,
             weight=1.))
 
-    Logger.debug('Event %s: created %s stationMagnitudes', len(sta_contrib),
-                 str(j_ev))
+    Logger.debug(
+        'Event %s: created %s stationMagnitudes (%s)', str(j_ev),
+        len(sta_contrib),
+        str([stamag.mag for stamag in detected_event.station_magnitudes]))
 
     # [sm.mag for sm in detected_event.station_magnitudes]
     delta_mags = [_delta_mag[1] for _delta_mag in delta_mag_corr.items()]
@@ -264,6 +266,8 @@ def compute_relative_event_magnitude(
         # better use median to exclude outliers?!
         av_mag = prev_mag + np.median(delta_mags)
 
+    Logger.debug('Event %s: The %s delta-magnitudes are: %s', str(j_ev),
+                 len(delta_mags), str(delta_mags))
 
     if not np.isnan(av_mag) and len(delta_mags) >= min_n_relative_amplitudes:
         # Compute average magnitude
@@ -279,9 +283,9 @@ def compute_relative_event_magnitude(
                 agency_id='EQC', author="EQcorrscan",
                 creation_time=UTCDateTime())))
         Logger.info(
-            'Event no. %s, %s: added average magnitude %s for %s station '
+            'Event no. %s, %s: added median magnitude %s for %s station '
             'magnitudes.', str(j_ev), detected_event.short_str(),
-            len(sta_contrib), detected_event.magnitudes[-1].mag)
+            detected_event.magnitudes[-1].mag, len(sta_contrib))
 
     # Write out Nordic files:
     if write_events:

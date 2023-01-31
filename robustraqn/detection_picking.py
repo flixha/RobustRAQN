@@ -23,7 +23,7 @@ from obspy.geodetics.base import degrees2kilometers, locations2degrees
 # from obspy.clients.filesystem.sds import Client
 from robustraqn.obspy.clients.filesystem.sds import Client
 
-from eqcorrscan.core.match_filter import (Tribe, Party, Template)
+from eqcorrscan.core.match_filter import (Tribe, Party, Template, Family)
 from eqcorrscan.core.lag_calc import LagCalcError
 from eqcorrscan.utils.pre_processing import dayproc, shortproc
 # from eqcorrscan.core.template_gen import _template_gen
@@ -268,7 +268,7 @@ def pick_events_for_day(
         time_difference_threshold=1, detect_value_allowed_reduction=2.5,
         threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
         archives=[], archive_types=[], request_fdsn=False,
-        min_det_chans=1, shift_len=0.8,
+        pick_xcorr_func=None, min_det_chans=1, shift_len=0.8,
         min_cc=0.4, min_cc_from_mean_cc_factor=0.6, extract_len=240,
         interpolate=True, use_new_resamp_method=True,
         write_party=False, ignore_cccsum_comparison=True,
@@ -349,6 +349,11 @@ def pick_events_for_day(
         # dayparty = Party([f for f in dayparty if f.template.name == '2019_06_04t13_41_43_80_templ'])
         # dayparty = Party([f for f in dayparty if f.template.name.startswith('2001_08_08t09_56_1')])
         # dayparty[0].detections = [dayparty[0].detections[0]]
+        
+        # fam = dayparty.select('2022_04_25t02_01_59_06_templ')
+        # dets = [det for det in fam if det.id ==
+        #         '2022_04_25t02_01_59_06_templ_20220425_093457750000']
+        # dayparty = Party(Family(template=fam.template, detections=dets))
 
         # 2019_10_15t02_43_11_50_templ_20190802_072130169538
 
@@ -635,8 +640,10 @@ def pick_events_for_day(
         all_vert=all_vert, all_horiz=all_horiz,
         horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
         interpolate=interpolate, use_new_resamp_method=use_new_resamp_method,
-        xcorr_func=xcorr_func, parallel=parallel, cores=cores, daylong=daylong,
-        ignore_cccsum_comparison=ignore_cccsum_comparison, **kwargs)
+        daylong=daylong, ignore_cccsum_comparison=ignore_cccsum_comparison,
+        xcorr_func=pick_xcorr_func, concurrency=concurrency,
+        parallel=parallel, cores=cores,
+        **kwargs)
     # try:
     # except LagCalcError:
     #    pass
@@ -658,7 +665,7 @@ def pick_events_for_day(
             min_cc_from_mean_cc_factor=min(min_cc_from_mean_cc_factor, 0.999),
             all_vert=all_vert, all_horiz=all_horiz,
             horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
-            xcorr_func=xcorr_func, parallel=parallel, cores=cores,
+            xcorr_func=pick_xcorr_func, parallel=parallel, cores=cores,
             daylong=daylong, interpolate=interpolate,
             use_new_resamp_method=use_new_resamp_method,
             ignore_cccsum_comparison=ignore_cccsum_comparison, **kwargs)
@@ -675,6 +682,8 @@ def pick_events_for_day(
         min_picks_on_detection_stations=min_picks_on_detection_stations,
         write_to_year_month_folders=write_to_year_month_folders,
         compute_relative_magnitudes=compute_relative_magnitudes,
+        min_mag_cc=min_cc,
+        min_mag_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
         parallel=parallel, cores=io_cores, **kwargs)
 
     if day_hash_file is not None:

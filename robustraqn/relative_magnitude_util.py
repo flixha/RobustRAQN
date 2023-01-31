@@ -41,7 +41,8 @@ def compute_relative_event_magnitude(
         detection_template_names=[], write_events=False, mag_out_dir=None,
         accepted_magnitude_types=['ML', 'Mw', 'MW'],
         accepted_magnitude_agencies=['BER', 'NOA'],
-        min_snr=1.1, min_cc=0.15, min_n_relative_amplitudes=2,
+        min_snr=1.1, min_cc=0.25, min_cc_from_mean_cc_factor=None,
+        min_n_relative_amplitudes=2,
         noise_window_start=-40, noise_window_end=-29.5,
         signal_window_start=-0.5, signal_window_end=10,
         use_s_picks=True, correlations=None, shift=0.35,
@@ -60,12 +61,12 @@ def compute_relative_event_magnitude(
         detected_event = detection.event
     # keep input events safe
     # detected_event = detected_event.copy()
-    Logger.debug('Event %s: start function', str(j_ev))
+    Logger.debug('Event %s: start function', j_ev)
     attach_all_resource_ids(detected_event)
-    Logger.debug('Event %s: attached resIDs', str(j_ev))
+    Logger.debug('Event %s: attached resIDs', j_ev)
 
     Logger.info('Event %s: Trying to compute relative magnitude for %s',
-                str(j_ev), detected_event.short_str())
+                j_ev, detected_event.short_str())
 
     # If detection is not known: find detection based on detected event
     if detection is None:
@@ -84,7 +85,7 @@ def compute_relative_event_magnitude(
         # that corresponds to the detected event
         template_name2b = templ2.name
         if template_name2a != template_name2b:
-            Logger.error('Event  %s: Problem with template names! ', str(j_ev))
+            Logger.error('Event  %s: Problem with template names! ', j_ev)
             return detected_event, pre_processed
         template_name2 = template_name2a
 
@@ -128,12 +129,12 @@ def compute_relative_event_magnitude(
             search_templ_name, detection_template_names, n=1)[0]
         Logger.warning(
             'Event  %s: Could not find exact match for template name %s, but '
-            + 'found one that is similar: %s', str(j_ev), search_templ_name,
+            + 'found one that is similar: %s', j_ev, search_templ_name,
             template_name1)
         templ1 = tribe.select(template_name1)
 
     # templ2 = tribe_detected.select(template_name2)
-    Logger.debug('Event %s: found matching template', str(j_ev))
+    Logger.debug('Event %s: found matching template', j_ev)
     if len(day_st) > 0:
         detection_st = day_st
     elif hasattr(detection, "st"):
@@ -158,6 +159,12 @@ def compute_relative_event_magnitude(
     Logger.debug(
         'Measure relative magnitude from streams with %s and %s traces',
         len(templ1.st), len(detection_st))
+    if min_cc_from_mean_cc_factor is not None:
+        min_cc = min(abs(detection.detect_val / detection.no_chans
+                         * min_cc_from_mean_cc_factor),
+                     min_cc)
+        Logger.debug('Event %s: Setting minimum cc-threshold for relative '
+                     'magnitude to %s', j_ev, min_cc)
     delta_mag, correlations = relative_magnitude(
         _quick_copy_stream(templ1.st), detection_st,
         templ1.event, detected_event,
@@ -178,7 +185,7 @@ def compute_relative_event_magnitude(
         # _delta_mag = _delta_mag / cc
         delta_mag_corr[seed_id] = _delta_mag
 
-    Logger.debug('Event %s: computed %s delta-magnitudes', str(j_ev),
+    Logger.debug('Event %s: computed %s delta-magnitudes', j_ev,
                  len(mag_ccs))
 
     # delta_mag_S = relative_magnitude(
@@ -191,28 +198,41 @@ def compute_relative_event_magnitude(
     # if len(delta_mag) > 0 and len(delta_mag_S) > 0:
     #     break
 
+    prev_mag = None
+    prev_mags = []
     try:
-        prev_mags = [
-            m.mag for m in templ1.event.magnitudes
-            if m.magnitude_type in accepted_magnitude_types
-            and (m.creation_info.agency_id in accepted_magnitude_agencies
-                 if m.creation_info else True)]
+        # First try to be string about accepted magnitude agencies
+        try:
+            prev_mags = [
+                m.mag for m in templ1.event.magnitudes
+                if m.magnitude_type in accepted_magnitude_types
+                and (m.creation_info.agency_id in accepted_magnitude_agencies
+                        if m.creation_info else False)]
+        except Exception as e:
+            pass
+        # If there are no magnitudes for accepted agencies, allow others.
+        if len(prev_mags) == 0:
+            prev_mags = [
+                m.mag for m in templ1.event.magnitudes
+                if m.magnitude_type in accepted_magnitude_types
+                and (m.creation_info.agency_id in accepted_magnitude_agencies
+                    if m.creation_info else True)]
     except Exception as e:
         Logger.warning(e)
         Logger.warning(
             "Event  %s: No template magnitude, relative magnitudes cannot be "
-            "computed for %s", str(j_ev), detected_event.short_str())
+            "computed for %s", j_ev, detected_event.short_str())
         return detected_event, pre_processed
     if len(prev_mags) > 0:
         prev_mag = np.mean(prev_mags)
     else:
         Logger.warning(
             "Event  %s: No template magnitudes, relative magnitudes cannot be "
-            "computed for %s", str(j_ev), detected_event.short_str())
+            "computed for %s", j_ev, detected_event.short_str())
         return detected_event, pre_processed
 
     Logger.debug('Event %s: found %s previous template-magnitudes (%s)',
-                 str(j_ev), len(prev_mags), str(prev_mags))
+                 j_ev, len(prev_mags), str(prev_mags))
     # new_mags_rel = [delta_mag[key] for key in delta_mag]
     # new_mag = prev_mag + np.mean(new_mags_rel)
     
@@ -252,9 +272,10 @@ def compute_relative_event_magnitude(
             weight=1.))
 
     Logger.debug(
-        'Event %s: created %s stationMagnitudes (%s)', str(j_ev),
+        'Event %s: created %s stationMagnitudes (%s)', j_ev,
         len(sta_contrib),
-        str([stamag.mag for stamag in detected_event.station_magnitudes]))
+        str(['{0:.2f}'.format(stamag.mag)
+             for stamag in detected_event.station_magnitudes]))
 
     # [sm.mag for sm in detected_event.station_magnitudes]
     delta_mags = [_delta_mag[1] for _delta_mag in delta_mag_corr.items()]
@@ -266,8 +287,9 @@ def compute_relative_event_magnitude(
         # better use median to exclude outliers?!
         av_mag = prev_mag + np.median(delta_mags)
 
-    Logger.debug('Event %s: The %s delta-magnitudes are: %s', str(j_ev),
-                 len(delta_mags), str(delta_mags))
+    Logger.debug('Event %s: The %s delta-magnitudes are: %s', j_ev,
+                 len(delta_mags),
+                 str(['{0:.2f}'.format(dm) for dm in delta_mags]))
 
     if not np.isnan(av_mag) and len(delta_mags) >= min_n_relative_amplitudes:
         # Compute average magnitude
@@ -284,7 +306,7 @@ def compute_relative_event_magnitude(
                 creation_time=UTCDateTime())))
         Logger.info(
             'Event no. %s, %s: added median magnitude %s for %s station '
-            'magnitudes.', str(j_ev), detected_event.short_str(),
+            'magnitudes.', j_ev, detected_event.short_str(),
             detected_event.magnitudes[-1].mag, len(sta_contrib))
 
     # Write out Nordic files:
@@ -295,7 +317,7 @@ def compute_relative_event_magnitude(
             detected_event, filename=None, userid='fh', evtype='L',
             outdir=mag_out_dir, overwrite=True, high_accuracy=True,
             nordic_format='NEW')
-        Logger.debug('Event %s: wrote Nordic file', str(j_ev))
+        Logger.debug('Event %s: wrote Nordic file', j_ev)
 
     # Avoid reprocessing full day-stream on next call to relative mag util
     if len(day_st) > 0:

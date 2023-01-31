@@ -153,7 +153,8 @@ def postprocess_picked_events(
         archives=[], archive_types=[], request_fdsn=False, template_path=None,
         origin_longitude=None, origin_latitude=None, origin_depth=None,
         evtype='L', high_accuracy=False, do_not_rename_refracted_phases=False,
-        compute_relative_magnitudes=False, min_mag_cc=0.2,
+        compute_relative_magnitudes=False,
+        min_mag_cc=0.2, min_mag_cc_from_mean_cc_factor=None,
         parallel=False, cores=1, n_threads=1, **kwargs):
     """
     :type picked_catalog: :class:`obspy.core.Catalog`
@@ -446,6 +447,7 @@ def postprocess_picked_events(
                 accepted_magnitude_types=['ML', 'Mw', 'MW'],
                 accepted_magnitude_agencies=['BER', 'NAO'],
                 mag_out_dir=None, min_cc=min_mag_cc,
+                min_cc_from_mean_cc_factor=min_mag_cc_from_mean_cc_factor,
                 # min_snr=1.1, min_n_relative_amplitudes=3,
                 # noise_window_start=-40, noise_window_end=-29.5,
                 # signal_window_start=-0.5, signal_window_end=10,
@@ -552,7 +554,7 @@ def extract_stream_for_picked_events(
     stream_list = extract_detections(
         detection_list, templ_tuple, archives, archive_types=archive_types,
         day_st=original_stats_stream, request_fdsn=request_fdsn,
-        extract_len=extract_len, outdir=None,
+        extract_len=extract_len, outdir=None, only_relevant_stations=True,
         additional_stations=additional_stations,
         cores=cores, parallel=parallel)
     list_of_stream_lists.append(stream_list)
@@ -818,6 +820,7 @@ def check_duplicate_template_channels(
 def extract_detections(detections, templates, archives, archive_types,
                        day_st=Stream(), request_fdsn=False, extract_len=90.0,
                        outdir=None, extract_Z=True, additional_stations=[],
+                       only_relevant_stations=True,
                        parallel=False, cores=None):
     """
     Extract waveforms associated with detections
@@ -985,6 +988,28 @@ def extract_detections(detections, templates, archives, archive_types,
             # Slice instead of trim allows stream to first cut, then copied - 
             # otherwise will run out of memory for multiple cuts.
             st = day_st.slice(starttime=t1, endtime=t2) # .copy()
+
+            # Reduce the stream to all traces relevant to the picks and traces
+            # in detection and template:
+            if only_relevant_stations:
+                relevant_stations = [pick.waveform_id.station_code
+                                     for pick in detection.event.picks]
+                relevant_stations += [chan[0] for chan in detection.chans]
+                template = [templ for templ in templates
+                            if templ.name == detection.template_name]
+                # Template picks contain array picks even if some channels are
+                # missing in template stream
+                relevant_stations = [pick.waveform_id.station_code
+                                     for pick in template.event.picks]
+                relevant_stations += [trace.stats.station
+                                     for trace in template.st if template]
+                relevant_stations = list(set(relevant_stations))
+                new_st = Stream()
+                for station in relevant_stations:
+                    new_st += st.select(station=station)
+                st = new_st
+                Logger.debug('Reduced full stream to %s traces for detection '
+                             '%s', len(st), detection.id)
 
             # Request extra channels from fdsn webservices if required, but
             # only request the exact data segments required to spare services.

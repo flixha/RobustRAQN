@@ -16,7 +16,7 @@ from obspy import UTCDateTime, Stream
 from obspy.core.event import (Catalog, Magnitude, StationMagnitude,
                               StationMagnitudeContribution, WaveformStreamID)
 from obspy.core.inventory.inventory import Inventory
-from obspy.core.event import ResourceIdentifier, CreationInfo, Event
+from obspy.core.event import ResourceIdentifier, CreationInfo, Event, Comment
 from obspy.core.event.header import (
     AmplitudeCategory, AmplitudeUnit, EvaluationMode, EvaluationStatus,
     ATTRIBUTE_HAS_ERRORS)
@@ -308,6 +308,13 @@ def compute_relative_event_magnitude(
             'Event no. %s, %s: added median magnitude %s for %s station '
             'magnitudes.', j_ev, detected_event.short_str(),
             detected_event.magnitudes[-1].mag, len(sta_contrib))
+        delta_mag = np.round(np.median(delta_mags), 2) + 0
+        mag_comment = Comment(
+            text=('Median template magnitude: {prev_mag: 5.2f}, magnitude-' +
+                  'delta: {delta_mag: 6.2f}').format(
+                      prev_mag=prev_mag, delta_mag=delta_mag),
+            creation_info=CreationInfo(agency_id='RR', author='RR'))
+        detected_event.comments.append(mag_comment)
 
     # Write out Nordic files:
     if write_events:

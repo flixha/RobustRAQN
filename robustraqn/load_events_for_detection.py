@@ -67,6 +67,7 @@ MY_ENV["SEISAN_TOP"] = '/home/felix/Software/SEISANrick'
 
 def _read_nordic(sfile, unused_kwargs=True, **kwargs):
     """
+    Internal function to log while reading Nordic file. 
     """
     Logger.info('Reading sfile %s', sfile)
     select = read_nordic(sfile, unused_kwargs=unused_kwargs, **kwargs)
@@ -151,6 +152,58 @@ def load_event_stream(
     """
     Load the waveforms for an event file (here: Nordic file) while performing
     some checks for duplicates, incompleteness, etc.
+
+    :type event: :class:`obspy.core.event.Event`
+    :param event: Event for which to load the stream from attached filename
+    :type sfile: str
+    :param sfile:
+        Path to Nordic event file from which to load event / waveform path.
+    :type seisan_wav_path
+    
+    :type selected_stations
+    
+    :type clients: list of :class:`obspy.clients`
+    :param clients:
+    :type st: :class:`obspy.core.stream.Stream`
+    :param st:
+    :type min_samp_rate: float
+    :param min_samp_rate: minimum sampling rate to retain streams
+    :type pre_event_time: float
+    :param pre_event_time: time (in s) to trim waveforms before event
+    :type allowed_band_codes: str
+    :param allowed_band_codes: allowed SEED band codes (1st char of channel ID)
+    :type forbidden_instrument_codes: str
+    :param forbidden_instrument_codes: forbidden SEED instrument codes (2nd)
+    :type allowed_component_codes: str
+    :param allowed_component_codes: allowed SEED component codes (3rd char)
+    :type channel_priorities: str
+    :param channel_priorities:
+        Band codes in order of priority - when multiple traces with different
+        band codes are available for station, will keep the highest priority
+        one.
+    :type template_length: float
+    :param template_length: Length to trim stream to in seconds.
+    :type search_only_month_folders: bool
+    :param search_only_month_folders:
+        When using Seisan REA / WAV database, limit search for waveform file to
+        relevant year/month-folder.
+    :type bulk_rejected: list
+    :param bulk_rejected:
+        Trace-IDs that were rejected in bulk request due to data quality
+        concerns.
+    :type wavetool_path: str
+    :param wavetool_path:
+        Path to Seisan's wavetool program that can handle conversion of old
+        (version < 6) Seisan waveform files that Obspy does not understand.
+    :type wav_suffixes: list
+    :param wav_suffixes:
+        List of file possible file suffixes, in case waveform files were
+        compressed and a file suffix added to original filename.
+    :type unused_kwargs: bool
+    :param unused_kwargs:
+        Whether some called Obspy function should accept unknown kwargs.
+    :type cores: int
+    :param cores: number of cores to use when reading in parallel
     """
     origin = event.preferred_origin() or event.origins[0]
     # Stop event processing if there are no waveform files

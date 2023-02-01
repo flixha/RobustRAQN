@@ -27,6 +27,8 @@ from robustraqn.quality_metrics import (get_waveforms_bulk, read_ispaq_stats)
 from robustraqn.seismic_array_tools import get_station_sites
 from robustraqn.relative_magnitude_util import compute_relative_event_magnitude
 
+from robustraqn.load_events_for_detection import (get_all_relevant_stations)
+
 import logging
 Logger = logging.getLogger(__name__)
 
@@ -151,6 +153,7 @@ def postprocess_picked_events(
         min_pick_stations=4, min_n_station_sites=4,
         min_picks_on_detection_stations=6, write_waveforms=False,
         archives=[], archive_types=[], request_fdsn=False, template_path=None,
+        sta_translation_file=None,
         origin_longitude=None, origin_latitude=None, origin_depth=None,
         evtype='L', high_accuracy=False, do_not_rename_refracted_phases=False,
         compute_relative_magnitudes=False,
@@ -416,6 +419,7 @@ def postprocess_picked_events(
             all_chans_for_stations=all_channels_for_stations,
             write_waveforms=write_waveforms,
             write_to_year_month_folders=write_to_year_month_folders,
+            sta_translation_file=sta_translation_file,
             parallel=parallel, cores=cores)
 
     # Compute relative magnitudes for events
@@ -458,6 +462,9 @@ def postprocess_picked_events(
             # Copy over magnitudes from detection-event to export-event
             event.magnitudes += detection_event.magnitudes
             event.station_magnitudes += detection_event.station_magnitudes
+            for comment in detection_event.comments:
+                if comment not in event.comments:
+                    event.comments.append(comment)
 
     # Create Seisan-style Sfiles for the whole day
     # sfile_path = os.path.join(sfile_path, + str(orig.time.year)\
@@ -500,12 +507,14 @@ def extract_stream_for_picked_events(
         original_stats_stream=Stream(), det_tribe=Tribe(),
         request_fdsn=False, wav_out_dir='.', write_waveforms=False,
         write_to_year_month_folders=False, extract_len=300,
-        all_chans_for_stations=[], parallel=False, cores=1):
+        all_chans_for_stations=[], sta_translation_file=None,
+        parallel=False, cores=1):
     """
     Extracts a stream object with all channels from the SDS-archive.
     Allows the input of multiple archives as a list
     """
     detection_list = list()
+    templ_list = []
     for event in catalog:
         found_detection = False
         for family in party:
@@ -517,33 +526,37 @@ def extract_stream_for_picked_events(
             if found_detection:
                 break
 
-    # Find stream of detection template - can be loaded from tribe or files
-    if len(det_tribe) > 0:
-        try:
-            templ_tuple = [
-                (family.template, det_tribe.select(family.template.name).st)]
-        except (AttributeError, IndexError):
-            Logger.error('Could not find template %s for related detection',
-                         family.template.name)
-            template_names = [templ.name for templ in det_tribe]
-            template_name_match = difflib.get_close_matches(
-                family.template.name, template_names)
-            if len(template_name_match) >= 1:
-                template_name_match = template_name_match[0]
-            Logger.warning(
-                'Found template with name %s, using instead of %s',
-                template_name_match, family.template.name)
-            templ_tuple = [
-                (family.template, det_tribe.select(template_name_match).st)]
-    else:
-        try:
-            templ_tuple = [(family.template, obspyread(os.path.join(
-                template_path, family.template.name + '.mseed')))]
-        except FileNotFoundError:
-            Logger.error(
-                'Cannot access stream for detection template with name %s, ' +
-                'during picking', family.template.name)
-            return
+        # Find stream of detection template - can be loaded from tribe or files
+        if len(det_tribe) > 0:
+            try:
+                templ_tuple = [
+                    (family.template, det_tribe.select(family.template.name).st)]
+                templ_list += templ_tuple
+            except (AttributeError, IndexError):
+                Logger.error('Could not find template %s for related detection',
+                            family.template.name)
+                template_names = [templ.name for templ in det_tribe]
+                template_name_match = difflib.get_close_matches(
+                    family.template.name, template_names)
+                if len(template_name_match) >= 1:
+                    template_name_match = template_name_match[0]
+                Logger.warning(
+                    'Found template with name %s, using instead of %s',
+                    template_name_match, family.template.name)
+                templ_tuple = [
+                    (family.template, det_tribe.select(template_name_match).st)]
+                templ_list += templ_tuple
+        else:
+            try:
+                # templ_tuple = [(family.template, obspyread(os.path.join(
+                #     template_path, family.template.name + '.mseed')))]
+                templ_tuple = [(family.template, family.template.st)]
+                templ_list += templ_tuple
+            except FileNotFoundError:
+                Logger.error(
+                    'Cannot access stream for detection template with name %s, ' +
+                    'during picking', family.template.name)
+                return
 
     additional_stachans = list()
     for sta in all_chans_for_stations:
@@ -552,9 +565,10 @@ def extract_stream_for_picked_events(
 
     list_of_stream_lists = list()
     stream_list = extract_detections(
-        detection_list, templ_tuple, archives, archive_types=archive_types,
+        detection_list, templ_list, archives, archive_types=archive_types,
         day_st=original_stats_stream, request_fdsn=request_fdsn,
         extract_len=extract_len, outdir=None, only_relevant_stations=True,
+        sta_translation_file=sta_translation_file,
         additional_stations=additional_stations,
         cores=cores, parallel=parallel)
     list_of_stream_lists.append(stream_list)
@@ -820,7 +834,7 @@ def check_duplicate_template_channels(
 def extract_detections(detections, templates, archives, archive_types,
                        day_st=Stream(), request_fdsn=False, extract_len=90.0,
                        outdir=None, extract_Z=True, additional_stations=[],
-                       only_relevant_stations=True,
+                       only_relevant_stations=True, sta_translation_file=None,
                        parallel=False, cores=None):
     """
     Extract waveforms associated with detections
@@ -978,6 +992,7 @@ def extract_detections(detections, templates, archives, archive_types,
         for client in clients:  # Append to existing day_st (can be empty)
             day_st += client.get_waveforms_bulk(
                 bulk, parallel=parallel, cores=cores)
+        n_chans_day_str = len(day_st)
         for detection in day_detections:
             Logger.info(
                 'Cutting for detections at: ' +
@@ -996,20 +1011,35 @@ def extract_detections(detections, templates, archives, archive_types,
                                      for pick in detection.event.picks]
                 relevant_stations += [chan[0] for chan in detection.chans]
                 template = [templ for templ in templates
-                            if templ.name == detection.template_name]
+                            if templ[0].name == detection.template_name]
+                if len(template) >= 1:  # Select one template alone
+                    template_st = template[0][1]
+                    template = template[0][0]
+                else:
+                    Logger.warning(
+                        'Could not find template for detection %s, cannot '
+                        'resolve which channels were part of template.',
+                        detection)
                 # Template picks contain array picks even if some channels are
                 # missing in template stream
                 relevant_stations = [pick.waveform_id.station_code
                                      for pick in template.event.picks]
                 relevant_stations += [trace.stats.station
-                                     for trace in template.st if template]
+                                     for trace in template_st if template]
                 relevant_stations = list(set(relevant_stations))
+                # Add alternative station codes for requested stations
+                if sta_translation_file is not None:
+                    relevant_stations = get_all_relevant_stations(
+                        relevant_stations,
+                        sta_translation_file=sta_translation_file)
+
                 new_st = Stream()
                 for station in relevant_stations:
                     new_st += st.select(station=station)
                 st = new_st
-                Logger.debug('Reduced full stream to %s traces for detection '
-                             '%s', len(st), detection.id)
+                Logger.debug('Reduced full stream (%s traces) to %s traces for'
+                             ' detection %s', n_chans_day_str, len(st),
+                             detection.id)
 
             # Request extra channels from fdsn webservices if required, but
             # only request the exact data segments required to spare services.

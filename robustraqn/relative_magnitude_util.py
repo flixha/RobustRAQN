@@ -203,8 +203,8 @@ def compute_relative_event_magnitude(
     try:
         # First try to be string about accepted magnitude agencies
         try:
-            prev_mags = [
-                m.mag for m in templ1.event.magnitudes
+            previous_magnitudes = [
+                m for m in templ1.event.magnitudes
                 if m.magnitude_type in accepted_magnitude_types
                 and (m.creation_info.agency_id in accepted_magnitude_agencies
                         if m.creation_info else False)]
@@ -212,11 +212,12 @@ def compute_relative_event_magnitude(
             pass
         # If there are no magnitudes for accepted agencies, allow others.
         if len(prev_mags) == 0:
-            prev_mags = [
-                m.mag for m in templ1.event.magnitudes
+            previous_magnitudes = [
+                m for m in templ1.event.magnitudes
                 if m.magnitude_type in accepted_magnitude_types
                 and (m.creation_info.agency_id in accepted_magnitude_agencies
                     if m.creation_info else True)]
+        prev_mags = [m.mag for m in previous_magnitudes]
     except Exception as e:
         Logger.warning(e)
         Logger.warning(
@@ -227,7 +228,7 @@ def compute_relative_event_magnitude(
         prev_mag = np.mean(prev_mags)
     else:
         Logger.warning(
-            "Event  %s: No template magnitudes, relative magnitudes cannot be "
+            "Event %s: No template magnitudes, relative magnitudes cannot be "
             "computed for %s", j_ev, detected_event.short_str())
         return detected_event, pre_processed
 
@@ -309,10 +310,16 @@ def compute_relative_event_magnitude(
             'magnitudes.', j_ev, detected_event.short_str(),
             detected_event.magnitudes[-1].mag, len(sta_contrib))
         delta_mag = np.round(np.median(delta_mags), 2) + 0
+        mag_str = '    '
+        if len(previous_magnitudes) == 1:
+            agency_id = previous_magnitudes[0].agency_id
+            if len(agency_id) > 3:
+                agency_id = agency_id[0:3]
+            mag_str = (m.magnitude_type or ' ') + (agency_id or '   ')
         mag_comment = Comment(
-            text=('Median template magnitude: {prev_mag: 5.2f}, magnitude-' +
-                  'delta: {delta_mag: 6.2f}').format(
-                      prev_mag=prev_mag, delta_mag=delta_mag),
+            text=('Mean template magnitude: {prev_mag: 5.2f}{mag_str:4s},' +
+                  ' magnitude-delta: {delta_mag: 6.2f}').format(
+                      prev_mag=prev_mag, mag_str=mag_str, delta_mag=delta_mag),
             creation_info=CreationInfo(agency_id='RR', author='RR'))
         detected_event.comments.append(mag_comment)
 

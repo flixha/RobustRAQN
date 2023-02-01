@@ -606,11 +606,11 @@ def extract_stream_for_picked_events(
             # orig_time = (
             #     stream[0].stats.starttime +
             #     (stream[0].stats.endtime - stream[0].stats.starttime) * 1/4)
-        # Convert to 32 bit data so that Seisan can read waveforms
+        # Convert to 32 bit int data so that Seisan can read waveforms
         for trace in stream:
-            trace.data = trace.data.astype("float32")
+            trace.data = trace.data.astype("int32")
             try:
-                trace.stats.mseed.encoding = 'FLOAT32'
+                trace.stats.mseed.encoding = 'INT32'
             except (KeyError, AttributeError):
                 pass
         if write_to_year_month_folders:
@@ -620,12 +620,30 @@ def extract_stream_for_picked_events(
             # Make Year/month structure in folder if it does not exist
             Path(wav_folder_path).mkdir(parents=True, exist_ok=True)
             waveform_path_filename = os.path.join(wav_folder_path, w_name)
-            stream.write(waveform_path_filename, format='MSEED')
+            try:  # Try to write with full compression
+                stream.write(waveform_path_filename, format='MSEED',
+                             encoding='STEIM2')
+            except Exception as e:
+                Logger.info(e)
+                Logger.info(
+                    'First attempt to write mseed file %s with compression'
+                    ' failed, trying with original trace encoding.',
+                    waveform_path_filename)
+                stream.write(waveform_path_filename, format='MSEED')
             wavefiles.append(waveform_path_filename)
         else:
             waveform_filename = os.path.join(wav_out_dir, w_name)
             wavefiles.append(waveform_filename)
-            stream.write(waveform_filename, format='MSEED')
+            try:  # Try to write with full compression
+                stream.write(waveform_filename, format='MSEED',
+                             encoding='STEIM2')
+            except Exception as e:
+                Logger.info(e)
+                Logger.info(
+                    'First attempt to write mseed file %s with compression'
+                    ' failed, trying with original trace encoding.',
+                    waveform_filename)
+                stream.write(waveform_filename, format='MSEED')
 
     return wavefiles, detection_list
 
@@ -1066,15 +1084,24 @@ def extract_detections(detections, templates, archives, archive_types,
                                                   detection.template_name)):
                     os.makedirs(os.path.join(outdir, detection.template_name))
                 for trace in st:
-                    trace.data = trace.data.astype("float32")
+                    trace.data = trace.data.astype("int32")
                     try:
-                        trace.stats.mseed.encoding = 'FLOAT32'
+                        trace.stats.mseed.encoding = 'INT32'
                     except (KeyError, AttributeError):
                         pass
-                st.write(os.path.join(
+                st_filename = os.path.join(
                     outdir, detection.template_name,
                     detection.detect_time.strftime(
-                        '%Y-%m-%d_%H-%M-%S') + '.ms'), format='MSEED')
+                        '%Y-%m-%d_%H-%M-%S') + '.ms')
+                try:  # Try to write with full compression
+                    st.write(st_filename, format='MSEED', encoding='STEIM2')
+                except Exception as e:
+                    Logger.info(e)
+                    Logger.info(
+                        'First attempt to write mseed file %s with compression'
+                        ' failed, trying with original trace encoding.',
+                        st_filename)
+                    st.write(st_filename, format='MSEED')
                 Logger.info(
                     'Written file: %s' % '/'.join(
                         [outdir, detection.template_name,

@@ -356,12 +356,6 @@ def pick_events_for_day(
         # picking (these contain more channels)
         # dayparty = replace_templates_for_picking(dayparty, tribe)
 
-    # dayparty = Party(dayparty[65])  # DEBUG
-    # dayparty = Party([family for family in dayparty  # DEBUG
-    #                   if family.template.name.startswith('2018_05_07t18_46')])
-    # Logger.info('Retaining only detections for template %s',
-    #             dayparty[0].template.name)
-
     # Rethreshold if required  # 2021_10_07t19_59_36_80_templ
     if new_threshold is not None:
         dayparty = Party(dayparty).rethreshold(

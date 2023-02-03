@@ -34,6 +34,28 @@ from eqcorrscan.utils.pre_processing import shortproc
 from robustraqn.obspy_utils import _quick_copy_stream
 
 
+def _remove_uncorrected_traces(stream=Stream()):
+    """
+    Removes those traces from a stream where the response was not removed.
+    """
+    remove_traces = []
+    for trace in stream:
+        remove_tr = True
+        # TODO: write and read processing info from tribe json / xml
+        # Right now, tribes / parties do not save processing information.
+        if hasattr(trace.stats, 'processing'):
+            for proc_info in trace.stats.processing:
+                if 'remove_response' in proc_info:
+                    remove_tr = False
+            if remove_tr:
+                remove_traces.append(trace)
+    for rm_trace in remove_traces:
+        Logger.debug(
+            'Removing trace %s for mag-calc because instrument response was ',
+            'not removed.', rm_trace)
+        stream.remove(rm_trace)
+    return stream
+
 
 def compute_relative_event_magnitude(
         detection, detected_event=None, j_ev=0, day_st=Stream(), party=Party(),
@@ -47,7 +69,8 @@ def compute_relative_event_magnitude(
         signal_window_start=-0.5, signal_window_end=10,
         use_s_picks=True, correlations=None, shift=0.35,
         return_correlations=True, correct_mag_bias=False,
-        pre_processed=False, parallel=False, cores=1, n_threads=1, **kwargs):
+        pre_processed=False, remove_response=False, output='DISP',
+        parallel=False, cores=1, n_threads=1, **kwargs):
     """
     Compute relative magnitudes with specific criteria on SNR, minimum number
     of amplitude measurements etc.
@@ -155,6 +178,15 @@ def compute_relative_event_magnitude(
             highcut=templ1.highcut, filt_order=templ1.filt_order,
             samp_rate=templ1.samp_rate, parallel=parallel, num_cores=cores,
             fft_threads=n_threads)
+    
+    # When response should have been removed, check that it was indeed removed
+    # from both template and detection - otherwise can't compute relative
+    # amplitudes.
+    if remove_response:
+        detection_st = _remove_uncorrected_traces(detection_st)
+        templ1_st = _quick_copy_stream(_remove_uncorrected_traces(templ1.st))
+    else:
+        templ1_st = _quick_copy_stream(templ1.st)
 
     Logger.debug(
         'Measure relative magnitude from streams with %s and %s traces',
@@ -166,7 +198,7 @@ def compute_relative_event_magnitude(
         Logger.debug('Event %s: Setting minimum cc-threshold for relative '
                      'magnitude to %s', j_ev, min_cc)
     delta_mag, correlations = relative_magnitude(
-        _quick_copy_stream(templ1.st), detection_st,
+        templ1_st, detection_st,
         templ1.event, detected_event,
         noise_window=(noise_window_start, noise_window_end),
         signal_window=(signal_window_start, signal_window_end),
@@ -189,7 +221,7 @@ def compute_relative_event_magnitude(
                  len(mag_ccs))
 
     # delta_mag_S = relative_magnitude(
-    #     templ1.st, templ2.st, templ1.event, detected_event,
+    #     templ1_st, templ2.st, templ1.event, detected_event,
     #     noise_window=(-50, -30), signal_window=(-0.5, 20), min_snr=min_snr,
     #     min_cc=0.7, use_s_picks=True, correlations=None, shift=0.4,
     #     return_correlations=False, correct_mag_bias=True)
@@ -312,10 +344,18 @@ def compute_relative_event_magnitude(
         delta_mag = np.round(np.median(delta_mags), 2) + 0
         mag_str = '    '
         if len(previous_magnitudes) == 1:
-            agency_id = previous_magnitudes[0].agency_id
+            try:
+                agency_id = previous_magnitudes[0].agency_id
+            except AttributeError:
+                agency_id = '   '
             if len(agency_id) > 3:
                 agency_id = agency_id[0:3]
-            mag_str = (m.magnitude_type or ' ') + (agency_id or '   ')
+            try:
+                mag_type = previous_magnitudes[0].magnitude_type
+                mag_type = mag_type[-1]  # Only retain last letter of magtype
+            except (AttributeError, IndexError):
+                mag_type = ' '
+            mag_str = mag_type + agency_id
         mag_comment = Comment(
             text=('Mean template magnitude: {prev_mag: 5.2f}{mag_str:4s},' +
                   ' magnitude-delta: {delta_mag: 6.2f}').format(

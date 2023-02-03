@@ -232,8 +232,9 @@ def calculate_events_for_party(party, parallel=False, cores=None):
 def run_day_detection(
         clients, tribe, date, ispaq, selected_stations,
         parallel=False, cores=1, io_cores=1, remove_response=False,
-        inv=Inventory(), noise_balancing=False, let_days_overlap=True,
-        balance_power_coefficient=2, apply_agc=False, agc_window_sec=5,
+        inv=Inventory(), output='DISP', noise_balancing=False,
+        balance_power_coefficient=2, let_days_overlap=True,
+        apply_agc=False, agc_window_sec=5,
         n_templates_per_run=20, xcorr_func='fftw',
         concurrency=None, arch='precise', trig_int=0, threshold=10,
         threshold_type='MAD', re_eval_thresh_factor=0.6, min_chans=10,
@@ -319,7 +320,7 @@ def run_day_detection(
         Logger.info('Checking if a run with the same parameters has been '
                     'performed before...')
         settings_hash = get_multi_obj_hash(
-            [tribe.templates, selected_stations, remove_response, inv,
+            [tribe.templates, selected_stations, remove_response, inv, output,
              day_stats, noise_balancing, balance_power_coefficient, xcorr_func,
              arch, trig_int, threshold, re_eval_thresh_factor, min_chans,
              multiplot, check_array_misdetections, short_tribe, short_tribe2,
@@ -368,7 +369,7 @@ def run_day_detection(
         day_st = init_processing_wRotation(
             day_st, starttime=starttime_req, endtime=endtime_req,
             # day_st, starttime=starttime, endtime=endtime,
-            remove_response=remove_response, inv=inv,
+            remove_response=remove_response, output=output, inv=inv,
             pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],
             parallel=parallel, cores=cores,
             sta_translation_file=sta_translation_file,

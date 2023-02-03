@@ -258,7 +258,7 @@ def pick_events_for_day(
         apply_array_lag_calc=False,
         relevant_stations=[], sta_translation_file='', let_days_overlap=True,
         noise_balancing=False, balance_power_coefficient=2,
-        remove_response=False, inv=Inventory(),
+        remove_response=False, output='DISP', inv=Inventory(),
         apply_agc=False, agc_window_sec=5, blacklisted_templates=[],
         parallel=False, cores=None, io_cores=1,
         check_array_misdetections=False, xcorr_func='fmf', arch='precise',
@@ -292,14 +292,15 @@ def pick_events_for_day(
         Logger.info('Checking if a run with the same parameters has been '
                     'performed before...')
         settings_hash = get_multi_obj_hash(
-            [tribe.templates, relevant_stations, remove_response, inv, ispaq,
-             noise_balancing, balance_power_coefficient, xcorr_func, arch,
-             trig_int, new_threshold, threshold_type, min_det_chans,
-             minimum_sample_rate, archives, request_fdsn, shift_len, min_cc,
-             min_cc_from_mean_cc_factor, extract_len, all_vert, all_horiz,
-             check_array_misdetections, short_tribe.templates,
-             short_tribe2.templates, re_eval_thresh_factor,
-             detect_value_allowed_reduction, time_difference_threshold,
+            [tribe.templates, relevant_stations, remove_response, output,
+             inv, ispaq, noise_balancing, balance_power_coefficient,
+             xcorr_func, arch, trig_int, new_threshold, threshold_type,
+             min_det_chans, minimum_sample_rate, archives, request_fdsn,
+             shift_len, min_cc, min_cc_from_mean_cc_factor, extract_len,
+             all_vert, all_horiz, check_array_misdetections,
+             short_tribe.templates, short_tribe2.templates,
+             re_eval_thresh_factor, detect_value_allowed_reduction,
+             time_difference_threshold,
              vertical_chans, horizontal_chans, det_folder, template_path,
              time_difference_threshold, minimum_sample_rate, apply_agc,
              agc_window_sec, interpolate, use_new_resamp_method,
@@ -462,7 +463,7 @@ def pick_events_for_day(
     nyquist_f = minimum_sample_rate / 2
     day_st = init_processing_wRotation(
         day_st, starttime=starttime_req, endtime=endtime_req,
-        remove_response=remove_response, inv=inv,
+        remove_response=remove_response, output=output, inv=inv,
         pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],
         parallel=parallel, cores=cores,
         sta_translation_file=sta_translation_file,
@@ -683,7 +684,7 @@ def pick_events_for_day(
         min_picks_on_detection_stations=min_picks_on_detection_stations,
         write_to_year_month_folders=write_to_year_month_folders,
         compute_relative_magnitudes=compute_relative_magnitudes,
-        min_mag_cc=min_cc,
+        min_mag_cc=min_cc, remove_response=remove_response, output=output,
         min_mag_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
         parallel=parallel, cores=io_cores, **kwargs)
 

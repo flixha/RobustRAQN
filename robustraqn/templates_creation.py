@@ -232,7 +232,7 @@ def _create_template_objects(
         events_files=[], selected_stations=[], template_length=60,
         lowcut=2.5, highcut=9.9, min_snr=5.0, prepick=0.5, samp_rate=20,
         seisan_wav_path=None, inv=Inventory(), clients=[],
-        remove_response=False, noise_balancing=False,
+        remove_response=False, output='DISP', noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
         apply_agc=False, agc_window_sec=5,
         min_n_traces=8, min_n_station_sites=4, write_out=False,
@@ -416,7 +416,7 @@ def _create_template_objects(
         if remove_response:
             nyquist_f = samp_rate / 2
             wavef = try_remove_responses(
-                wavef, inv, taper_fraction=0.15,
+                wavef, inv, output=output, taper_fraction=0.15,
                 pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],
                 parallel=parallel, cores=cores,
                 thread_parallel=thread_parallel, n_threads=n_threads, **kwargs)
@@ -673,7 +673,7 @@ def create_template_objects(
         sfiles=[], catalog=None, selected_stations=[], template_length=60,
         lowcut=2.5, highcut=9.9, min_snr=5.0, prepick=0.5, samp_rate=20,
         seisan_wav_path=None, clients=[], inv=Inventory(),
-        remove_response=False, noise_balancing=False,
+        remove_response=False, output='DISP', noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
         apply_agc=False, agc_window_sec=5,
         min_n_traces=8, write_out=False, write_individual_templates=False,
@@ -863,7 +863,7 @@ def create_template_objects(
                 prepick=prepick, samp_rate=samp_rate,
                 seisan_wav_path=seisan_wav_path, clients=clients,
                 inv=new_inv.select(time=UTCDateTime(unique_date_list[nbatch])),
-                remove_response=remove_response,
+                remove_response=remove_response, output=output,
                 noise_balancing=noise_balancing,
                 balance_power_coefficient=balance_power_coefficient,
                 apply_agc=apply_agc, agc_window_sec=agc_window_sec,
@@ -907,7 +907,8 @@ def create_template_objects(
             lowcut=lowcut, highcut=highcut, min_snr=min_snr,
             prepick=prepick, samp_rate=samp_rate,
             seisan_wav_path=seisan_wav_path, clients=clients, inv=new_inv,
-            remove_response=remove_response, noise_balancing=noise_balancing,
+            remove_response=remove_response, output=output,
+            noise_balancing=noise_balancing,
             balance_power_coefficient=balance_power_coefficient,
             ground_motion_input=ground_motion_input,
             min_n_traces=min_n_traces, make_pretty_plot=make_pretty_plot,

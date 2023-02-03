@@ -156,8 +156,8 @@ def postprocess_picked_events(
         sta_translation_file=None,
         origin_longitude=None, origin_latitude=None, origin_depth=None,
         evtype='L', high_accuracy=False, do_not_rename_refracted_phases=False,
-        compute_relative_magnitudes=False,
-        min_mag_cc=0.2, min_mag_cc_from_mean_cc_factor=None,
+        compute_relative_magnitudes=False, remove_response=False,
+        output='DISP', min_mag_cc=0.2, min_mag_cc_from_mean_cc_factor=None,
         parallel=False, cores=1, n_threads=1, **kwargs):
     """
     :type picked_catalog: :class:`obspy.core.Catalog`
@@ -457,8 +457,9 @@ def postprocess_picked_events(
                 # signal_window_start=-0.5, signal_window_end=10,
                 # use_s_picks=True, correlations=None, shift=0.35,
                 return_correlations=True, correct_mag_bias=False,
-                pre_processed=pre_processed, parallel=parallel, cores=cores,
-                n_threads=n_threads, **kwargs)
+                remove_response=remove_response, output=output,
+                pre_processed=pre_processed,
+                parallel=parallel, cores=cores, n_threads=n_threads, **kwargs)
             # Copy over magnitudes from detection-event to export-event
             event.magnitudes += detection_event.magnitudes
             event.station_magnitudes += detection_event.station_magnitudes

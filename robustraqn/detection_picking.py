@@ -344,11 +344,6 @@ def pick_events_for_day(
         # replace the old templates in the detection-families with those for
         # dayparty = Party([f for f in dayparty if f.template.name == '2021_10_07t19_59_36_80_templ'])
         # dayparty = Party([f for f in dayparty if f.template.name == '2018_02_23t21_15_51_38_templ'])
-        # dayparty[0].detections = [dayparty[0].detections[3]]
-        # dayparty = Party([f for f in dayparty if f.template.name == '2004_10_14t10_17_46_70_templ'])
-        # 2004_10_14t10_17_46_70_templ_20190501_181532100000
-        # dayparty = Party([f for f in dayparty if f.template.name == '2019_06_04t13_41_43_80_templ'])
-        # dayparty = Party([f for f in dayparty if f.template.name.startswith('2001_08_08t09_56_1')])
         # dayparty[0].detections = [dayparty[0].detections[0]]
         
         # fam = dayparty.select('2022_04_25t02_01_59_06_templ')

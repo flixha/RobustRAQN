@@ -463,6 +463,17 @@ def postprocess_picked_events(
             # Copy over magnitudes from detection-event to export-event
             event.magnitudes += detection_event.magnitudes
             event.station_magnitudes += detection_event.station_magnitudes
+            event.amplitudes += detection_event.amplitudes
+            for amplitude in event.amplitudes:
+                if amplitude.pick_id is None:  # Cannot resolve seed-id
+                    continue
+                # May need to update pick resource id in amplitude
+                ref_pick = amplitude.pick_id.get_referred_object()
+                if ref_pick not in event.picks:
+                    pick_ids = [p.resource_id for p in event.picks
+                                if p.waveform_id == ref_pick.waveform_id]
+                    for pick_id in pick_ids:
+                        amplitude.pick_id = pick_id
             for comment in detection_event.comments:
                 if comment not in event.comments:
                     event.comments.append(comment)

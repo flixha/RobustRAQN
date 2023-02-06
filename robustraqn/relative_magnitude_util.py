@@ -13,8 +13,9 @@ import logging
 Logger = logging.getLogger(__name__)
 
 from obspy import UTCDateTime, Stream
-from obspy.core.event import (Catalog, Magnitude, StationMagnitude,
-                              StationMagnitudeContribution, WaveformStreamID)
+from obspy.core.event import (Catalog, Magnitude, StationMagnitude, Amplitude,
+                              StationMagnitudeContribution, WaveformStreamID,
+                              QuantityError)
 from obspy.core.inventory.inventory import Inventory
 from obspy.core.event import ResourceIdentifier, CreationInfo, Event, Comment
 from obspy.core.event.header import (
@@ -63,8 +64,10 @@ def compute_relative_event_magnitude(
         detection_template_names=[], write_events=False, mag_out_dir=None,
         accepted_magnitude_types=['ML', 'Mw', 'MW'],
         accepted_magnitude_agencies=['BER', 'NOA'],
+        magnitude_agency_type_pref=[
+            ('BER', 'ML'), ('BER', 'Mw'), ('BER', 'MW'), ('NOA', 'ML')],
         min_snr=1.1, min_cc=0.25, min_cc_from_mean_cc_factor=None,
-        min_n_relative_amplitudes=2,
+        min_n_relative_amplitudes=2, check_rel_amp_deviations=True,
         noise_window_start=-40, noise_window_end=-29.5,
         signal_window_start=-0.5, signal_window_end=10,
         use_s_picks=True, correlations=None, shift=0.35,
@@ -196,7 +199,7 @@ def compute_relative_event_magnitude(
                          * min_cc_from_mean_cc_factor),
                      min_cc)
         Logger.debug('Event %s: Setting minimum cc-threshold for relative '
-                     'magnitude to %s', j_ev, min_cc)
+                     'magnitude to %.5f', j_ev, min_cc)
     delta_mag, correlations = relative_magnitude(
         templ1_st, detection_st,
         templ1.event, detected_event,
@@ -205,7 +208,8 @@ def compute_relative_event_magnitude(
         min_snr=min_snr, min_cc=min_cc, use_s_picks=use_s_picks,
         correlations=None, shift=shift,
         return_correlations=return_correlations,
-        correct_mag_bias=correct_mag_bias)
+        correct_mag_bias=correct_mag_bias,
+        check_rel_amp_deviations=check_rel_amp_deviations, **kwargs)
         #  correct_mag_bias=True)
         # magnitude_method="UnnormalizedCC"
 
@@ -230,26 +234,55 @@ def compute_relative_event_magnitude(
     # if len(delta_mag) > 0 and len(delta_mag_S) > 0:
     #     break
 
-    prev_mag = None
-    prev_mags = []
     try:
-        # First try to be string about accepted magnitude agencies
-        try:
-            previous_magnitudes = [
-                m for m in templ1.event.magnitudes
-                if m.magnitude_type in accepted_magnitude_types
-                and (m.creation_info.agency_id in accepted_magnitude_agencies
-                        if m.creation_info else False)]
-        except Exception as e:
-            pass
-        # If there are no magnitudes for accepted agencies, allow others.
-        if len(prev_mags) == 0:
-            previous_magnitudes = [
-                m for m in templ1.event.magnitudes
-                if m.magnitude_type in accepted_magnitude_types
-                and (m.creation_info.agency_id in accepted_magnitude_agencies
-                    if m.creation_info else True)]
+        prev_mag = None
+        prev_mags = []
+        # Check if there are magnitudes for preferred agency + type combinations
+        prev_mag_agency_type_tuple = [
+            ((m.creation_info.agency_id, m.magnitude_type), m)
+            for m in templ1.event.magnitudes if m.creation_info]
+        previous_magnitudes = [
+            prev_mag[1] for prev_mag in prev_mag_agency_type_tuple
+            if prev_mag[0] in magnitude_agency_type_pref]
+        # If there are no magnitudes for accepted agencies / types, allow others.
+        if len(previous_magnitudes) == 0:
+            if len(prev_mags) == 0:
+                previous_magnitudes = [
+                    m for m in templ1.event.magnitudes
+                    if m.magnitude_type in accepted_magnitude_types
+                    and (m.creation_info.agency_id in accepted_magnitude_agencies
+                        if m.creation_info else True)]
         prev_mags = [m.mag for m in previous_magnitudes]
+    
+    # try:
+    #     previous_magnitudes = []
+    #     for mag_pref in magnitude_agency_type_pref:
+    #         if len(previous_magnitudes) 
+    #         try:
+    #             previous_magnitudes = [
+    #                 m for m in templ1.event.magnitudes
+    #                 if m.magnitude_type == mag_pref[1]
+    #                 and (m.creation_info.agency_id == mag_pref[0]
+    #                      if m.creation_info else False)]
+    #         except Exception as e:
+    #             pass
+        # # First try to be string about accepted magnitude agencies
+        # try:
+        #     previous_magnitudes = [
+        #         m for m in templ1.event.magnitudes
+        #         if m.magnitude_type in accepted_magnitude_types
+        #         and (m.creation_info.agency_id in accepted_magnitude_agencies
+        #                 if m.creation_info else False)]
+        # except Exception as e:
+        #     pass
+        # If there are no magnitudes for accepted agencies, allow others.
+        # if len(prev_mags) == 0:
+        #     previous_magnitudes = [
+        #         m for m in templ1.event.magnitudes
+        #         if m.magnitude_type in accepted_magnitude_types
+        #         and (m.creation_info.agency_id in accepted_magnitude_agencies
+        #             if m.creation_info else True)]
+        # prev_mags = [m.mag for m in previous_magnitudes]
     except Exception as e:
         Logger.warning(e)
         Logger.warning(
@@ -285,31 +318,6 @@ def compute_relative_event_magnitude(
     #                                    creation_time=UTCDateTime(),
     #                                    version=None)))
 
-    # Add station magnitudes
-    sta_contrib = []
-    for seed_id, _delta_mag in delta_mag_corr.items():
-        if np.isnan(prev_mag) or np.isnan(_delta_mag):
-            continue
-        sta_mag = StationMagnitude(
-            mag=prev_mag + _delta_mag,
-            magnitude_type='ML',
-            method_id=ResourceIdentifier("relative"),
-            waveform_id=WaveformStreamID(seed_string=seed_id),
-            creation_info=CreationInfo(
-                agency_id='BER',
-                author="EQcorrscan",
-                creation_time=UTCDateTime()))
-        detected_event.station_magnitudes.append(sta_mag)
-        sta_contrib.append(StationMagnitudeContribution(
-            station_magnitude_id=sta_mag.resource_id,
-            weight=1.))
-
-    Logger.debug(
-        'Event %s: created %s stationMagnitudes (%s)', j_ev,
-        len(sta_contrib),
-        str(['{0:.2f}'.format(stamag.mag)
-             for stamag in detected_event.station_magnitudes]))
-
     # [sm.mag for sm in detected_event.station_magnitudes]
     delta_mags = [_delta_mag[1] for _delta_mag in delta_mag_corr.items()]
     # av_mag = prev_mag + np.dot(
@@ -318,7 +326,58 @@ def compute_relative_event_magnitude(
     if len(delta_mags) > 0:
         # av_mag = prev_mag + np.mean(delta_mags)
         # better use median to exclude outliers?!
-        av_mag = prev_mag + np.median(delta_mags)
+        av_delta_mag = np.median(delta_mags)
+        av_mag = prev_mag + av_delta_mag
+    else:
+        return detected_event, pre_processed
+
+    # Add station magnitudes
+    sta_contrib = []
+    amp_contrib = []
+    for seed_id, _delta_mag in delta_mag_corr.items():
+        if np.isnan(prev_mag) or np.isnan(_delta_mag):
+            continue
+        # Add relative amplitude measurement:
+        rel_amp = 10 ** _delta_mag
+        # Adding amplitude mainly useful if there is a related pick
+        pick_ids = [p.resource_id for p in detected_event.picks
+                    if p.waveform_id.get_seed_string() == seed_id]
+        for pick_id in pick_ids:
+            amp = Amplitude(pick_id=pick_id, type='Arel',
+                            generic_amplitude=rel_amp, unit='dimensionless',
+                            waveform_id=WaveformStreamID(seed_string=seed_id),
+                            magnitude_hint='MR')
+            amp_contrib.append(amp)
+        if len(pick_ids) == 0:
+            amp = Amplitude(generic_amplitude=rel_amp, unit='dimensionless',
+                            waveform_id=WaveformStreamID(seed_string=seed_id),
+                            type='Arel', magnitude_hint='MR')
+            amp_contrib.append(amp)
+        # Add station magnitude contribution
+        station_mag_residual = _delta_mag - av_delta_mag
+        sta_mag = StationMagnitude(
+            mag=prev_mag + _delta_mag,
+            amplitude_id=amp.resource_id,
+            magnitude_type='MR', station_magnitude_type='MR',
+            mag_errors=QuantityError(uncertainty=station_mag_residual),
+            method_id=ResourceIdentifier("relative"),
+            waveform_id=WaveformStreamID(seed_string=seed_id),
+            creation_info=CreationInfo(
+                # agency_id='BER',
+                agency_id='eqcorrscan.core.lag_calc',
+                author="EQcorrscan",
+                creation_time=UTCDateTime()))
+        detected_event.station_magnitudes.append(sta_mag)
+        sta_contrib.append(StationMagnitudeContribution(
+            station_magnitude_id=sta_mag.resource_id,
+            weight=1.))
+    detected_event.amplitudes += amp_contrib
+
+    Logger.debug(
+        'Event %s: created %s stationMagnitudes (%s)', j_ev,
+        len(sta_contrib),
+        str(['{0:.2f}'.format(stamag.mag)
+             for stamag in detected_event.station_magnitudes]))
 
     Logger.debug('Event %s: The %s delta-magnitudes are: %s', j_ev,
                  len(delta_mags),
@@ -326,26 +385,27 @@ def compute_relative_event_magnitude(
 
     if not np.isnan(av_mag) and len(delta_mags) >= min_n_relative_amplitudes:
         # Compute average magnitude
-        detected_event.magnitudes.append(Magnitude(
-            mag=av_mag, magnitude_type='ML',
-            origin_id=(detected_event.preferred_origin() or
-                       detected_event.origins[0]).resource_id,
-            method_id=ResourceIdentifier("relative"),
-            station_count=len(delta_mag),
-            evaluation_mode=EvaluationMode('automatic'),
-            station_magnitude_contributions=sta_contrib,
-            creation_info=CreationInfo(
-                agency_id='EQC', author="EQcorrscan",
-                creation_time=UTCDateTime())))
+        detected_event.magnitudes.append(
+            Magnitude(
+                mag=av_mag, magnitude_type='ML',
+                origin_id=(detected_event.preferred_origin() or
+                        detected_event.origins[0]).resource_id,
+                method_id=ResourceIdentifier("relative"),
+                station_count=len(delta_mag),
+                evaluation_mode=EvaluationMode('automatic'),
+                station_magnitude_contributions=sta_contrib,
+                creation_info=CreationInfo(
+                    agency_id='EQC', author="EQcorrscan",
+                    creation_time=UTCDateTime())))
         Logger.info(
-            'Event no. %s, %s: added median magnitude %s for %s station '
+            'Event no. %s, %s: added median magnitude %.3f for %s station '
             'magnitudes.', j_ev, detected_event.short_str(),
             detected_event.magnitudes[-1].mag, len(sta_contrib))
         delta_mag = np.round(np.median(delta_mags), 2) + 0
         mag_str = '    '
         if len(previous_magnitudes) == 1:
             try:
-                agency_id = previous_magnitudes[0].agency_id
+                agency_id = previous_magnitudes[0].creation_info.agency_id
             except AttributeError:
                 agency_id = '   '
             if len(agency_id) > 3:

@@ -407,6 +407,8 @@ def compute_relative_event_magnitude(
             try:
                 agency_id = previous_magnitudes[0].creation_info.agency_id
             except AttributeError:
+                pass
+            if agency_id is None:
                 agency_id = '   '
             if len(agency_id) > 3:
                 agency_id = agency_id[0:3]
@@ -417,7 +419,7 @@ def compute_relative_event_magnitude(
                 mag_type = ' '
             mag_str = mag_type + agency_id
         mag_comment = Comment(
-            text=('Mean template magnitude: {prev_mag: 5.2f}{mag_str:4s},' +
+            text=('Template magnitude: {prev_mag: 5.2f}{mag_str:4s},' +
                   ' magnitude-delta: {delta_mag: 6.2f}').format(
                       prev_mag=prev_mag, mag_str=mag_str, delta_mag=delta_mag),
             creation_info=CreationInfo(agency_id='RR', author='RR'))

@@ -402,6 +402,7 @@ def compute_relative_event_magnitude(
             'magnitudes.', j_ev, detected_event.short_str(),
             detected_event.magnitudes[-1].mag, len(sta_contrib))
         delta_mag = np.round(np.median(delta_mags), 2) + 0
+        mag_std = np.round(np.std(delta_mags), 2) + 0
         mag_str = '    '
         if len(previous_magnitudes) == 1:
             try:
@@ -420,9 +421,10 @@ def compute_relative_event_magnitude(
             mag_str = mag_type + agency_id
         mag_comment = Comment(
             text=('Template magnitude: {prev_mag: 5.2f}{mag_str:4s},' +
-                  ' magnitude-delta: {delta_mag: 6.2f}').format(
-                      prev_mag=prev_mag, mag_str=mag_str, delta_mag=delta_mag),
-            creation_info=CreationInfo(agency_id='RR', author='RR'))
+                  ' magnitude-delta: {delta_mag: 6.2f}, std: {mag_std: 5.2f}'
+                  ).format(prev_mag=prev_mag, mag_str=mag_str,
+                           delta_mag=delta_mag, mag_std=mag_std),
+                  creation_info=CreationInfo(agency_id='RR', author='RR'))
         detected_event.comments.append(mag_comment)
 
     # Write out Nordic files:

@@ -421,9 +421,10 @@ def compute_relative_event_magnitude(
             mag_str = mag_type + agency_id
         mag_comment = Comment(
             text=('Template magnitude: {prev_mag: 5.2f}{mag_str:4s},' +
-                  ' magnitude-delta: {delta_mag: 6.2f}, std: {mag_std: 5.2f}'
-                  ).format(prev_mag=prev_mag, mag_str=mag_str,
-                           delta_mag=delta_mag, mag_std=mag_std),
+                  ' magnitude-delta: {delta_mag: 6.2f}, std: {mag_std: 5.2f}' +
+                   ', n: {n: 4d}').format(
+                      prev_mag=prev_mag, mag_str=mag_str, delta_mag=delta_mag,
+                      mag_std=mag_std, n=len(delta_mags)),
                   creation_info=CreationInfo(agency_id='RR', author='RR'))
         detected_event.comments.append(mag_comment)
 
@@ -443,3 +444,4 @@ def compute_relative_event_magnitude(
     else:
         pre_processed = False
     return detected_event, pre_processed
+# %%

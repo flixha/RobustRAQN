@@ -454,7 +454,7 @@ def pick_events_for_day(
         day_st, starttime=starttime_req, endtime=endtime_req,
         remove_response=remove_response, output=output, inv=inv,
         pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],
-        # parallel=parallel, cores=cores,
+        parallel=parallel, cores=cores,
         sta_translation_file=sta_translation_file,
         noise_balancing=noise_balancing,
         balance_power_coefficient=balance_power_coefficient, **kwargs)

@@ -2743,18 +2743,19 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
                 tr.stats.station = sta_fortransl_dict.get(tr.stats.station)
         updated_trace_ids.append(tr.id)
 
-    # trace_id_change_dict[old_tr_id] = tr.id
-    # trace_id_change_dict_1
+    # here I need to figure out in which order the original traces are now with
+    # updated IDs in the stream.
     # original_trace_ids <--> intermed_trace_ids: not in same order
     # intermed_trace_ids <--> updated_trace_ids: are in same order
+    # Reverse dictionary of changes from the first round of id-changes
     inv_trace_id_change_dict_1 = {
         v: k for k, v in trace_id_change_dict_1.items()}
     original_trace_ids_new_order = []
     for tr_id in intermed_trace_ids:
         old_tr_id = inv_trace_id_change_dict_1[tr_id]
         original_trace_ids_new_order.append(old_tr_id)
-    # trace_id_change_dict_1
-
+    # Create the dict that contains the original IDs and the corresponding
+    # updated IDs.
     trace_id_change_dict = dict()
     for tr_id_old, tr_id_new in zip(original_trace_ids_new_order,
                                     updated_trace_ids):

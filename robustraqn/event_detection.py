@@ -150,10 +150,21 @@ def get_multi_obj_hash(hash_object_list):
                 hash = hashlib.md5(obj.__str__(extended=True).encode('utf-8'))
             except TypeError:
                 pass
+        if isinstance(obj, str):
+            hash = hashlib.md5(obj.encode('utf-8'))
         if hash is None:
             try:
+                # E.g. for tribe, stream, or inventory (tries to loop 1/2/3 x)
                 hash = hashlib.md5(str(obj).encode('utf-8'))
-            except ValueError:
+                hash = hashlib.md5(str(sorted([
+                    str(item) for item in obj])).encode('utf-8'))
+                hash = hashlib.md5(str(sorted([
+                    str(item) for subobj in obj
+                    for item in subobj])).encode('utf-8'))
+                hash = hashlib.md5(str(sorted([
+                    str(item) for subobj in obj for subsubobj in subobj
+                    for item in subsubobj])).encode('utf-8'))
+            except (TypeError, ValueError):
                 pass
         if hash is not None:
             try:

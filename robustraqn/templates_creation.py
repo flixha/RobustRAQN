@@ -444,7 +444,7 @@ def _create_template_objects(
 
         # standardize all codes for network, station, location, channel
         if normalize_NSLC:
-            wavef = normalize_NSLC_codes(
+            wavef, trace_id_change_dict = normalize_NSLC_codes(
                 wavef, inv, sta_translation_file=sta_translation_file,
                 std_network_code=std_network_code,
                 std_location_code=std_location_code,

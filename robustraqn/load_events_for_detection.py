@@ -1781,9 +1781,14 @@ def _init_processing_per_channel(
         detrend_type='simple', taper_fraction=0.005, pre_filt=None,
         downsampled_max_rate=None, noise_balancing=False,
         balance_power_coefficient=2, sta_translation_file='',
+        normalize_all_station_channels=False, exclude_component_codes=['H'],
         n_threads=1, **kwargs):
     """
     Inner loop over which the initial processing can be parallelized
+    :type normalize_all_station_channels: bool
+    :param normalize_all_station_channels:
+        Specify whether channels belonging to the same station should be
+        normalized to the same (most common) sampling rate).
     """
 
     # First check if there are consecutive Zeros in the data (happens for
@@ -1805,6 +1810,12 @@ def _init_processing_per_channel(
     if len(st) == 0:
         return st
 
+    # Check whether all the traces at the same station have the same samling
+    # rate:
+    if normalize_all_station_channels:
+        st = check_normalize_station_sample_rates(
+            stream, exclude_component_codes=exclude_component_codes, **kwargs)
+    
     # Detrend
     st.detrend(type=detrend_type)
     # Merge, but keep "copy" of the masked array for filling back
@@ -1813,6 +1824,9 @@ def _init_processing_per_channel(
     masked_st.merge(method=0, fill_value=None, interpolation_samples=0)
     masked_st.trim(starttime=starttime, endtime=endtime, pad=True,
                    nearest_sample=True, fill_value=None)
+    masked_st_tr_dict = dict()
+    for tr in masked_st:
+        masked_st_tr_dict[tr.id] = tr
 
     # Merge daystream without masking
     # st.merge(method=0, fill_value=0, interpolation_samples=0)
@@ -1847,10 +1861,16 @@ def _init_processing_per_channel(
     st = st.detrend(type=detrend_type)
 
     # Put masked array into response-corrected stream st:
-    for j, tr in enumerate(st):
-        if isinstance(masked_st.traces[j].data, np.ma.MaskedArray):
+    # masked_st
+    for tr in st:
+        masked_st_tr = masked_st_tr_dict[tr.id]
+        if isinstance(masked_st_tr.data, np.ma.MaskedArray):
             tr.data = np.ma.masked_array(tr.data,
-                                         mask=masked_st.traces[j].data.mask)
+                                         mask=masked_st_tr.data.mask)
+    # for j, tr in enumerate(st):
+    #     if isinstance(masked_st.traces[j].data, np.ma.MaskedArray):
+    #         tr.data = np.ma.masked_array(tr.data,
+    #                                      mask=masked_st.traces[j].data.mask)
     
     # Check that at least 80 (x) % of data are not masked:
     # TODO: Don't do consecutive Zero checks here, just the other checks 
@@ -1901,6 +1921,7 @@ def _init_processing_per_channel_wRotation(
         skip_interp_sample_rate_smaller=skip_interp_sample_rate_smaller,
         interpolation_method=interpolation_method)
 
+
     # Detrend
     st.detrend(type=detrend_type)
     # Merge, but keep "copy" of the masked array for filling back
@@ -1909,6 +1930,9 @@ def _init_processing_per_channel_wRotation(
     masked_st.merge(method=0, fill_value=None, interpolation_samples=0)
     masked_st.trim(starttime=starttime, endtime=endtime, pad=True,
                    nearest_sample=True, fill_value=None)
+    masked_st_tr_dict = dict()
+    for tr in masked_st:
+        masked_st_tr_dict[tr.id] = tr
 
     # Merge daystream without masking
     # st.merge(method=0, fill_value=0, interpolation_samples=0)
@@ -1927,7 +1951,7 @@ def _init_processing_per_channel_wRotation(
     st.detrend(type=detrend_type)
 
     # normalize NSLC codes, including rotation
-    st = normalize_NSLC_codes(
+    st, trace_id_change_dict = normalize_NSLC_codes(
         st, inv, sta_translation_file=sta_translation_file,
         std_network_code=std_network_code, std_location_code=std_location_code,
         std_channel_prefix=std_channel_prefix, parallel=False, cores=1,
@@ -1946,17 +1970,28 @@ def _init_processing_per_channel_wRotation(
         st = st.taper(0.005, type='hann', max_length=None, side='both')
 
     # Put masked array into response-corrected stream st:
-    for j, tr in enumerate(st):
-        if isinstance(masked_st.traces[j].data, np.ma.MaskedArray):
-            try:
-                tr.data = np.ma.masked_array(
-                    tr.data, mask=masked_st.traces[j].data.mask)
-            except np.ma.MaskError as e:
-                Logger.error(e)
-                Logger.error(
-                    'Numpy Mask error - this is a problematic exception '
-                    'because it does not appear to be reproducible. I shall '
-                    'hence try to process this trace again.')
+    for tr in st:
+        # Find the mask that fits to the trace (which may have changed id)
+        inv_trace_id_change_dict = {
+            v: k for k, v in trace_id_change_dict.items()}
+        old_tr_id = inv_trace_id_change_dict[tr.id]
+        masked_st_tr = masked_st_tr_dict[old_tr_id]
+        if isinstance(masked_st_tr.data, np.ma.MaskedArray):
+            tr.data = np.ma.masked_array(tr.data,
+                                         mask=masked_st_tr.data.mask)
+    # for j, tr in enumerate(st):
+    #     if isinstance(masked_st.traces[j].data, np.ma.MaskedArray):
+    #         tr.data = np.ma.masked_array(
+    #             tr.data, mask=masked_st.traces[j].data.mask)
+            # try:
+            #     tr.data = np.ma.masked_array(
+            #         tr.data, mask=masked_st.traces[j].data.mask)
+            # except np.ma.MaskError as e:
+            #     Logger.error(e)
+            #     Logger.error(
+            #         'Numpy Mask error - this is a problematic exception '
+            #         'because it does not appear to be reproducible. I shall '
+            #         'hence try to process this trace again.')
 
     # Downsample if necessary
     if downsampled_max_rate is not None:
@@ -2178,6 +2213,56 @@ def check_normalize_sampling_rate(
         new_st += keep_st
 
     return new_st, True
+
+
+def check_normalize_station_sample_rates(
+        stream, exclude_component_codes=['H'], **kwargs):
+    """
+    Function to compare sampling rates across channels for same station, and
+    normalize trace's sampling rate to the most common one for all traces.
+
+    :type stream: obspy.core.Stream
+    :param stream: Stream that will be checked and corrected.
+    :type exclude_component_codes: list
+    :param exclude_component_codes:
+        Specify component codes for which the comparison for different
+        sampling rates at one station should be skipped (e.g., hydrophone vs.
+        3-comp seismometer).
+
+    returns:
+        stream with corrected traces, True/False if any traces were corrected
+        or not.
+    :rtype: tuple of (:class:`obspy.core.event.Catalog`, boolean)
+        # Check that sampling rates are the same for all channels on one station
+    """
+    resampled_st = Stream()
+    uniq_stations = list(set([tr.stats.station_code for tr in stream]))
+    for station in uniq_stations:
+        match_st = Stream([
+            tr for tr in stream if tr.station.code == station
+            and tr.stats.channel[-1] not in exclude_component_codes])
+        channel_rates = [tr.stats.sampling_rate for tr in match_st]
+        if len(channel_rates) > 1:
+            c = Counter(channel_rates)
+            common_channel_sampling_rate = c.most_common(1)[0][0]
+            Logger.info(
+                'For station %s, there are traces with %s different '
+                'sampling rates: %s; normalizing to %s Hz.',
+                station, len(channel_rates), str(set(channel_rates)),
+                common_channel_sampling_rate)
+            for tr in match_st:
+                tr.resample(
+                    sampling_rate=common_channel_sampling_rate,
+                    window='hann', no_filter=True, strict_length=False)
+        resampled_st += match_st
+        # Now add also the traces that were excluded from comparison due to
+        # specific component codes (e.g., hydrophone)
+        excl_match_st = Stream([
+            tr for tr in stream if tr.stats.station == station
+            and tr.stats.channel[-1] in exclude_component_codes])
+        resampled_st += excl_match_st
+
+    return resampled_st
 
 
 def try_remove_responses(
@@ -2557,8 +2642,11 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
                 Logger.info('Removed trace %s because it is a forbidden trace',
                             tr.id)
 
+    original_trace_ids = [tr.id for tr in st]
+    trace_id_change_dict_1 = dict()
     # 1.
     for tr in st:
+        old_tr_id = tr.id
         # Check the channel names and correct if required
         if len(tr.stats.channel) <= 2 and len(tr.stats.location) == 1:
             tr.stats.channel = tr.stats.channel + tr.stats.location
@@ -2586,6 +2674,7 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
                     'Cannot rename channel of trace %s to %s because there is '
                     'already a trace with id %s', tr.id, target_channel,
                     existing_sta_chans[0])
+        trace_id_change_dict_1[old_tr_id] = tr.id
             # tr.stats.location = '00'
     # 2. Rotate to proper ZNE and rename channels to ZNE
     # for tr in st:
@@ -2638,6 +2727,8 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
     # load list of tuples for station-code translation
     sta_fortransl_dict, sta_backtrans_dict = load_station_translation_dict(
         file=sta_translation_file)
+    intermed_trace_ids = [tr.id for tr in st]
+    updated_trace_ids = []
     for tr in st:
         if std_network_code is not None:
             tr.stats.network = std_network_code
@@ -2650,8 +2741,26 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
                 tr.stats.station), channel=tr.stats.channel)
             if len(existing_sta_chans) == 0:
                 tr.stats.station = sta_fortransl_dict.get(tr.stats.station)
+        updated_trace_ids.append(tr.id)
 
-    return st
+    # trace_id_change_dict[old_tr_id] = tr.id
+    # trace_id_change_dict_1
+    # original_trace_ids <--> intermed_trace_ids: not in same order
+    # intermed_trace_ids <--> updated_trace_ids: are in same order
+    inv_trace_id_change_dict_1 = {
+        v: k for k, v in trace_id_change_dict_1.items()}
+    original_trace_ids_new_order = []
+    for tr_id in intermed_trace_ids:
+        old_tr_id = inv_trace_id_change_dict_1[tr_id]
+        original_trace_ids_new_order.append(old_tr_id)
+    # trace_id_change_dict_1
+
+    trace_id_change_dict = dict()
+    for tr_id_old, tr_id_new in zip(original_trace_ids_new_order,
+                                    updated_trace_ids):
+        trace_id_change_dict[tr_id_old] = tr_id_new
+
+    return st, trace_id_change_dict
 
 
 def get_all_relevant_stations(

@@ -346,9 +346,9 @@ def pick_events_for_day(
         # dayparty = Party([f for f in dayparty if f.template.name == '2018_02_23t21_15_51_38_templ'])
         # dayparty[0].detections = [dayparty[0].detections[0]]
         
-        # fam = dayparty.select('2022_04_25t02_01_59_06_templ')
+        # fam = dayparty.select('2022_04_25t09_31_30_18_templ')
         # dets = [det for det in fam if det.id ==
-        #         '2022_04_25t02_01_59_06_templ_20220425_093457750000']
+        #         '2022_04_25t09_31_30_18_templ_20220425_003728600000']
         # dayparty = Party(Family(template=fam.template, detections=dets))
 
         # 2019_10_15t02_43_11_50_templ_20190802_072130169538
@@ -454,7 +454,7 @@ def pick_events_for_day(
         day_st, starttime=starttime_req, endtime=endtime_req,
         remove_response=remove_response, output=output, inv=inv,
         pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],
-        parallel=parallel, cores=cores,
+        # parallel=parallel, cores=cores,
         sta_translation_file=sta_translation_file,
         noise_balancing=noise_balancing,
         balance_power_coefficient=balance_power_coefficient, **kwargs)
@@ -473,7 +473,7 @@ def pick_events_for_day(
     # WHY NEEDED HERE????
     # day_st.merge(method=0, fill_value=0, interpolation_samples=0)
     # Normalize NSLC codes
-    day_st = normalize_NSLC_codes(
+    day_st, trace_id_change_dict = normalize_NSLC_codes(
         day_st, inv, sta_translation_file=sta_translation_file,
         std_network_code="NS", std_location_code="00",
         std_channel_prefix="BH")

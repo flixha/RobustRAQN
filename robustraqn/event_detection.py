@@ -399,7 +399,7 @@ def run_day_detection(
         #    noise_balancing=noise_balancing)
 
         # # # #Normalize NSLC codes
-        # day_st = normalize_NSLC_codes(
+        # day_st, trace_id_change_dict = normalize_NSLC_codes(
         #     day_st, inv, parallel=False, cores=cores,
         #     std_network_code="NS", std_location_code="00",
         #     std_channel_prefix="BH",

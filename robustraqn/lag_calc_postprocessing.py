@@ -149,7 +149,7 @@ def postprocess_picked_events(
         det_tribe=Tribe(), day_st=Stream(), pre_processed=False,
         write_sfiles=False, sfile_path='Sfiles',
         write_to_year_month_folders=False,
-        operator='feha', all_channels_for_stations=[], extract_len=300,
+        operator='feha', all_chans_for_stations=[], extract_len=300,
         min_pick_stations=4, min_n_station_sites=4,
         min_picks_on_detection_stations=6, write_waveforms=False,
         archives=[], archive_types=[], request_fdsn=False, template_path=None,
@@ -178,8 +178,8 @@ def postprocess_picked_events(
     :param sfile_path: Path to folder where to save S-files.
     :type operator: str
     :param operator: initials of the operating user (max 4 chars)
-    :type all_channels_for_stations: bool
-    :param all_channels_for_stations:
+    :type all_chans_for_stations: bool
+    :param all_chans_for_stations:
         Whether to save seismograms from all available channels for the
         picked event.
     :type extract_len: float
@@ -416,7 +416,7 @@ def postprocess_picked_events(
             original_stats_stream=original_stats_stream,
             request_fdsn=request_fdsn, wav_out_dir=sfile_path,
             extract_len=extract_len, det_tribe=det_tribe,
-            all_chans_for_stations=all_channels_for_stations,
+            all_chans_for_stations=all_chans_for_stations,
             write_waveforms=write_waveforms,
             write_to_year_month_folders=write_to_year_month_folders,
             sta_translation_file=sta_translation_file,
@@ -520,7 +520,7 @@ def extract_stream_for_picked_events(
         request_fdsn=False, wav_out_dir='.', write_waveforms=False,
         write_to_year_month_folders=False, extract_len=300,
         all_chans_for_stations=[], sta_translation_file=None,
-        parallel=False, cores=1):
+        only_relevant_stations=True, parallel=False, cores=1, **kwargs):
     """
     Extracts a stream object with all channels from the SDS-archive.
     Allows the input of multiple archives as a list
@@ -579,7 +579,8 @@ def extract_stream_for_picked_events(
     stream_list = extract_detections(
         detection_list, templ_list, archives, archive_types=archive_types,
         day_st=original_stats_stream, request_fdsn=request_fdsn,
-        extract_len=extract_len, outdir=None, only_relevant_stations=True,
+        extract_len=extract_len, outdir=None,
+        only_relevant_stations=only_relevant_stations,
         sta_translation_file=sta_translation_file,
         additional_stations=additional_stations,
         cores=cores, parallel=parallel)

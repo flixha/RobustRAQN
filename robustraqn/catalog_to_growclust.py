@@ -208,7 +208,10 @@ def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
                 # gc_orig.time_errors.uncertainty = (tmp_cat_df.et.iloc[0])
 
                 # OriginQuality(used_station_count=)
-                # OriginUncertainty()
+                origin_uncertainty = OriginUncertainty(
+                    horizontal_uncertainty=tmp_cat_df.eh.iloc[0],
+                    preferred_description="horizontal uncertainty")
+
                 gc_orig = Origin(
                     force_resource_id=True,
                     latitude=tmp_cat_df.latR.iloc[0],
@@ -223,6 +226,7 @@ def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
                     time=tmp_cat_df.datetime.iloc[0],
                     time_errors=QuantityError(
                         uncertainty=tmp_cat_df.et.iloc[0]),
+                    origin_uncertainty=origin_uncertainty,
                     creation_info=CreationInfo(agency_id='BER', author='GC'))
                     # arrivals=cat_orig.arrivals)
                 Logger.info(

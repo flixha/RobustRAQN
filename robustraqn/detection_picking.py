@@ -269,6 +269,7 @@ def pick_events_for_day(
         time_difference_threshold=1, detect_value_allowed_reduction=2.5,
         threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
         archives=[], archive_types=[], request_fdsn=False,
+        all_chans_for_stations=[],
         pick_xcorr_func=None, min_det_chans=1, shift_len=0.8,
         min_cc=0.4, min_cc_from_mean_cc_factor=0.6, extract_len=240,
         interpolate=True, use_new_resamp_method=True,

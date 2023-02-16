@@ -157,8 +157,9 @@ def postprocess_picked_events(
         origin_longitude=None, origin_latitude=None, origin_depth=None,
         evtype='L', high_accuracy=False, do_not_rename_refracted_phases=False,
         compute_relative_magnitudes=False, remove_response=False,
-        output='DISP', min_mag_cc=0.2, min_mag_cc_from_mean_cc_factor=None,
-        parallel=False, cores=1, n_threads=1, **kwargs):
+        output='DISP', min_mag_cc=0.2, mag_min_cc_from_mean_cc_factor=None,
+        mag_min_cc_from_median_cc_factor=None,
+        absolute_values=False, parallel=False, cores=1, n_threads=1, **kwargs):
     """
     :type picked_catalog: :class:`obspy.core.Catalog`
     :param picked_catalog: Catalog of events picked, e.g., with lag_calc.
@@ -451,7 +452,9 @@ def postprocess_picked_events(
                 accepted_magnitude_types=['ML', 'Mw', 'MW'],
                 accepted_magnitude_agencies=['BER', 'NAO'],
                 mag_out_dir=None, min_cc=min_mag_cc,
-                min_cc_from_mean_cc_factor=min_mag_cc_from_mean_cc_factor,
+                absolute_values=absolute_values,
+                min_cc_from_mean_cc_factor=mag_min_cc_from_mean_cc_factor,
+                min_cc_from_median_cc_factor=mag_min_cc_from_median_cc_factor,
                 # min_snr=1.1, min_n_relative_amplitudes=3,
                 # noise_window_start=-40, noise_window_end=-29.5,
                 # signal_window_start=-0.5, signal_window_end=10,

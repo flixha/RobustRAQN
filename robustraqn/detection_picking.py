@@ -269,9 +269,9 @@ def pick_events_for_day(
         time_difference_threshold=1, detect_value_allowed_reduction=2.5,
         threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
         archives=[], archive_types=[], request_fdsn=False,
-        all_chans_for_stations=[],
         pick_xcorr_func=None, min_det_chans=1, shift_len=0.8,
-        min_cc=0.4, min_cc_from_mean_cc_factor=0.6, extract_len=240,
+        min_cc=0.4, min_cc_from_mean_cc_factor=None,
+        min_cc_from_median_cc_factor=0.98, extract_len=240,
         interpolate=True, use_new_resamp_method=True,
         write_party=False, ignore_cccsum_comparison=True,
         all_vert=True, all_horiz=True, vertical_chans=['Z', 'H'],
@@ -280,8 +280,8 @@ def pick_events_for_day(
         operator='EQC', day_hash_file=None, copy_data=True,
         redecluster=False, clust_trig_int=30, decluster_metric='thresh_exc',
         hypocentral_separation=False, min_chans=13, absolute_values=True,
-        compute_relative_magnitudes=False,
-        **kwargs):
+        compute_relative_magnitudes=False, mag_min_cc_from_mean_cc_factor=None,
+        mag_min_cc_from_median_cc_factor=1.2, **kwargs):
     """
     Day-loop for picker
     """
@@ -298,7 +298,8 @@ def pick_events_for_day(
              inv, ispaq, noise_balancing, balance_power_coefficient,
              xcorr_func, arch, trig_int, new_threshold, threshold_type,
              min_det_chans, minimum_sample_rate, archives, request_fdsn,
-             shift_len, min_cc, min_cc_from_mean_cc_factor, extract_len,
+             shift_len, min_cc, min_cc_from_mean_cc_factor, 
+             min_cc_from_median_cc_factor, extract_len,
              all_vert, all_horiz, check_array_misdetections,
              short_tribe.templates, short_tribe2.templates,
              re_eval_thresh_factor, detect_value_allowed_reduction,
@@ -307,7 +308,9 @@ def pick_events_for_day(
              time_difference_threshold, minimum_sample_rate, apply_agc,
              agc_window_sec, interpolate, use_new_resamp_method,
              ignore_cccsum_comparison, min_pick_stations,
-             min_picks_on_detection_stations, min_n_station_sites])
+             min_picks_on_detection_stations, min_n_station_sites,
+             compute_relative_magnitudes, mag_min_cc_from_mean_cc_factor,
+             mag_min_cc_from_median_cc_factor])
         # Check hash against existing list
         try:
             day_hash_df = pd.read_csv(day_hash_file, names=["date", "hash"])
@@ -570,6 +573,9 @@ def pick_events_for_day(
             elif len(shortt) == 0:
                 Logger.error('Missing all short templates, cannot do detection'
                              '-reevaluation')
+            else:
+                Logger.info('Got short tribe with %s templates. ready for '
+                             'reevaluation.', len(shortt))
         dayparty, short_party = reevaluate_detections(
             dayparty, short_tribe, stream=day_st,
             threshold=new_threshold-1, trig_int=trig_int/4,
@@ -629,6 +635,7 @@ def pick_events_for_day(
     picked_catalog = dayparty.copy().lag_calc(
         day_st, pre_processed=pre_processed, shift_len=shift_len,
         min_cc=min_cc, min_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
+        min_cc_from_median_cc_factor=min_cc_from_median_cc_factor,
         all_vert=all_vert, all_horiz=all_horiz,
         horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
         interpolate=interpolate, use_new_resamp_method=use_new_resamp_method,
@@ -654,6 +661,7 @@ def pick_events_for_day(
         picked_catalog = array_lag_calc(
             day_st, picked_catalog, dayparty, tribe, stations_df,
             min_cc=min_cc, pre_processed=pre_processed, shift_len=shift_len,
+            # Array lag-calc should not be able to increase min_cc value:
             min_cc_from_mean_cc_factor=min(min_cc_from_mean_cc_factor, 0.999),
             all_vert=all_vert, all_horiz=all_horiz,
             horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
@@ -676,7 +684,9 @@ def pick_events_for_day(
         write_to_year_month_folders=write_to_year_month_folders,
         compute_relative_magnitudes=compute_relative_magnitudes,
         min_mag_cc=min_cc, remove_response=remove_response, output=output,
-        min_mag_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
+        mag_min_cc_from_mean_cc_factor=mag_min_cc_from_mean_cc_factor,
+        mag_min_cc_from_median_cc_factor=mag_min_cc_from_median_cc_factor,
+        absolute_values=absolute_values,
         parallel=parallel, cores=io_cores, **kwargs)
 
     if day_hash_file is not None:

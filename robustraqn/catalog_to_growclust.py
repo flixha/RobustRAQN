@@ -167,6 +167,8 @@ def update_tribe_from_gc_file(tribe, gc_cat_file, max_diff_seconds=3):
 
 def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
     """
+    Growclust eh, ez errors are median absolute deviations of the bootstrap
+    distribution.
     """
     cat_backup = cat.copy()
     gc_df = read_gc_cat_to_df(gc_cat_file)
@@ -209,7 +211,7 @@ def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
 
                 # OriginQuality(used_station_count=)
                 origin_uncertainty = OriginUncertainty(
-                    horizontal_uncertainty=tmp_cat_df.eh.iloc[0],
+                    horizontal_uncertainty=tmp_cat_df.eh.iloc[0] * 1000,
                     preferred_description="horizontal uncertainty")
 
                 gc_orig = Origin(

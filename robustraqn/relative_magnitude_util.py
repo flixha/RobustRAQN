@@ -67,10 +67,11 @@ def compute_relative_event_magnitude(
         magnitude_agency_type_pref=[
             ('BER', 'ML'), ('BER', 'Mw'), ('BER', 'MW'), ('NOA', 'ML')],
         min_snr=1.1, min_cc=0.25, min_cc_from_mean_cc_factor=None,
+        min_cc_from_median_cc_factor=None,
         min_n_relative_amplitudes=2, check_rel_amp_deviations=True,
         noise_window_start=-40, noise_window_end=-29.5,
         signal_window_start=-0.5, signal_window_end=10,
-        use_s_picks=True, correlations=None, shift=0.35,
+        use_s_picks=True, correlations=None, absolute_values=False, shift=0.35,
         return_correlations=True, correct_mag_bias=False,
         pre_processed=False, remove_response=False, output='DISP',
         parallel=False, cores=1, n_threads=1, **kwargs):
@@ -194,19 +195,17 @@ def compute_relative_event_magnitude(
     Logger.debug(
         'Measure relative magnitude from streams with %s and %s traces',
         len(templ1.st), len(detection_st))
-    if min_cc_from_mean_cc_factor is not None:
-        min_cc = min(abs(detection.detect_val / detection.no_chans
-                         * min_cc_from_mean_cc_factor),
-                     min_cc)
-        Logger.debug('Event %s: Setting minimum cc-threshold for relative '
-                     'magnitude to %.5f', j_ev, min_cc)
+
+
     delta_mag, correlations = relative_magnitude(
         templ1_st, detection_st,
         templ1.event, detected_event,
         noise_window=(noise_window_start, noise_window_end),
         signal_window=(signal_window_start, signal_window_end),
-        min_snr=min_snr, min_cc=min_cc, use_s_picks=use_s_picks,
-        correlations=None, shift=shift,
+        min_snr=min_snr, min_cc=min_cc,
+        min_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
+        min_cc_from_median_cc_factor=min_cc_from_median_cc_factor,
+        use_s_picks=use_s_picks, correlations=None, shift=shift,
         return_correlations=return_correlations,
         correct_mag_bias=correct_mag_bias,
         check_rel_amp_deviations=check_rel_amp_deviations, **kwargs)

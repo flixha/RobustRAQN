@@ -1039,7 +1039,7 @@ def array_lag_calc(
         st, picked_cat, party, tribe, stations_df,
         seisarray_prefixes=SEISARRAY_PREFIXES,
         min_cc=0.4, pre_processed=False, shift_len=0.8,
-        min_cc_from_mean_cc_factor=0.6,
+        min_cc_from_mean_cc_factor=None, min_cc_from_median_cc_factor=0.95,
         horizontal_chans=['E', 'N', '1', '2'], vertical_chans=['Z'],
         interpolate=False, use_new_resamp_method=True,
         plot=False, overlap='calculate',
@@ -1137,6 +1137,12 @@ def array_lag_calc(
         have been added for phases arriving at seismic arrays.
     :rtype picked_cat: class:`obspy.core.event.catalog`
     """
+    # Array lag-calc should not be able to increase min_cc value:
+    if min_cc_from_mean_cc_factor is not None:
+        min_cc_from_mean_cc_factor = min(min_cc_from_mean_cc_factor, 0.999)
+    if min_cc_from_median_cc_factor is not None:
+        min_cc_from_median_cc_factor = min(min_cc_from_median_cc_factor, 0.999)
+
     if len(picked_cat) == 0:
         return picked_cat
     tribe_array_picks_dict = dict()
@@ -1179,11 +1185,18 @@ def array_lag_calc(
                 continue
             # From (preprocessed?) stream select only traces for current array
             array_catalog = Catalog()
+            # Adjust min_cc threshold according to a factor for the whole array
+            adj_min_cc_from_mean_cc_factor = (
+                    min_cc_from_mean_cc_factor/cc_relax_factor
+                    if min_cc_from_mean_cc_factor is not None else None)
+            adj_min_cc_from_median_cc_factor = (
+                    min_cc_from_median_cc_factor/cc_relax_factor
+                    if min_cc_from_median_cc_factor is not None else None)
             array_catalog = array_party.lag_calc(
                 array_st_dict[seisarray_prefix], shift_len=0.0,
                 pre_processed=pre_processed, min_cc=min_cc/cc_relax_factor,
-                min_cc_from_mean_cc_factor=(
-                    min_cc_from_mean_cc_factor/cc_relax_factor),
+                min_cc_from_mean_cc_factor=adj_min_cc_from_mean_cc_factor,
+                min_cc_from_median_cc_factor=adj_min_cc_from_median_cc_factor,
                 horizontal_chans=horizontal_chans,
                 vertical_chans=vertical_chans, interpolate=interpolate,
                 use_new_resamp_method=use_new_resamp_method,

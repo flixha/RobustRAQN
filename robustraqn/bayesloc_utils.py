@@ -13,9 +13,11 @@ import textwrap
 from datetime import datetime
 from joblib.parallel import Parallel, delayed
 from wcmatch import fnmatch
+from collections import Counter
 
 from obspy.core.event import (
     Catalog, Event, QuantityError, OriginQuality, OriginUncertainty)
+from obspy import Inventory
 from obspy.geodetics.base import degrees2kilometers, kilometers2degrees
 from obspy.core.utcdatetime import UTCDateTime
 from obspy.core.event import Origin, Pick, Arrival
@@ -30,7 +32,9 @@ from obsplus.utils.time import to_datetime64
 from obsplus.constants import EVENT_DTYPES, TIME_COLUMNS
 from obsplus.structures.dfextractor import DataFrameExtractor
 
-import pandas as pd
+
+
+from robustraqn.seismic_array_tools import get_station_sites
 
 import logging
 Logger = logging.getLogger(__name__)
@@ -85,8 +89,10 @@ def readSTATION0(path, stations):
     f = open(path + '/STATION0.HYP', 'r')
     for line in f:
         line_sta = line[1:6].strip()
-        if (line_sta in stations or
-                fnmatch(line_sta, stations, flags=fnmatch.EXTMATCH)):
+        wildcarded_stations = [sta for sta in stations
+                               if '?' in sta or '*' in sta]
+        if (line_sta in stations or fnmatch.fnmatch(
+                line_sta, wildcarded_stations, flags=fnmatch.EXTMATCH)):
             station = line[1:6].strip()
             # Format is either ddmm.mmS/N or ddmm(.)mmmS/N
             lat = line[6:14].replace(' ', '0')
@@ -230,16 +236,44 @@ def _select_best_origin(
         orig.depth = fix_depth
     orig_epoch_time = (
         orig.time._get_datetime() - default_start).total_seconds()
+
+    hor_uncertainty_km = None
+    if (orig.origin_uncertainty is not None and
+            orig.origin_uncertainty.max_horizontal_uncertainty):
+        hor_uncertainty_km = (
+            orig.origin_uncertainty.max_horizontal_uncertainty / 1000)
+    elif (orig.longitude_errors  is not None
+          and orig.longitude_errors.uncertainty  is not None
+          and orig.latitude_errors  is not None
+          and orig.latitude_errors.uncertainty):
+        hor_uncertainty_km = degrees2kilometers((
+            (orig.latitude_errors.uncertainty or def_hor_error_deg) +
+            (orig.longitude_errors.uncertainty or def_hor_error_deg)) / 2)
+    elif (orig.longitude_errors is not None
+          and orig.longitude_errors.uncertainty  is not None):
+        hor_uncertainty_km = degrees2kilometers(
+            orig.longitude_errors.uncertainty)
+    elif (orig.latitude_errors is not None
+          and orig.latitude_errors.uncertainty is not None):
+        hor_uncertainty_km = degrees2kilometers(
+            orig.latitude_errors.uncertainty)
+    if hor_uncertainty_km is None:
+        hor_uncertainty_km = degrees2kilometers(def_hor_error_deg)
+
+    if orig.depth is not None:
+        o_depth = orig.depth / 1000
+    else: 
+        o_depth = default_depth / 1000
+
+    if orig.depth_errors.uncertainty is not None:
+        o_depth_error = orig.depth_errors.uncertainty / 1000
+    else:
+        o_depth_error = def_dep_error_m / 1000
+
     priors.append((
         evid, orig.latitude or default_lat, orig.longitude or default_lon,
         # orig.origin_uncertainty.max_horizontal_uncertainty / 1000 or 30,
-        degrees2kilometers(
-            ((orig.latitude_errors.uncertainty or def_hor_error_deg) +
-             (orig.longitude_errors.uncertainty or def_hor_error_deg)) / 2),
-        #    (orig.longitude_errors.uncertainty +
-        #     orig.longitude_errors.uncertainty) / 2
-        (orig.depth or default_depth) / 1000,
-        (orig.depth_errors.uncertainty or def_dep_error_m) / 1000,
+        hor_uncertainty_km, o_depth, o_depth_error,
         orig_epoch_time, orig.time_errors.uncertainty or def_time_error_s))
     return orig, priors
 
@@ -274,7 +308,7 @@ def _get_traveltime(model, degree, depth, phase):
                     return(np.nan)
 
 
-def _get_nordic_event_id(event):
+def _get_nordic_event_id(event, return_generic_nordic_id=False):
     """
     Get the event id that is mentioned in the most recent comment in event read
     from Nordic file.
@@ -288,9 +322,18 @@ def _get_nordic_event_id(event):
                     if len(comment.text.split(' ')) > 1]
         comments = sorted(comments, key=lambda x: x.text.split(' ')[1],
                             reverse=True)
-        event_id = int(
-            [com.text.split('ID:')[-1].strip('SdLRD ')
-            for com in comments if 'ID:' in com.text][0])
+        try:
+            event_id = int(
+                [com.text.split('ID:')[-1].strip('SdLRD ')
+                for com in comments if 'ID:' in com.text][0])
+        except IndexError:
+            event_id = None
+    # Return generic nordic ID in case no specific ID is saved in file.
+    if event_id is None and return_generic_nordic_id:
+        event_id = int(event.short_str(
+            )[0:19].replace('-', '').replace(':', '').replace('T',''))
+    if isinstance(event_id, str):
+        event_id = int(event_id)
     return event_id
 
 
@@ -391,10 +434,13 @@ def _fill_bayes_origin_quality(event, orig):
     if orig is not None and orig.quality is not None:
         orig_quality = orig.quality
     else:
-        orig_quality = OriginQuality(
-            used_station_count=len(set(
+        if event is not None:
+            used_station_count = len(set(
                 [pick.waveform_id.station_code for pick in event.picks
-                    if pick.waveform_id is not None])))
+                    if pick.waveform_id is not None]))
+        else:
+            used_station_count = 0
+        orig_quality = OriginQuality(used_station_count=used_station_count)
     return orig_quality
 
 
@@ -407,7 +453,14 @@ def _fill_bayes_origin_uncertainty(row):
         row = row.iloc[0]
     cov = [[row.east_sd, row.north_east_cor],
             [row.north_east_cor, row.north_sd]]
-    ellipse = Ellipse.from_cov(cov, center=(0, 0))
+    # IF there are any nans or infs:
+    if np.any(np.isnan(cov)) or np.any(np.isinf(cov)):
+        ellipse = AttribDict()
+        ellipse.a = 0
+        ellipse.b = 0
+        ellipse.theta = 0
+    else:
+        ellipse = Ellipse.from_cov(cov, center=(0, 0))
     origin_uncertainty = None
     if ellipse:
         origin_uncertainty = OriginUncertainty(
@@ -443,7 +496,7 @@ def read_bayesloc_origins(
             except AttributeError:
                 continue
         bayesloc_event_ids.append(bayesloc_event_id)
-    if all([id is not None for id in bayesloc_event_ids]):
+    if len(cat) > 0 and all([id is not None for id in bayesloc_event_ids]):
         return cat, pd.DataFrame(), False
 
     bayes_df = pd.read_csv(bayesloc_origins_ned_stats_file, delimiter=' ')
@@ -524,7 +577,7 @@ def read_bayesloc_origins(
                 creation_info=CreationInfo(
                     agency_id=agency_id, author='Bayesloc'),
                 arrivals=arrivals,
-                quality=orig_quality,
+                quality=origin_quality,
                 origin_uncertainty=origin_uncertainty)
             bayes_orig.extra = {
                 'bayesloc_event_id': {
@@ -541,7 +594,8 @@ def read_bayesloc_origins(
         for event in cat:
             cat_orig = (event.preferred_origin() or event.origins[0]).copy()
             arrivals = cat_orig.arrivals.copy()
-            nordic_event_id = _get_nordic_event_id(event)
+            nordic_event_id = _get_nordic_event_id(
+                event, return_generic_nordic_id=True)
             tmp_cat_df = bayes_df.loc[bayes_df.ev_id == int(nordic_event_id)]
             if find_event_without_id and len(tmp_cat_df) == 0:
                 lower_dtime = (cat_orig.time - s_diff)._get_datetime()
@@ -856,18 +910,34 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
             #         'bayesloc_event_id': {
             #             'value': row.ev_id,
             #             'namespace': 'Bayesloc'}}
-            new_arrival.extra.update({'original_phase':
-                {'value': row.phase, 'namespace': nsp}})
-            new_arrival.extra.update({'prob_as_called':
-                {'value': row.prob_as_called, 'namespace': nsp}})
-            new_arrival.extra.update({'most_prob_phase': 
-                {'value': row.most_prob_phase, 'namespace': nsp}})
+            try:
+                new_arrival.extra.update({'original_phase':
+                    {'value': row.phase, 'namespace': nsp}})
+            except AttributeError:
+                pass
+            try:
+                new_arrival.extra.update({'prob_as_called':
+                    {'value': row.prob_as_called, 'namespace': nsp}})
+            except AttributeError:
+                pass
+            try:
+                new_arrival.extra.update({'most_prob_phase': 
+                    {'value': row.most_prob_phase, 'namespace': nsp}})
+            except AttributeError:
+                pass
             # Need to find the field with the probability for the new phasehint
-            new_arrival.extra.update({
-                'prob_as_suggested': 
-                    {'value': getattr(row, row.most_prob_phase),
-                     'namespace': nsp}})
-            new_arrival.extra.update({'n': {'value': row.n, 'namespace': nsp}})
+            try:
+                new_arrival.extra.update({
+                    'prob_as_suggested': 
+                        {'value': getattr(row, row.most_prob_phase),
+                        'namespace': nsp}})
+            except AttributeError:
+                pass
+            try:
+                new_arrival.extra.update({'n': {'value': row.n, 'namespace': nsp}})
+            except AttributeError:
+                pass
+
             # TODO could add probabilities for all other the other phase hints,
             #      that the pick/arrival could refer to, but that may not be 
             #      very useful.
@@ -1082,6 +1152,300 @@ def _update_bayesloc_phase_hints(cat, remove_1_suffix=False):
                     pick.phase_hint = arrival.phase
     return cat
 
+
+def write_arrival_file(
+        cat, path='.', split_into_months=False, custom_epoch=datetime(1970,1,1,0,0,0),
+        abs_min_n_stations=0, abs_min_n_phases=0,
+        allowed_phases=['P', 'S', 'Pn', 'Pg', 'Sn', 'Sg', 'P1', 'S1', 'Pb', 'Sb'],
+        known_station_names=[],
+        min_n_station_sites=0, minimum_phases_per_station=0,
+        inv=Inventory(), compare_station_to_inventory=False,
+        min_n_teleseismic_stations=0, include_good_regional_events=True,
+        min_n_regional_stations=0, min_latitude=None, max_latitude=None,
+        min_longitude=None, max_longitude=None,
+        fix_depth=None, default_depth=10, def_dep_error_m=15000,
+        default_lat=None, default_lon=None, def_hor_error_deg=None,
+        def_time_error_s=5, obs_prefixes=()):
+    """
+    Function to write bayesloc arrival file.
+    """
+    Logger.info('Step 2.6 Collecting arrivals that fulfill criteria')
+
+    phases_per_station = Counter([pick.waveform_id.station_code
+                                  for event in cat
+                                  for pick in event.picks])
+
+    # Write one output file for all events in each of the 12 months of all years
+    if split_into_months:
+        months_list = [[mo] for mo in np.arange(1, 13)]
+        Logger.info('Splitting input files into %s unqiue bayesloc runs / folders',
+                    len(months_list))
+    else:
+        months_list = [list(np.arange(1, 13))]
+
+    for im, months in enumerate(months_list):
+        im = im + 1
+        ev_ids = list()
+        arrivals = []
+        priors = []
+        folder_suffix = ""
+        if split_into_months:
+            folder_suffix = '_' + '{run:02d}'.format(run=im)
+        run_folder = path + folder_suffix
+        for j, event in enumerate(cat):
+            orig = event.preferred_origin() or event.origins[0]
+            
+            if min_latitude and orig.latitude and orig.latitude < min_latitude:
+                continue
+            if max_latitude and orig.latitude and orig.latitude > max_latitude:
+                continue
+            if min_longitude and orig.longitude and orig.longitude < min_longitude:
+                continue
+            if max_longitude and orig.longitude and orig.longitude > max_longitude:
+                continue
+            
+            # Set minimum number of stations and phases
+            unique_stations_list = list(set([p.waveform_id.station_code
+                                            for p in event.picks]))
+            n_stations = len(unique_stations_list)
+            n_phases = len(list(set([(p.waveform_id.station_code, p.phase_hint)
+                                    for p in event.picks])))
+            n_station_sites = len(
+                list(set(get_station_sites(unique_stations_list))))
+
+            sta_dist_tuples = []
+            for arrival in orig.arrivals:
+                pick = arrival.pick_id.get_referred_object()
+                if pick is None:
+                    continue
+                sta_dist_tuples.append((pick.waveform_id.station_code,
+                                        arrival.distance))
+            n_teleseismic_stations = len(list(set(
+                sdt[0] for sdt in sta_dist_tuples if sdt[1] and sdt[1] > 15 )))
+            # distances = event_distances[j]
+            # n_teleseismic_stations = len(list(set(
+            #     [p.waveform_id.station_code for jp, p in enumerate(event.picks)
+            #     if distances[jp] is not None and distances[jp] > 15])))
+
+            if obs_prefixes:
+                n_obs_stations = len(list(set(
+                    [p.waveform_id.station_code for p in event.picks
+                    if p.waveform_id.station_code.startswith(obs_prefixes)])))
+
+            # Absolute minimum number of phases and stations - otherwise DO NOT use
+            if (n_stations < abs_min_n_stations or n_phases < abs_min_n_phases or
+                    n_station_sites < min_n_station_sites):
+                Logger.info(
+                    'Not enough stations / sites / phases: %s stations, %s sites '
+                    ' (%s teleseismic), %s phases', str(n_stations),
+                    str(n_station_sites), str(n_teleseismic_stations),
+                    str(n_phases))
+                continue
+
+            has_local_solution = False
+            if orig.creation_info.agency_id in ['AWI']:
+                has_local_solution = True
+            # First round of relocations: select only events with at least 5? teleseismic
+            # arrivals to pin down residuals better
+            if (n_teleseismic_stations >= min_n_teleseismic_stations or
+                    n_obs_stations >= min_n_obs_stations):
+                pass
+            elif (include_good_regional_events and
+                    n_stations >= min_n_regional_stations):
+                pass
+            elif has_local_solution:
+                pass
+            else:
+                # When splitting into one Bayesloc run across all equal months,
+                # then keep even worse observed events
+                if not strict or (split_into_months and orig.time.month in months):
+                    pass
+                else:
+                    continue
+
+            orig = event.preferred_origin()
+            evid = _get_nordic_event_id(
+                event, return_generic_nordic_id=True)
+            # Make sure no event id is duplicated
+            while evid in ev_ids:
+                evid = evid + 1
+            ev_ids.append(evid)
+            for pick in event.picks:
+                if pick.phase_hint in allowed_phases:
+                    # fix P- and S- phase names to Pg / Pn / Sg / Sn?
+                    # Sort out picks from stations where there's too few picks:
+                    if phases_per_station[
+                        pick.waveform_id.station_code] < minimum_phases_per_station:
+                        continue
+                    if compare_station_to_inventory:
+                        sel_inv = inv.select(station=pick.waveform_id.station_code)
+                        if len(sel_inv) == 0:
+                            continue
+                        # Check for case mismatch
+                        if sel_inv.networks[
+                                0].stations[0].code != pick.waveform_id.station_code:
+                            continue
+                    epoch_time = ( pick.time._get_datetime() - custom_epoch
+                                  ).total_seconds()
+                    arrivals.append(
+                        (evid, pick.waveform_id.station_code.upper(),
+                         pick.phase_hint, epoch_time))
+            # PRIOR file
+            # evid = int(
+            #     [com.text.split('ID:')[-1].strip('S').strip('d').strip('LRD').strip().strip('d')
+            #      for com in event.comments if 'ID:' in com.text ][0])
+            orig, priors = _select_best_origin(
+                event, evid, priors, fix_depth=fix_depth,
+                default_depth=default_depth, def_dep_error_m=def_dep_error_m,
+                default_lat=default_lat, default_lon=default_lon,
+                def_hor_error_deg=def_hor_error_deg,
+                def_time_error_s=def_time_error_s, default_start=custom_epoch)
+            
+        Logger.info('Step 3.2 Writing %s arrivals to arrival file', str(len(arrivals)))
+        arrfile = 'arrival.dat'
+        
+        if not os.path.exists(run_folder):
+            os.makedirs(run_folder)
+        arrivalfile = os.path.join(run_folder, arrfile)
+        f = open(arrivalfile, 'wt')
+        f.write('ev_id sta_id phase time\n')
+        for arrival in arrivals:
+            eid, scode, phase, time = arrival
+            # Only write out arrivals for known stations - bayesloc may otherwise crash
+            if known_station_names and scode not in known_station_names:
+                continue
+            f.write('%i %s %s %.3f\n' % (eid, scode, phase, time))
+        f.close()
+
+        Logger.info('Step 3.3 Writing %s origins to prior file', str(len(priors)))
+        prifile = 'prior.dat' #??
+        priorfile = os.path.join(run_folder, prifile)
+        f = open(priorfile,'wt')
+        f.write('ev_id lat_mean lon_mean dist_sd depth_mean depth_sd time_mean time_sd\n')
+        for prior in priors:
+            evid, plat, plon, dist_sd, pdepth, dep_sd, ptime, time_sd = prior
+            # f.write('%i %9.4f %9.4f %4.1f %6.1f %4.1f %16.3f %4.1f\n' %
+            #        (evid, plat, plon, dist_sd, pdepth, dep_sd, ptime, time_sd))
+            f.write('%i %9.4f %9.4f %7.1f %6.1f %7.1f %16.3f %6.1f\n' %
+                    (evid, plat, plon, dist_sd, pdepth, dep_sd, ptime, time_sd))
+        f.close()
+
+
+
+def write_station(inventory, station0_file=None, stations_dat_file=None,
+                  stations=[], filename="station.dat", write_only_once=True):
+    """
+    Write a GrowClust formatted station file.
+
+    :type inventory: obspy.core.Inventory
+    :param inventory:
+        Inventory of stations to write - should include channels if
+        use_elevation=True to incorporate channel depths.
+    :type use_elevation: bool
+    :param use_elevation: Whether to write elevations (requires hypoDD >= 2)
+    :type filename: str
+    :param filename: File to write stations to.
+    """
+    station_strings = []
+    # formatter = "{sta:<5s}{lat:>9.4f}{lon:>10.4f}{elev:>10.3f}"
+    # formatter = "{sta:<s} {lat:>.4f} {lon:>.4f} {elev:>.3f}"
+    formatter = "{sta:5s} {lat:9.4f} {lon:10.4f} {elev:7.3f}"
+    # %s %.4f %.4f %.3f
+    known_station_names = []
+    for network in inventory:
+        for station in network:
+            parts = dict(sta=station.code, lat=station.latitude,
+                         lon=station.longitude, elev=station.elevation / 1000)
+            # if use_elevation:
+            #     channel_depths = {chan.depth for chan in station}
+            #     if len(channel_depths) == 0:
+            #         Logger.warning("No channels provided, using 0 depth.")
+            #         depth = 0.0
+            #     else:
+            #         depth = channel_depths.pop()
+            #     if len(channel_depths) > 1:
+            #         Logger.warning(
+            #             f"Multiple depths for {station.code}, using {depth}")
+            #     parts.update(dict(elev=station.elevation - depth))
+            if write_only_once:  # Write only one location per station
+                if station.code in known_station_names:
+                    continue
+            # Don't write station if no picks in catalog
+            if station.code not in stations:
+                continue
+            station_strings.append(formatter.format(**parts))
+            known_station_names.append(station.code)
+    if station0_file is not None:
+        if station0_file:
+            stalist_1 = readSTATION0(station0_file, stations)
+            for line in stalist_1:
+                if write_only_once:
+                    if line[0] in known_station_names:
+                        continue
+                parts = dict(sta=line[0], lat=line[1], lon=line[2],
+                            elev=line[3] / 1000)
+                station_strings.append(formatter.format(**parts))
+                known_station_names.append(line[0])
+        if stations_dat_file:
+            stalist_2 = read_stations_dat(stations_dat_file, stations)
+            for line in stalist_2:
+                if write_only_once:
+                    if line[0] in known_station_names:
+                        continue
+                parts = dict(sta=line[0], lat=line[1], lon=line[2],
+                            elev=line[3] / 1000)
+                station_strings.append(formatter.format(**parts))
+                known_station_names.append(line[0])
+    with open(filename, "w") as f:
+        f.write('sta_id lat lon elev\n')
+        f.write("\n".join(station_strings))
+    return known_station_names
+
+
+def read_stations_dat(path, stations):
+    """
+    function to read ISF station.dat-file
+    """
+    if path is None:
+        return None
+    stalist = []
+    f = open(path + '/stations.dat', 'r')
+    for line in f:
+        if line[0:5].strip() in stations:
+            station = line[0:5].strip()
+            # Format is either ddmm.mmS/N or ddmm(.)mmmS/N
+            lat = line[6:14].replace(' ', '0')
+            if lat[-1] == 'S':
+                NS = -1
+            else:
+                NS = 1
+            lat = (int(lat[0:2]) + float(lat[2:4]) / 60
+                   + float(lat[4:-1]) / (60 * 60)) * NS
+            lon = line[15:25].replace(' ', '0')
+            if lon[-1] == 'W':
+                EW = -1
+            else:
+                EW = 1
+            if lon[5] == '.':
+                lon = (int(lon[0:3]) + float(lon[3:-1]) / 60) * EW
+            else:
+                lon = (int(lon[0:3]) + float(lon[3:5]) / 60 
+                       + float(lon[5:-1]) / (60 * 60)) * EW
+            try:
+                elev = float(line[25:32].strip())
+            except ValueError:  # Elevation could be empty
+                elev = 0.0
+            site = line[32:].strip()
+            stalist.append((station, lat, lon, elev, site))
+    f.close()
+    f = open('station0.dat', 'w')
+    for sta in stalist:
+        line = ''.join([sta[0].ljust(5), _cc_round(sta[1], 4).ljust(10),
+                        _cc_round(sta[2], 4).ljust(10),
+                        _cc_round(sta[3] / 1000, 4).rjust(7), '\n'])
+        f.write(line)
+    f.close()
+    return stalist
 
 
 # %%

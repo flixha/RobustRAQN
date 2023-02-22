@@ -573,8 +573,10 @@ def prepare_detection_stream(
 
     :returns: :class:`obspy.core.stream.Stream`
     """
-    min_samp_rate = min(list(set([tr.stats.sampling_rate
-                                  for templ in tribe for tr in templ.st])))
+    tr_rates = [tr.stats.sampling_rate for templ in tribe for tr in templ.st]
+    if len(tr_rates) == 0:
+        return st
+    min_samp_rate = min(list(set(tr_rates)))
     # REMOVE UNUSABLE CHANNELS
     # st_copy = st.copy()
     st_of_tr_to_be_removed = Stream()

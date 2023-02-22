@@ -576,24 +576,25 @@ def pick_events_for_day(
             else:
                 Logger.info('Got short tribe with %s templates. ready for '
                              'reevaluation.', len(shortt))
-        dayparty, short_party = reevaluate_detections(
-            dayparty, short_tribe, stream=day_st,
-            threshold=new_threshold-1, trig_int=trig_int/4,
-            threshold_type=threshold_type,
-            re_eval_thresh_factor=re_eval_thresh_factor,
-            overlap='calculate', plotDir='ReDetectionPlots',
-            plot=False, fill_gaps=True, ignore_bad_data=True,
-            daylong=daylong, ignore_length=True, min_chans=min_det_chans,
-            pre_processed=pre_processed,
-            parallel_process=parallel, cores=cores,
-            xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
-            # xcorr_func='time_domain', concurrency='multiprocess',
-            group_size=n_templates_per_run, process_cores=cores,
-            time_difference_threshold=time_difference_threshold,
-            detect_value_allowed_reduction=detect_value_allowed_reduction,
-            return_party_with_short_templates=True,
-            min_n_station_sites=min_n_station_sites,
-            use_weights=use_weights, copy_data=copy_data, **kwargs)
+        if len(short_tribe) > 0:
+            dayparty, short_party = reevaluate_detections(
+                dayparty, short_tribe, stream=day_st,
+                threshold=new_threshold-1, trig_int=trig_int/4,
+                threshold_type=threshold_type,
+                re_eval_thresh_factor=re_eval_thresh_factor,
+                overlap='calculate', plotDir='ReDetectionPlots',
+                plot=False, fill_gaps=True, ignore_bad_data=True,
+                daylong=daylong, ignore_length=True, min_chans=min_det_chans,
+                pre_processed=pre_processed,
+                parallel_process=parallel, cores=cores,
+                xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
+                # xcorr_func='time_domain', concurrency='multiprocess',
+                group_size=n_templates_per_run, process_cores=cores,
+                time_difference_threshold=time_difference_threshold,
+                detect_value_allowed_reduction=detect_value_allowed_reduction,
+                return_party_with_short_templates=True,
+                min_n_station_sites=min_n_station_sites,
+                use_weights=use_weights, copy_data=copy_data, **kwargs)
         if len(short_tribe2) > 0:
             dayparty, short_party2 = reevaluate_detections(
                 dayparty, short_tribe2, stream=day_st,
@@ -661,8 +662,8 @@ def pick_events_for_day(
         picked_catalog = array_lag_calc(
             day_st, picked_catalog, dayparty, tribe, stations_df,
             min_cc=min_cc, pre_processed=pre_processed, shift_len=shift_len,
-            # Array lag-calc should not be able to increase min_cc value:
-            min_cc_from_mean_cc_factor=min(min_cc_from_mean_cc_factor, 0.999),
+            min_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
+            min_cc_from_median_cc_factor=min_cc_from_median_cc_factor,
             all_vert=all_vert, all_horiz=all_horiz,
             horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
             xcorr_func=pick_xcorr_func, parallel=parallel, cores=cores,

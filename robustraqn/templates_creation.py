@@ -48,14 +48,15 @@ from eqcorrscan.utils.correlate import pool_boy
 from robustraqn.load_events_for_detection import (
     normalize_NSLC_codes, get_all_relevant_stations, load_event_stream,
     try_remove_responses, check_template, prepare_picks,
-    fix_phasehint_capitalization)
+    fix_phasehint_capitalization, mask_consecutive_zeros, taper_trace_segments)
 from robustraqn.spectral_tools import (
     st_balance_noise, Noise_model, get_updated_inventory_with_noise_models)
 from robustraqn.quality_metrics import (
     create_bulk_request, get_parallel_waveform_client)
 from robustraqn.seismic_array_tools import (
     extract_array_picks, add_array_station_picks, get_station_sites,
-    LARGE_APERTURE_SEISARRAY_PREFIXES, get_updated_stations_df)
+    LARGE_APERTURE_SEISARRAY_PREFIXES, get_updated_stations_df,
+    mask_array_trace_offsets)
 from robustraqn.bayesloc_utils import update_cat_from_bayesloc
 from robustraqn.obspy.clients.filesystem.sds import Client
 from robustraqn.obspy_utils import _quick_copy_stream
@@ -312,8 +313,8 @@ def _create_template_objects(
         make_pretty_plot=False, prefix='',
         check_template_strict=True, allow_channel_duplication=True,
         normalize_NSLC=True, add_array_picks=False, stations_df=pd.DataFrame(),
-        add_large_aperture_array_picks=False, ispaq=None,
-        sta_translation_file="station_code_translation.txt",
+        add_large_aperture_array_picks=False, suppress_arraywide_steps=True,
+        ispaq=None, sta_translation_file="station_code_translation.txt",
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         vertical_chans=['Z', 'H'],
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
@@ -484,6 +485,14 @@ def _create_template_objects(
             Logger.info('Rejected template: event %s for sfile %s has no '
                         'waveforms available', event.short_str(), sfile)
             continue
+
+        # Check for array-wide steps in the data
+        if suppress_arraywide_steps:
+            wavef = mask_array_trace_offsets(
+                wavef, split_taper_stream=False, **kwargs)
+        wavef = mask_consecutive_zeros(wavef, min_run_length=None)
+        # Taper all the segments
+        wavef = taper_trace_segments(wavef)
 
         if remove_response:
             nyquist_f = samp_rate / 2

@@ -261,7 +261,7 @@ def pick_events_for_day(
         noise_balancing=False, balance_power_coefficient=2,
         remove_response=False, output='DISP', inv=Inventory(),
         apply_agc=False, agc_window_sec=5, blacklisted_templates=[],
-        parallel=False, cores=None, io_cores=1,
+        parallel=False, cores=None, io_cores=1, plot=False, multiplot=False,
         check_array_misdetections=False, xcorr_func='fmf', arch='precise',
         re_eval_thresh_factor=0.6, use_weights=False, min_pick_stations=5,
         min_picks_on_detection_stations=4, min_n_station_sites=4,
@@ -350,6 +350,7 @@ def pick_events_for_day(
         # dayparty = Party([f for f in dayparty if f.template.name == '2021_10_07t19_59_36_80_templ'])
         # dayparty = Party([f for f in dayparty if f.template.name == '2018_02_23t21_15_51_38_templ'])
         # dayparty[0].detections = [dayparty[0].detections[0]]
+        # dayparty = Party([f for f in dayparty if f.template.name == '2015_02_14t07_19_44_39_templ'])
         
         # fam = dayparty.select('2022_04_25t09_31_30_18_templ')
         # dets = [det for det in fam if det.id ==
@@ -583,9 +584,9 @@ def pick_events_for_day(
                 threshold_type=threshold_type,
                 re_eval_thresh_factor=re_eval_thresh_factor,
                 overlap='calculate', plotDir='ReDetectionPlots',
-                plot=False, fill_gaps=True, ignore_bad_data=True,
-                daylong=daylong, ignore_length=True, min_chans=min_det_chans,
-                pre_processed=pre_processed,
+                plot=plot, multiplot=multiplot, fill_gaps=True,
+                ignore_bad_data=True, daylong=daylong, ignore_length=True,
+                min_chans=min_det_chans, pre_processed=pre_processed,
                 parallel_process=parallel, cores=cores,
                 xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
                 # xcorr_func='time_domain', concurrency='multiprocess',
@@ -602,9 +603,9 @@ def pick_events_for_day(
                 threshold_type=threshold_type,
                 re_eval_thresh_factor=re_eval_thresh_factor*0.9,
                 overlap='calculate', plotDir='ReDetectionPlots',
-                plot=False, fill_gaps=True, ignore_bad_data=True,
-                daylong=daylong, ignore_length=True, min_chans=min_det_chans,
-                pre_processed=pre_processed,
+                plot=plot, multiplot=True, fill_gaps=True,
+                ignore_bad_data=True, daylong=daylong, ignore_length=True,
+                min_chans=min_det_chans, pre_processed=pre_processed,
                 parallel_process=parallel, cores=cores,
                 xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
                 # xcorr_func='time_domain', concurrency='multiprocess',

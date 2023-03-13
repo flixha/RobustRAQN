@@ -1159,9 +1159,11 @@ def mask_shared_trace_offsets(
     return stream
 
 
-def mask_array_trace_offsets(stream, seisarray_prefixes=SEISARRAY_PREFIXES,
-                             min_concerned_trace_pct=0.4, percentile=99.99,
-                             share_masks=False, **kwargs):
+def mask_array_trace_offsets(
+        stream, seisarray_prefixes=SEISARRAY_PREFIXES,
+        min_concerned_trace_pct=0.4, percentile=99.99, share_masks=False,
+        split_taper_stream=True, min_length_s=10.0, max_percentage=0.1,
+        max_length=1.0, **kwargs):
     """
     For each seismic array, check whether all (or a set) of the traces display
     a step in the data at the very same time. Mask these steps if present to
@@ -1182,7 +1184,24 @@ def mask_array_trace_offsets(stream, seisarray_prefixes=SEISARRAY_PREFIXES,
         percentile of the largest steps in the data that are checked for being
         overlapping between traces. defaults to 99.9
     :type percentile: float
+    :param share_masks:
+        Whether the concerning steps should be masked across all traces, no
+        matter whether the trace itself has a step there.
+    :type share_masks: bool
+    :param split_taper_stream:
+        Whether to split and taper the trace segments (required to actually
+        make the step-generated artefacts to disappear in filtered data)
+    :type split_taper_stream: bool
+    :param min_length_s: minimum length of trace in seconds to be retained
+    :type min_length_s: float
+    :param max_percentage: maximum percentage of trace to taper
+    :type max_percentage: float
+    :param max_length: maximum length (in seconds) of stream to taper
+    :type max_length: float
+
+    
     """
+    Logger.info('Starting checks for overlapping steps on seismic array data.')
     array_st_dict = extract_array_stream(
         stream, seisarray_prefixes=seisarray_prefixes)
     array_traces = [
@@ -1195,7 +1214,7 @@ def mask_array_trace_offsets(stream, seisarray_prefixes=SEISARRAY_PREFIXES,
                     array_prefix)
         masked_array_stream = mask_shared_trace_offsets(
             array_stream, min_concerned_trace_pct=min_concerned_trace_pct,
-            percentile=percentile, **kwargs)
+            percentile=percentile, split_taper_stream=False, **kwargs)
         # the masks between array stations should be similar - apply zeroing-
         # asks to all stations
         if share_masks:
@@ -1209,30 +1228,14 @@ def mask_array_trace_offsets(stream, seisarray_prefixes=SEISARRAY_PREFIXES,
                 # Set mask of all traces to the complete mask
                 for tr in masked_array_stream:
                     tr.data.mask[union_mask_indices] = 1
-
-        # Remove this after testing
-        # masked_array_stream = masked_array_stream.split()
-        # masked_array_stream = load_events_for_detection.mask_consecutive_zeros(
-        #     masked_array_stream)
-        # # masked_array_stream = masked_array_stream.merge()
-        # masked_array_stream = masked_array_stream.split()
-        # min_length_s = 30
-        # n_tr_before_sel = len(masked_array_stream)
-        # masked_array_stream = Stream([
-        #     tr for tr in masked_array_stream
-        #     if tr.stats.npts >= tr.stats.sampling_rate * min_length_s])
-        # n_tr_after_sel = len(masked_array_stream)
-        # #
-        # Logger.info(
-        #     'Removed %s (of %s) traces because they were shorter than %s s',
-        #     n_tr_before_sel - n_tr_after_sel, n_tr_before_sel, min_length_s)
-        # # 
-        # masked_array_stream = masked_array_stream.taper(
-        #     max_percentage=0.1, max_length=1)
         # Append traces to the list that will contribute to return-stream
         masked_array_traces += masked_array_stream.traces
 
     out_stream = Stream(single_station_traces + masked_array_traces)
+    if split_taper_stream:
+        out_stream = load_events_for_detection.taper_trace_segments(
+            out_stream, min_length_s=min_length_s,
+            max_percentage=max_percentage, max_length=max_length)
     return out_stream
 
 

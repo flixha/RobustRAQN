@@ -12,6 +12,7 @@ import pickle
 from multiprocessing import Pool, cpu_count, current_process, get_context
 # from multiprocessing.pool import ThreadPool
 from joblib import Parallel, delayed, parallel_backend
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from itertools import chain, repeat
@@ -51,7 +52,7 @@ from robustraqn.obspy.core.stream import Stream
 import robustraqn.spectral_tools  # absolute import to avoid circular import
 from robustraqn.quality_metrics import get_parallel_waveform_client
 from robustraqn.seismic_array_tools import (
-    get_station_sites, get_station_sites_dict)
+    get_station_sites, get_station_sites_dict, mask_array_trace_offsets)
 from robustraqn.obspy.clients.filesystem.sds import Client
 from timeit import default_timer
 import logging
@@ -1373,6 +1374,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
                     interpolation_method='lanczos', taper_fraction=0.005,
                     detrend_type='simple', downsampled_max_rate=None,
                     noise_balancing=False, balance_power_coefficient=2,
+                    suppress_arraywide_steps=True,
                     parallel=False, cores=None, **kwargs):
     """
     Does an initial processing of the day's stream,
@@ -1392,6 +1394,9 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
     seed_id_list = [tr.id for tr in day_st]
     unique_seed_id_list = list(dict.fromkeys(seed_id_list))
 
+    # first check for array-wide steps in the data
+    if suppress_arraywide_steps:
+        day_st = mask_array_trace_offsets(day_st, **kwargs)
     streams = []
     if not parallel:
         for id in unique_seed_id_list:
@@ -1723,7 +1728,7 @@ def _mask_consecutive(data, value_to_mask=0, min_run_length=5, axis=-1):
 
 
 def mask_consecutive_zeros(st, min_run_length=5, min_data_percentage=80,
-                           starttime=None, endtime=None):
+                           starttime=None, endtime=None, cores=None):
     """
     Mask consecutive Zeros in trace
     """
@@ -1732,10 +1737,16 @@ def mask_consecutive_zeros(st, min_run_length=5, min_data_percentage=80,
     if endtime is None:
         endtime = min([tr.stats.endtime for tr in st])
     if min_run_length is not None:
-        for tr in st:
-            consecutive_zeros_mask = _mask_consecutive(
-                tr.data, value_to_mask=0, min_run_length=min_run_length,
-                axis=-1)
+        if cores is None:
+            cores = min(len(st), cpu_count())
+        with ThreadPoolExecutor(max_workers=cores) as executor:
+            # Because numpy releases GIL threading can use multiple cores
+            consecutive_zeros_masks = executor.map(
+                _mask_consecutive, [tr.data for tr in st.traces])
+        for tr, consecutive_zeros_mask in zip(st, consecutive_zeros_masks):
+            # consecutive_zeros_mask = _mask_consecutive(
+            #     tr.data, value_to_mask=0, min_run_length=min_run_length,
+            #     axis=-1)
             # Convert trace data to masked array if required
             if np.any(consecutive_zeros_mask):
                 Logger.info(
@@ -1775,6 +1786,39 @@ def mask_consecutive_zeros(st, min_run_length=5, min_data_percentage=80,
     return st
 
 
+def taper_trace_segments(stream, min_length_s=10.0, max_percentage=0.1,
+                         max_length=1.0, **kwargs):
+    """
+    Taper all segments / traces after masking problematic values (e.g., spikes,
+    zeros).
+
+    :param stream: input stream with traces
+    :type stream: :class:`obspy.core.stream.Stream`
+    :param min_length_s:
+        minimum segment length in s to keep trace, defaults to 10.0
+    :type min_length_s: float, optional
+    :param max_percentage:
+        maximum length of taper in decimal percent, defaults to 0.1
+    :type max_percentage: float, optional
+    :param max_length: maximum taper lenght in s, defaults to 1.0
+    :type max_length: float, optional
+    :return: stream with tapered / remaining traces
+    :rtype: :class:`obspy.core.stream.Stream`
+    """
+    stream = stream.split()
+    n_tr_before_sel = len(stream)
+    if min_length_s is not None:
+        stream = Stream([
+            tr for tr in stream
+            if tr.stats.npts >= tr.stats.sampling_rate * min_length_s])
+        n_tr_after_sel = len(stream)
+        Logger.info(
+            'Removed %s (of %s) traces because they were shorter than %s s',
+            n_tr_before_sel - n_tr_after_sel, n_tr_before_sel, min_length_s)
+    stream = stream.taper(max_percentage=max_percentage, max_length=max_length)
+    return stream
+
+
 def _init_processing_per_channel(
         st, starttime, endtime, remove_response=False, output='DISP',
         inv=Inventory(), min_segment_length_s=10, max_sample_rate_diff=1,
@@ -1792,11 +1836,13 @@ def _init_processing_per_channel(
         Specify whether channels belonging to the same station should be
         normalized to the same (most common) sampling rate).
     """
-
     # First check if there are consecutive Zeros in the data (happens for
-    # example in Norsar data; this should be gaps rather than Zeros)
+    # example in NO array data; this should really be gaps rather than Zeros)
     st = mask_consecutive_zeros(
         st, min_run_length=5, starttime=starttime, endtime=endtime)
+    # Taper all the segments
+    st = taper_trace_segments(st)
+    
     if len(st) == 0:
         return st
 

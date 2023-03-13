@@ -33,6 +33,8 @@ from obspy import UTCDateTime
 from obsplus.stations.pd import stations_to_df
 from eqcorrscan.core.match_filter import Party
 
+from robustraqn import load_events_for_detection
+
 
 # List of extended glob-expressions that match all stations within a seismic
 # array. E.g., NC3* will match all stations starting with "NC3" into one
@@ -1035,6 +1037,193 @@ def _check_picks_within_shiftlen(party, event, detection_id, shift_len):
     return event
 
 
+def _non_consecutive(arr):
+    """Find non-consecutive numbers in array.
+
+    :param arr: sorted array of values
+    :type arr: np.array
+    :return:
+        array of values that appear "isolated" in input, i.e. no neighboring
+        value (i+1, i-1) is in input.
+    :rtype: np.array
+    """
+    non_consec_values = []
+    n_items = len(arr)
+    if n_items > 1:
+        for i in range(1, n_items):
+            if arr[i - 1] + 1 != arr[i]:
+                non_consec_values.append(arr[i])
+    return np.array(non_consec_values)
+
+
+def mask_shared_trace_offsets(stream, min_concerned_trace_pct=0.65,
+                              percentile=99.99, **kwargs):
+    """
+    Function to correct steps across a full seismic array.
+    These steps often create problematic misdetections in template matching.
+
+    :param stream:
+        stream containing traces that should be checked for overlapping steps.
+    :type stream: class:`obspy.core.stream.Stream`
+    :param min_concerned_trace_pct:
+        ratio of traces that need to show the offset to be masked,
+        defaults to 0.65
+    :type min_concerned_trace_pct: float, optional
+    :param percentile:
+        percentile of the largest steps in the data that are checked for being
+        overlapping between traces. defaults to 99.9
+    :type percentile: float
+    :return: stream where the overlapping steps are masked
+    :rtype: class:`obspy.core.stream.Stream`
+    """
+    # min_npts = min([tr.stats.npts for tr in st])
+    uniq_sampling_rates = list(set([tr.stats.sampling_rate for tr in stream]))
+    ret_traces = []  # to collect traces for returned stream
+    # one array may have stations with different sampling rates.
+    # loop across the stations that share the sampling rates here:
+    for sampling_rate in uniq_sampling_rates:
+        s_stream = stream.select(sampling_rate=sampling_rate)
+        n_traces = len(s_stream)
+        min_n_concerned_traces = round(n_traces * min_concerned_trace_pct)
+        # Trim traces to common start (only if different)
+        trace_starts = [tr.stats.starttime for tr in s_stream]
+        if len(list(set([ts.datetime for ts in trace_starts]))) > 1:
+            earliest_trace_start = min(trace_starts)
+            s_stream.trim(starttime=earliest_trace_start, pad=True)
+
+        ampstep_data_list = []
+        # Compute change between consecutive samples for all traces
+        for tr in s_stream:
+            ampstep_data_list.append(tr.data[1:] - tr.data[:-1])
+        # Store changes in one n_tr x npts array
+        ampstep_data = np.abs(np.array(ampstep_data_list))
+        # Find the index for the maximum absolute change
+        max_indices = np.argmax(ampstep_data, axis=1)
+        # uniq_indices = list(set(max_indices))
+        # Find the indices for the 99.xx-percentile values
+        top_percentiles = np.nanpercentile(ampstep_data, percentile, axis=1,
+                                        method='closest_observation')
+        trace_top_perc_indices = []
+        for jt, top_perc in enumerate(top_percentiles):
+            trace_top_perc_indices.append(
+                np.where(ampstep_data[jt,:] > top_perc)[0])
+        # Quick intersection when all traces need to be concerned
+        if min_concerned_trace_pct == 1:
+            # find overlap betw index-lists (indices that appear in all lists)
+            shared_indices = list(set.intersection(
+                *map(set, trace_top_perc_indices)))
+        else:
+            # Find indices that overlap in at least x traces:
+            all_indices = np.concatenate(trace_top_perc_indices, axis=0)
+            shared_indices = np.array([
+                key for key, value in Counter(all_indices).items()
+                if value >= min_n_concerned_traces])
+        # A problematic step across the whole array is recognized when all
+        # traces have their maximum change at the same time.
+        # Don't mask anything if the maximum change is at the very start or end
+        #if (len(uniq_indices) == 1 and uniq_indices[0] > 0
+        #        and uniq_indices[0] < min_npts):
+        if len(shared_indices) == 0:
+            ret_traces += [tr for tr in s_stream]
+            continue
+        # Mask-indices should not be neighboring values - that could indicate
+        # a real high-amplitude arrival
+        shared_indices.sort()
+        non_consec_shared_indices = _non_consecutive(shared_indices)
+        Logger.info('Found %s isolated amplitude steps in the seismic array data, '
+                    'masking.', len(shared_indices))
+        for tr in stream:
+            # mask data array around the step - reuse existing mask if present
+            if isinstance(tr.data, np.ma.MaskedArray):
+                mask = tr.data.mask
+            else:  # Make new mask
+                mask = np.zeros_like(tr.data)
+            for shared_index in non_consec_shared_indices:
+                mask[shared_index-2 : shared_index+1] = 1
+            tr.data = np.ma.MaskedArray(data=tr.data, mask=mask)
+        ret_traces += [tr for tr in s_stream]
+        # stream = stream.split().taper(max_percentage=max_percentage,
+        #                              max_length=max_length)
+    return Stream(ret_traces)
+
+
+def mask_array_trace_offsets(stream, seisarray_prefixes=SEISARRAY_PREFIXES,
+                             min_concerned_trace_pct=0.4, percentile=99.99,
+                             share_masks=False, **kwargs):
+    """
+    For each seismic array, check whether all (or a set) of the traces display
+    a step in the data at the very same time. Mask these steps if present to
+    avoid spikes across the whole array after later filtering of the data.
+
+    :param stream:
+        stream of all traces (can be for arrays and single stations together)
+    :type stream: class:`obspy.core.stream.Stream`
+    :param seisarray_prefixes: 
+        List of extended-glob patterns that match all station codes within
+        seismic arrays., defaults to SEISARRAY_PREFIXES
+    :type seisarray_prefixes: list, optional
+    :param min_concerned_trace_pct:
+        ratio of traces that need to show the offset to be masked,
+        defaults to 0.65
+    :type min_concerned_trace_pct: float, optional
+    :param percentile:
+        percentile of the largest steps in the data that are checked for being
+        overlapping between traces. defaults to 99.9
+    :type percentile: float
+    """
+    array_st_dict = extract_array_stream(
+        stream, seisarray_prefixes=seisarray_prefixes)
+    array_traces = [
+        tr for key, stream in array_st_dict.items() for tr in stream]
+    single_station_traces = [tr for tr in stream if tr not in array_traces]
+    # Check all arrays
+    masked_array_traces = []
+    for array_prefix, array_stream in array_st_dict.items():
+        Logger.info('Checking seismic array %s for overlapping steps.',
+                    array_prefix)
+        masked_array_stream = mask_shared_trace_offsets(
+            array_stream, min_concerned_trace_pct=min_concerned_trace_pct,
+            percentile=percentile, **kwargs)
+        # the masks between array stations should be similar - apply zeroing-
+        # asks to all stations
+        if share_masks:
+            mask_indices_list = [np.where(tr.data.mask == True)
+                                 for tr in masked_array_stream
+                                 if isinstance(tr.data, np.ma.MaskedArray)]
+            # Skip if no values were masked
+            if len(mask_indices_list) > 0:
+                union_mask_indices = np.unique(
+                    np.concatenate(mask_indices_list, axis=1))
+                # Set mask of all traces to the complete mask
+                for tr in masked_array_stream:
+                    tr.data.mask[union_mask_indices] = 1
+
+        # Remove this after testing
+        # masked_array_stream = masked_array_stream.split()
+        # masked_array_stream = load_events_for_detection.mask_consecutive_zeros(
+        #     masked_array_stream)
+        # # masked_array_stream = masked_array_stream.merge()
+        # masked_array_stream = masked_array_stream.split()
+        # min_length_s = 30
+        # n_tr_before_sel = len(masked_array_stream)
+        # masked_array_stream = Stream([
+        #     tr for tr in masked_array_stream
+        #     if tr.stats.npts >= tr.stats.sampling_rate * min_length_s])
+        # n_tr_after_sel = len(masked_array_stream)
+        # #
+        # Logger.info(
+        #     'Removed %s (of %s) traces because they were shorter than %s s',
+        #     n_tr_before_sel - n_tr_after_sel, n_tr_before_sel, min_length_s)
+        # # 
+        # masked_array_stream = masked_array_stream.taper(
+        #     max_percentage=0.1, max_length=1)
+        # Append traces to the list that will contribute to return-stream
+        masked_array_traces += masked_array_stream.traces
+
+    out_stream = Stream(single_station_traces + masked_array_traces)
+    return out_stream
+
+
 def array_lag_calc(
         st, picked_cat, party, tribe, stations_df,
         seisarray_prefixes=SEISARRAY_PREFIXES,
@@ -1060,7 +1249,7 @@ def array_lag_calc(
               and other contributing factors.
         - add one single pick for the array's reference station for each phase
 
-    :type st: obspy.core.stream.Stream
+    :type st: class:`obspy.core.stream.Stream`
     :param st: All the data needed to cut from - can be a gappy Stream.
     :type picked_cat: class:`obspy.core.event.catalog`
     :type picked_cat:

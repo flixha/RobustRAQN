@@ -1396,7 +1396,8 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
 
     # first check for array-wide steps in the data
     if suppress_arraywide_steps:
-        day_st = mask_array_trace_offsets(day_st, **kwargs)
+        day_st = mask_array_trace_offsets(
+            day_st, split_taper_stream=False, **kwargs)
     streams = []
     if not parallel:
         for id in unique_seed_id_list:
@@ -1510,7 +1511,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
 def init_processing_wRotation(
         day_st, starttime, endtime, remove_response=False, output='DISP',
         inv=Inventory(), pre_filt=None, sta_translation_file='',
-        parallel=False, cores=None, n_threads=1,
+        parallel=False, cores=None, n_threads=1, suppress_arraywide_steps=True,
         min_segment_length_s=10, max_sample_rate_diff=1,
         skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
         skip_interp_sample_rate_smaller=1e-7, interpolation_method='lanczos',
@@ -1537,6 +1538,12 @@ def init_processing_wRotation(
         Logger.error('There are no traces to do initial processing on %s',
                      str(starttime))
         return day_st
+
+    # first check for array-wide steps in the data
+    if suppress_arraywide_steps:
+        day_st = mask_array_trace_offsets(
+            day_st, split_taper_stream=False, **kwargs)
+    
     # Sort unique-ID list by most common, so that 3-component stations
     # appear first and are processed first in parallel loop (for better load-
     # balancing)

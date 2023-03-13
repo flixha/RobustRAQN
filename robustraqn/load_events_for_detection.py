@@ -51,8 +51,8 @@ from obsplus.stations.pd import stations_to_df
 from robustraqn.obspy.core.stream import Stream
 import robustraqn.spectral_tools  # absolute import to avoid circular import
 from robustraqn.quality_metrics import get_parallel_waveform_client
-from robustraqn.seismic_array_tools import (
-    get_station_sites, get_station_sites_dict, mask_array_trace_offsets)
+from robustraqn import seismic_array_tools
+# get_station_sites, get_station_sites_dict, mask_array_trace_offsets)
 from robustraqn.obspy.clients.filesystem.sds import Client
 from timeit import default_timer
 import logging
@@ -641,7 +641,7 @@ def prepare_detection_stream(
     # If I merge the traces before removing the response, then the masked
     # arrays / None-values removal will mess up the response-corrected trace
     # and make it all None.
-    # st.merge(method=0, fill_value=None, interpolation_samples=0)
+    # st.merge(method=0, fill_value=0, interpolation_samples=0)
     # If using Zero as a fill_value, then EQcorrscan will not be able to
     # automatically recognize these times and exclude the correlation-
     # value on those traces from the stacked value.
@@ -723,7 +723,7 @@ def parallel_detrend(st, parallel=True, cores=None, type='simple'):
     return st
 
 
-def parallel_merge(st, method=0, fill_value=None, interpolation_samples=0,
+def parallel_merge(st, method=0, fill_value=0, interpolation_samples=0,
                    cores=1):
     seed_id_list = [tr.id for tr in st]
     unique_seed_id_list = list(dict.fromkeys(seed_id_list))
@@ -748,7 +748,7 @@ def parallel_merge(st, method=0, fill_value=None, interpolation_samples=0,
         for tr in trace_st:
             st.append(tr)
 
-    # st.merge(method=0, fill_value=None, interpolation_samples=0)
+    # st.merge(method=0, fill_value=0, interpolation_samples=0)
     return st
 
 
@@ -833,7 +833,7 @@ def parallel_rotate(st, inv, parallel=True, cores=None,
     #     for tr in trace_st:
     #         st.append(tr)
 
-    # st.merge(method=0, fill_value=None, interpolation_samples=0)
+    # st.merge(method=0, fill_value=0, interpolation_samples=0)
     return st
 
 
@@ -841,11 +841,11 @@ def daily_plot(st, year, month, day, data_unit='counts', suffix=''):
     """
     """
     for tr in st:
-        outPlotFile = os.path.join('DebugPlots', str(year)
+        out_plot_file = os.path.join('DebugPlots', str(year)
                                    + str(month).zfill(2) + str(day).zfill(2)
                                    + '_' + tr.stats.station
                                    + '_' + tr.stats.channel + suffix + '.png')
-        tr.plot(type='dayplot', size=(1900, 1080), outfile=outPlotFile,
+        tr.plot(type='dayplot', size=(1900, 1080), outfile=out_plot_file,
                 data_unit=data_unit)
 
 
@@ -1382,7 +1382,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
     # If I merge the traces before removing the response, then the masked
     # arrays / None-values removal will mess up the response-corrected trace
     # and make it all None.
-    # st.merge(method=0, fill_value=None, interpolation_samples=0)
+    # st.merge(method=0, fill_value=0, interpolation_samples=0)
     # If using Zero as a fill_value, then EQcorrscan will not be able to
     # automatically recognize these times and exclude the correlation-
     # value on those traces from the stacked value.
@@ -1396,7 +1396,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
 
     # first check for array-wide steps in the data
     if suppress_arraywide_steps:
-        day_st = mask_array_trace_offsets(
+        day_st = seismic_array_tools.mask_array_trace_offsets(
             day_st, split_taper_stream=False, **kwargs)
     streams = []
     if not parallel:
@@ -1422,7 +1422,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
         # Make a copy of the day-stream to find the values that need to be
         # masked.
         # masked_st = day_st.copy()
-        # masked_st.merge(method=0, fill_value=None, interpolation_samples=0)
+        # masked_st.merge(method=0, fill_value=0, interpolation_samples=0)
         # masked_st.trim(starttime=starttime, endtime=endtime, pad=True,
         #             nearest_sample=True, fill_value=0)
 
@@ -1541,9 +1541,9 @@ def init_processing_wRotation(
 
     # first check for array-wide steps in the data
     if suppress_arraywide_steps:
-        day_st = mask_array_trace_offsets(
+        day_st = seismic_array_tools.mask_array_trace_offsets(
             day_st, split_taper_stream=False, **kwargs)
-    
+
     # Sort unique-ID list by most common, so that 3-component stations
     # appear first and are processed first in parallel loop (for better load-
     # balancing)
@@ -1736,8 +1736,25 @@ def _mask_consecutive(data, value_to_mask=0, min_run_length=5, axis=-1):
 
 def mask_consecutive_zeros(st, min_run_length=5, min_data_percentage=80,
                            starttime=None, endtime=None, cores=None):
-    """
-    Mask consecutive Zeros in trace
+    """Mask consecutive Zeros in trace
+
+    :param st: input stream
+    :type st: :class:`obspy.core.stream.Stream`
+    :param min_run_length:
+        minmum number of consecutive zero-samples to be masked, defaults to 5.
+    :type min_run_length: int, optional
+    :param min_data_percentage:
+        minimum percentage of actual data in trace to retain, defaults to 80
+    :type min_data_percentage: float, optional
+    :param starttime: starttime of data vailability check, defaults to None
+    :type starttime: :class:`obspy.core.event.UTCDateTime`, optional
+    :param endtime: endtime of data availability check, defaults to None
+    :type endtime: :class:`obspy.core.event.UTCDateTime`, optional
+    :param cores: number of cores to use in checks, defaults to None
+    :type cores: int, optional
+
+    :return: stream with consecutive zero-samples masked.
+    :rtype: :class:`obspy.core.stream.Stream`
     """
     if starttime is None:
         starttime = min([tr.stats.starttime for tr in st])
@@ -1754,13 +1771,19 @@ def mask_consecutive_zeros(st, min_run_length=5, min_data_percentage=80,
             # consecutive_zeros_mask = _mask_consecutive(
             #     tr.data, value_to_mask=0, min_run_length=min_run_length,
             #     axis=-1)
-            # Convert trace data to masked array if required
             if np.any(consecutive_zeros_mask):
+                # Convert trace data to masked array if required
+                if isinstance(tr.data, np.ma.MaskedArray):
+                    # Combine the previous mask and the new nonzero mask:
+                    mask = tr.data.mask
+                    mask[np.where(consecutive_zeros_mask == 1)] = 1
+                else:
+                    mask = consecutive_zeros_mask
                 Logger.info(
                     'Trace %s contains more than %s consecutive zeros, '
                     'masking Zero data', tr, min_run_length)
                 tr.data = np.ma.MaskedArray(
-                    data=tr.data, mask=consecutive_zeros_mask, fill_value=None)
+                    data=tr.data, mask=mask, fill_value=0)
         st = st.split()  # After splitting there should be no masks
     removal_st = Stream()
     min_data_fraction = min_data_percentage / 100
@@ -1793,7 +1816,7 @@ def mask_consecutive_zeros(st, min_run_length=5, min_data_percentage=80,
     return st
 
 
-def taper_trace_segments(stream, min_length_s=10.0, max_percentage=0.1,
+def taper_trace_segments(stream, min_length_s=2.0, max_percentage=0.1,
                          max_length=1.0, **kwargs):
     """
     Taper all segments / traces after masking problematic values (e.g., spikes,
@@ -1819,9 +1842,12 @@ def taper_trace_segments(stream, min_length_s=10.0, max_percentage=0.1,
             tr for tr in stream
             if tr.stats.npts >= tr.stats.sampling_rate * min_length_s])
         n_tr_after_sel = len(stream)
-        Logger.info(
-            'Removed %s (of %s) traces because they were shorter than %s s',
-            n_tr_before_sel - n_tr_after_sel, n_tr_before_sel, min_length_s)
+        if n_tr_after_sel != n_tr_before_sel:
+            Logger.info(
+                '%s: Removed %s (of %s) traces shorter than %s s',
+                '.'.join(stream[0].id.split('.')[0:3]),
+                n_tr_before_sel  - n_tr_after_sel,
+                n_tr_before_sel, min_length_s)
     stream = stream.taper(max_percentage=max_percentage, max_length=max_length)
     return stream
 
@@ -1876,9 +1902,9 @@ def _init_processing_per_channel(
     # Merge, but keep "copy" of the masked array for filling back
     # Make a copy of the day-stream to find the values that need to be masked.
     masked_st = st.copy()
-    masked_st.merge(method=0, fill_value=None, interpolation_samples=0)
+    masked_st.merge(method=0, fill_value=0, interpolation_samples=0)
     masked_st.trim(starttime=starttime, endtime=endtime, pad=True,
-                   nearest_sample=True, fill_value=None)
+                   nearest_sample=True, fill_value=0)
     masked_st_tr_dict = dict()
     for tr in masked_st:
         masked_st_tr_dict[tr.id] = tr
@@ -1965,7 +1991,8 @@ def _init_processing_per_channel_wRotation(
     st = mask_consecutive_zeros(st, min_run_length=5)
     if len(st) == 0:
         return st
-
+    # Taper all the segments after inserting nans
+    st = taper_trace_segments(st)
 
     # Second, check trace segments for strange sampling rates and segments that
     # are too short:
@@ -1982,9 +2009,9 @@ def _init_processing_per_channel_wRotation(
     # Merge, but keep "copy" of the masked array for filling back
     # Make a copy of the day-stream to find the values that need to be masked.
     masked_st = st.copy()
-    masked_st.merge(method=0, fill_value=None, interpolation_samples=0)
+    masked_st.merge(method=0, fill_value=0, interpolation_samples=0)
     masked_st.trim(starttime=starttime, endtime=endtime, pad=True,
-                   nearest_sample=True, fill_value=None)
+                   nearest_sample=True, fill_value=0)
     masked_st_tr_dict = dict()
     for tr in masked_st:
         masked_st_tr_dict[tr.id] = tr
@@ -2776,7 +2803,7 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
     # Need to merge again here, because rotate may split merged traces if there
     # are masked arrays (i.e., values filled with None). The merge here will
     # recreate the masked arrays (after they disappeared during rotate).
-    st = st.merge(method=1, fill_value=None, interpolation_samples=-1)
+    st = st.merge(method=1, fill_value=0, interpolation_samples=-1)
 
     # 3. +4 +5 Translate station codes, Set network and location codes
     # load list of tuples for station-code translation
@@ -2964,16 +2991,17 @@ def print_error_plots(st, path='ErrorPlots', time_str=''):
         for trace in st:
             png_name = time_str + '_' + trace.stats.station +\
                 '_' + trace.stats.channel + '.png'
-            outPlotFile = os.path.join(path, png_name)
-            trace.plot(type='dayplot', size=(1900, 1080), outfile=outPlotFile,
-                       data_unit='nm')
+            out_plot_file = os.path.join(path, png_name)
+            trace.plot(type='dayplot', size=(1900, 1080),
+                       outfile=out_plot_file, data_unit='nm')
     except Exception as e:
         Logger.error('Got an exception when trying to plot Error figures'
                      'for %s', current_day_str)
         Logger.error(e)
 
 
-def multiplot_detection(party, tribe, st, out_folder='DetectionPlots'):
+def multiplot_detection(
+        party, tribe, st, out_folder='DetectionPlots', **kwargs):
     """
     Create a plot of a detection including the background stream.
     """
@@ -3022,8 +3050,9 @@ def multiplot_detection(party, tribe, st, out_folder='DetectionPlots'):
 def reevaluate_detections(
         party, short_tribe, stream, threshold_type='MAD', threshold=9,
         re_eval_thresh_factor=0.6, trig_int=40.0, overlap='calculate',
-        plot=False, plotDir='DetectionPlots', daylong=False, fill_gaps=False,
-        ignore_bad_data=False, ignore_length=True, pre_processed=False,
+        plot=False, multiplot=False, plotDir='DetectionPlots',
+        daylong=False, fill_gaps=False, ignore_bad_data=False,
+        ignore_length=True, pre_processed=False,
         parallel_process=False, cores=None, xcorr_func='fftw',
         concurrency=None, arch='precise', group_size=1, full_peaks=False,
         save_progress=False, process_cores=None, spike_test=False, min_chans=4,
@@ -3055,7 +3084,8 @@ def reevaluate_detections(
     # Get list of unique station names in party for station-site dict lookup
     unique_stations = list(set(
         [chan[0] for fam in party for det in fam for chan in det.chans]))
-    station_sites_dict = get_station_sites_dict(unique_stations)
+    station_sites_dict = seismic_array_tools.get_station_sites_dict(
+        unique_stations)
 
     if min_n_station_sites > 1:
         checked_party = Party()
@@ -3288,6 +3318,8 @@ def reevaluate_detections(
         'Re-evaluation of %s detections (%s families) finished, remaining are'
         ' %s detections (%s families).', n_detections_in, n_families_in,
         n_detections, n_families)
+    if multiplot:
+        multiplot_detection(long_return_party, short_tribe, det_st, **kwargs)
 
     return long_return_party, short_return_party
 
@@ -3303,3 +3335,5 @@ if __name__ == "__main__":
                    endtime=UTCDateTime(1999,8,1,20,36,54))
     st = mask_consecutive_zeros(st, min_run_length=5)
     st = st.split()
+    # Taper all the segments
+    st = taper_trace_segments(st)

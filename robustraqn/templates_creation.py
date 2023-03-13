@@ -73,7 +73,12 @@ def listdir_fullpath(d):
 
 
 def _quick_tribe_copy(tribe):
-    """
+    """Function to quickly copy tribe with effiecient stream copy.
+
+    :param tribe: Tribe holding templates that needs to be copied.
+    :type tribe: class:`eqcorrscan.core.match_filter.Tribe`
+    :return: Tribe
+    :rtype: class:`eqcorrscan.core.match_filter.Tribe`
     """
     new_template_list = []
     for template in tribe:
@@ -94,8 +99,49 @@ def _shorten_tribe_streams(
         min_n_traces=0, write_out=False, make_pretty_plot=False,
         prefix='short', noise_balancing=False, apply_agc=False,
         write_individual_templates=False, check_len_strict=True):
-    """
-    Create shorter templates from a tribe of longer templates
+    """Create shorter templates from a tribe of longer templates
+
+    :param tribe: Tribe with long templates
+    :type tribe: class:`eqcorrscan.core.match_filter.Tribe`
+    :param trace_offset:
+        offset as ratio of the template's length at which to start the new
+        templates, defaults to 0
+    :type trace_offset: int, optional
+    :param tribe_len_pct:
+        length of the new shortened templates, as ratio of the long template's
+        length, defaults to 0.2
+    :type tribe_len_pct: float, optional
+    :param max_tribe_len:
+        maximum absolute length in s for new templates, defaults to None
+    :type max_tribe_len: float, optional
+    :param min_n_traces:
+        minimum number of traces to keep template, defaults to 0
+    :type min_n_traces: int, optional
+    :param write_out: Whether to write new tribe to file, defaults to False
+    :type write_out: bool, optional
+    :param make_pretty_plot: whether to plot new template, defaults to False
+    :type make_pretty_plot: bool, optional
+    :param prefix:
+        name-prefix for writing out the shortened tribe, defaults to 'short'
+    :type prefix: str, optional
+    :param noise_balancing:
+        whether the tribe was noise-balanced (will be part of filename),
+        defaults to False
+    :type noise_balancing: bool, optional
+    :param apply_agc:
+        whether agc was applied to tribe, will be part of filename,
+        defaults to False
+    :type apply_agc: bool, optional
+    :param write_individual_templates:
+        whether to write out each template in its own file, defaults to False
+    :type write_individual_templates: bool, optional
+    :param check_len_strict:
+        whether to strictly check the length of the shortened templates to all
+        be the same number of samples, defaults to True
+    :type check_len_strict: bool, optional
+    :raises AssertionError: occurrs when traces do not have the same length
+    :return: shortened tribe
+    :rtype:  class:`eqcorrscan.core.match_filter.Tribe`
     """
     if len(tribe) == 0:
         return tribe
@@ -158,7 +204,33 @@ def check_template_event_errors_ok(
         max_time_error_s=None, file='', min_latitude=None, max_latitude=None,
         min_longitude=None, max_longitude=None, **kwargs):
     """
-    function to check origin errors gracefully
+    Function to check origin errors gracefully for the different ways erros
+    can be recorded.
+
+    :param origin: origin for which to check location errors
+    :type origin: class:`obspy.core.event.origin`
+    :param max_horizontal_error_km:
+        maximum horizontal error in km to pass check, defaults to None
+    :type max_horizontal_error_km: float, optional
+    :param max_depth_error_km:
+        maximum depth error in km to pass check, defaults to None
+    :type max_depth_error_km: float, optional
+    :param max_time_error_s:
+        maximum time error in km to pass check, defaults to None
+    :type max_time_error_s: float, optional
+    :param file: event-file
+        for which error was checked (only needed for logging), defaults to ''
+    :type file: str, optional
+    :param min_latitude: minimum latitude to pass check, defaults to None
+    :type min_latitude: float, optional
+    :param max_latitude: maximum latitude to pass check, defaults to None
+    :type max_latitude: float, optional
+    :param min_longitude: minimum longitude to pass check, defaults to None
+    :type min_longitude: float, optional
+    :param max_longitude: maximum longitude to pass check, defaults to None
+    :type max_longitude: float, optional
+    :return: Whether origin passed all checks or not.
+    :rtype: bool
     """
     # Do not use event as template if any errors are above threshold
     if not origin:
@@ -654,8 +726,17 @@ def reset_preferred_magnitude(tribe, mag_preference_priority=[('ML', 'BER')]):
 
 
 def _make_date_list(catalog, unique=True, sorted=True):
-    """
-    Make list of the unique days / dates for events in a catalog
+    """Make list of the unique days / dates for events in a catalog
+
+    :param catalog: _description_
+    :type catalog: type:`obspy.core.event.Catalog`
+    :param unique:
+        whether to provide a unique list of dayes, defaults to True
+    :type unique: bool, optional
+    :param sorted: whether to sort dates, defaults to True
+    :type sorted: bool, optional
+    :return: list of dates for which catalog contains events
+    :rtype: list of type:`obspy.core.UTCDateTime`
     """
     date_list = []
     for event in catalog:
@@ -689,8 +770,102 @@ def create_template_objects(
         parallel=False, cores=1, thread_parallel=False, n_threads=1,
         max_events_per_file=200, task_id=None,
         *args, **kwargs):
-    """
-      Wrapper for create-template-function
+    """Wrapper for create-template-function
+
+    :param sfiles: _description_, defaults to []
+    :type sfiles: list, optional
+    :param catalog: _description_, defaults to None
+    :type catalog: _type_, optional
+    :param selected_stations: _description_, defaults to []
+    :type selected_stations: list, optional
+    :param template_length: _description_, defaults to 60
+    :type template_length: int, optional
+    :param lowcut: _description_, defaults to 2.5
+    :type lowcut: float, optional
+    :param highcut: _description_, defaults to 9.9
+    :type highcut: float, optional
+    :param min_snr: _description_, defaults to 5.0
+    :type min_snr: float, optional
+    :param prepick: _description_, defaults to 0.5
+    :type prepick: float, optional
+    :param samp_rate: _description_, defaults to 20
+    :type samp_rate: int, optional
+    :param seisan_wav_path: _description_, defaults to None
+    :type seisan_wav_path: _type_, optional
+    :param clients: _description_, defaults to []
+    :type clients: list, optional
+    :param inv: _description_, defaults to Inventory()
+    :type inv: _type_, optional
+    :param remove_response: _description_, defaults to False
+    :type remove_response: bool, optional
+    :param output: _description_, defaults to 'DISP'
+    :type output: str, optional
+    :param noise_balancing: _description_, defaults to False
+    :type noise_balancing: bool, optional
+    :param balance_power_coefficient: _description_, defaults to 2
+    :type balance_power_coefficient: int, optional
+    :param ground_motion_input: _description_, defaults to []
+    :type ground_motion_input: list, optional
+    :param apply_agc: _description_, defaults to False
+    :type apply_agc: bool, optional
+    :param agc_window_sec: _description_, defaults to 5
+    :type agc_window_sec: int, optional
+    :param min_n_traces: _description_, defaults to 8
+    :type min_n_traces: int, optional
+    :param write_out: _description_, defaults to False
+    :type write_out: bool, optional
+    :param write_individual_templates: _description_, defaults to False
+    :type write_individual_templates: bool, optional
+    :param check_template_strict: _description_, defaults to True
+    :type check_template_strict: bool, optional
+    :param templ_path: _description_, defaults to 'Templates'
+    :type templ_path: str, optional
+    :param prefix: _description_, defaults to ''
+    :type prefix: str, optional
+    :param make_pretty_plot: _description_, defaults to False
+    :type make_pretty_plot: bool, optional
+    :param allow_channel_duplication: _description_, defaults to True
+    :type allow_channel_duplication: bool, optional
+    :param normalize_NSLC: _description_, defaults to True
+    :type normalize_NSLC: bool, optional
+    :param ispaq: _description_, defaults to None
+    :type ispaq: _type_, optional
+    :param add_array_picks: _description_, defaults to False
+    :type add_array_picks: bool, optional
+    :param add_large_aperture_array_picks: _description_, defaults to False
+    :type add_large_aperture_array_picks: bool, optional
+    :param sta_translation_file: _description_, defaults to "station_code_translation.txt"
+    :type sta_translation_file: str, optional
+    :param std_network_code: _description_, defaults to 'NS'
+    :type std_network_code: str, optional
+    :param std_location_code: _description_, defaults to '00'
+    :type std_location_code: str, optional
+    :param std_channel_prefix: _description_, defaults to 'BH'
+    :type std_channel_prefix: str, optional
+    :param vertical_chans: _description_, defaults to ['Z', 'H']
+    :type vertical_chans: list, optional
+    :param wavetool_path: _description_, defaults to '/home/felix/Software/SEISANrick/PRO/linux64/wavetool'
+    :type wavetool_path: str, optional
+    :param horizontal_chans: _description_, defaults to ['E', 'N', '1', '2', 'X', 'Y']
+    :type horizontal_chans: list, optional
+    :param erase_mags: _description_, defaults to False
+    :type erase_mags: bool, optional
+    :param parallel: _description_, defaults to False
+    :type parallel: bool, optional
+    :param cores: _description_, defaults to 1
+    :type cores: int, optional
+    :param thread_parallel: _description_, defaults to False
+    :type thread_parallel: bool, optional
+    :param n_threads: _description_, defaults to 1
+    :type n_threads: int, optional
+    :param max_events_per_file: _description_, defaults to 200
+    :type max_events_per_file: int, optional
+    :param task_id: _description_, defaults to None
+    :type task_id: _type_, optional
+    :raises NotImplementedError: _description_
+    :raises NotImplementedError: _description_
+    :return: _description_
+    :rtype: _type_
     """
     # Get only relevant inventory information to make Pool-startup quicker
     new_inv = Inventory()

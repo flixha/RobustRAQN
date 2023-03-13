@@ -1056,8 +1056,10 @@ def _non_consecutive(arr):
     return np.array(non_consec_values)
 
 
-def mask_shared_trace_offsets(stream, min_concerned_trace_pct=0.65,
-                              percentile=99.99, **kwargs):
+def mask_shared_trace_offsets(
+        stream, min_concerned_trace_pct=0.65, percentile=99.99,
+        split_taper_stream=True, min_length_s=10.0, max_percentage=0.1,
+        max_length=1.0, **kwargs):
     """
     Function to correct steps across a full seismic array.
     These steps often create problematic misdetections in template matching.
@@ -1073,11 +1075,16 @@ def mask_shared_trace_offsets(stream, min_concerned_trace_pct=0.65,
         percentile of the largest steps in the data that are checked for being
         overlapping between traces. defaults to 99.9
     :type percentile: float
-    :return: stream where the overlapping steps are masked
+    :return:
+        stream where the overlapping steps are masked. By default, the stream
+        is already tapered and split into the valid data segments. Use 
+        `split_taper_stream=False` to avoid splitting and tapering.
     :rtype: class:`obspy.core.stream.Stream`
     """
     # min_npts = min([tr.stats.npts for tr in st])
     uniq_sampling_rates = list(set([tr.stats.sampling_rate for tr in stream]))
+    # TODO: what to do when sampling rates vary by tiny values? -- hope it
+    #       doesn't usually happen at array data?!
     ret_traces = []  # to collect traces for returned stream
     # one array may have stations with different sampling rates.
     # loop across the stations that share the sampling rates here:
@@ -1142,9 +1149,14 @@ def mask_shared_trace_offsets(stream, min_concerned_trace_pct=0.65,
                 mask[shared_index-2 : shared_index+1] = 1
             tr.data = np.ma.MaskedArray(data=tr.data, mask=mask)
         ret_traces += [tr for tr in s_stream]
-        # stream = stream.split().taper(max_percentage=max_percentage,
-        #                              max_length=max_length)
-    return Stream(ret_traces)
+    # Optionally split and taper stream (this is required to make the artefacts
+    # caused by the steps disappear in filtered data):
+    stream = Stream(ret_traces)
+    if split_taper_stream:
+        stream = load_events_for_detection.taper_trace_segments(
+            stream, min_length_s=min_length_s, max_percentage=max_percentage,
+            max_length=max_length)
+    return stream
 
 
 def mask_array_trace_offsets(stream, seisarray_prefixes=SEISARRAY_PREFIXES,

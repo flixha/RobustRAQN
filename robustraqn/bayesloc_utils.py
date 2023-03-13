@@ -242,9 +242,13 @@ def _select_best_origin(
             orig.origin_uncertainty.max_horizontal_uncertainty):
         hor_uncertainty_km = (
             orig.origin_uncertainty.max_horizontal_uncertainty / 1000)
-    elif (orig.longitude_errors  is not None
-          and orig.longitude_errors.uncertainty  is not None
-          and orig.latitude_errors  is not None
+    elif (orig.origin_uncertainty is not None and 
+            orig.origin_uncertainty.horizontal_uncertainty):
+        hor_uncertainty_km = (
+            orig.origin_uncertainty.horizontal_uncertainty / 1000)
+    elif (orig.longitude_errors is not None
+          and orig.longitude_errors.uncertainty is not None
+          and orig.latitude_errors is not None
           and orig.latitude_errors.uncertainty):
         hor_uncertainty_km = degrees2kilometers((
             (orig.latitude_errors.uncertainty or def_hor_error_deg) +
@@ -278,9 +282,25 @@ def _select_best_origin(
     return orig, priors
 
 
-def _get_traveltime(model, degree, depth, phase):
+def _get_traveltime(models, degree, depth, phase, model_cutoff_distances=[]):
     """
     """
+    if len(model_cutoff_distances) < len(models):
+        model = models[0]
+    else:
+        # Select the correct model according to the cutoff distance of each
+        # model and the source-receiver distance in degrees
+        model = None
+        for jm, cutoff_dist in enumerate(model_cutoff_distances):
+            if jm == 0:
+               if degree <= cutoff_dist:
+                   model = models[jm]
+            elif (degree <= cutoff_dist
+                    and degree > model_cutoff_distances[jm-1]):
+                model = models[jm]
+        if model is None:
+            Logger.error('No velocity model applicable at distance %s',
+                         degree)
     if phase in ['P', 'S']:  # For short phase name, get quickest phase
         phase_list = [phase, phase.lower(), phase + 'g', phase + 'n']
         try:
@@ -338,21 +358,27 @@ def _get_nordic_event_id(event, return_generic_nordic_id=False):
 
 
 def write_ttimes_files(
-        model, mod_name=None,
+        models, model_cutoff_distances=[], mod_names=[], out_name=None,
         phase_list=['P', 'Pg', 'Pn', 'S', 'Sg', 'Sn', 'P1', 'S1'],
         min_depth=0, max_depth=40, depth_step=2, min_degrees=0, max_degrees=10,
+        min_tele_degrees=13,
         degree_step=0.2, outpath='.', print_first_arriving_PS=True,
-        parallel=False, cores=40):
+        full_teleseismic_phases=False, parallel=False, cores=40):
     """
     """
-    if not isinstance(model, TauPyModel):
-        mod_name = str(model.split('/')[-1].split('.')[0])
-        model = TauPyModel(model)
-    else:
-        if mod_name is not None:
-            mod_name = mod_name
+    used_models = []
+    for jm, model in enumerate(models):
+        if not isinstance(model, TauPyModel):
+            mod_name = str(model.split('/')[-1].split('.')[0])
+            model = TauPyModel(model)
         else:
-            mod_name = 'def_'
+            if mod_names:
+                mod_name = mod_names[jm]
+            else:
+                mod_name = 'def_'
+        used_models.append(model)
+        mod_names.append(mod_name)
+    models = used_models
     # model = TauModel.from_file('NNSN1D_plusAK135.npz')
     # a list of epicentral distances without a travel time, and a flag:
     # notimes = []
@@ -361,15 +387,21 @@ def write_ttimes_files(
     # calculate the arrival times and plot vs. epicentral distance:
     depths = np.arange(min_depth, max_depth, depth_step)
     # degrees = np.linspace(min_degrees, max_degrees, npoints)
+    out_name = out_name or mod_names[0]
     degrees = np.arange(min_degrees, max_degrees, degree_step)
     for phase in phase_list:
-        ttfile = mod_name + '.' + phase
+        if full_teleseismic_phases:
+            if phase in ['P', 'S', 'pP', 'sP', 'pS', 'sS']:
+                degrees = np.arange(min_tele_degrees, 360, degree_step)
+            else:
+                degrees = np.arange(min_degrees, max_degrees, degree_step)
+        ttfile = out_name + '.' + phase
         ttfile = os.path.expanduser(os.path.join(outpath, ttfile))
         Logger.info('Writing traveltime table to file %s', ttfile)
         f = open(ttfile, 'wt')
         f.write((
             '# travel-time table for velocityModel=%s and phase=%s. Generated '
-            + 'with Obspy.taup and write_ttimes_files.\n') % (mod_name, phase))
+            + 'with Obspy.taup and write_ttimes_files.\n') % (out_name, phase))
         f.write('%s  Number of depth samples at the following depths (km):\n' %
                 len(depths))
         depths_str = ''.join(['%8.2f' % depth for depth in depths])
@@ -387,9 +419,13 @@ def write_ttimes_files(
         for depth in depths:
             if parallel:
                 ttimes = Parallel(n_jobs=cores)(delayed(_get_traveltime)(
-                    model, degree, depth, comp_phase) for degree in degrees)
+                    models, degree, depth, comp_phase,
+                    model_cutoff_distances=model_cutoff_distances)
+                                                for degree in degrees)
             else:
-                ttimes = [_get_traveltime(model, degree, depth, comp_phase)
+                ttimes = [_get_traveltime(
+                    models, degree, depth, comp_phase,
+                    model_cutoff_distances=model_cutoff_distances)
                           for degree in degrees]
 
             # make sure P and S are the first arrivals -check if Pn or Sn are
@@ -397,10 +433,12 @@ def write_ttimes_files(
             if print_first_arriving_PS:
                 if phase in ['P1', 'S1']:
                     n_ttimes = Parallel(n_jobs=cores)(delayed(_get_traveltime)(
-                        model, degree, depth, comp_phase + 'n')
+                        models, degree, depth, comp_phase + 'n',
+                        model_cutoff_distances=model_cutoff_distances)
                                                       for degree in degrees)
                     b_ttimes = Parallel(n_jobs=cores)(delayed(_get_traveltime)(
-                        model, degree, depth, comp_phase + 'b')
+                        models, degree, depth, comp_phase + 'b',
+                        model_cutoff_distances=model_cutoff_distances)
                                                       for degree in degrees)
                     ttimes = [np.nanmin([ttimes[j], n_ttimes[j], b_ttimes[j]])
                               for j, ttime in enumerate(ttimes)]
@@ -468,13 +506,26 @@ def _fill_bayes_origin_uncertainty(row):
             min_horizontal_uncertainty=ellipse.b * 1000.,
             azimuth_max_horizontal_uncertainty=ellipse.theta,
             preferred_description="uncertainty ellipse")
+    if ellipse is None:
+        Logger.error(
+            'Event %s: Unertainty ellipse could not be created, maybe covarian'
+            'ce values are not positive definite.', row.ev_id)
+        min_unc = min(row.east_sd, row.north_sd)
+        max_unc = max(row.east_sd, row.north_sd)
+        # TODO: fix how this would set the ellipse azimuth incorrectly
+        origin_uncertainty = OriginUncertainty(
+            # horizontal_uncertainty=np.mean([min_unc, max_unc]),
+            max_horizontal_uncertainty=max_unc,
+            min_horizontal_uncertainty=min_unc,
+            azimuth_max_horizontal_uncertainty=0,
+            preferred_description="uncertainty ellipse")
     return origin_uncertainty
 
 
 def read_bayesloc_origins(
         bayesloc_origins_ned_stats_file, cat=Catalog(),
         custom_epoch=None, agency_id='', find_event_without_id=False,
-        s_diff=3, max_bayes_error_km=100):
+        s_diff=3, max_bayes_error_km=100, read_all_iterations=False):
     """
     Read bayesloc origins into Catalog and pandas datafrane
     """
@@ -646,7 +697,67 @@ def read_bayesloc_origins(
                     event.origins = [bayes_orig] + event.origins
                     event.preferred_origin_id = bayes_orig.resource_id
                 # else:
+    if read_all_iterations:
+        bayesloc_origins_file = os.path.join(os.path.split(
+            bayesloc_origins_ned_stats_file)[0], 'origins.out')
+        cat, bayes_df = _cat_add_origin_iterations(
+            cat, bayes_df, custom_epoch=custom_epoch,
+            bayesloc_origins_file=bayesloc_origins_file)
     return cat, bayes_df, bayesloc_solutions_added
+
+
+def _cat_add_origin_iterations(cat, bayes_df, bayesloc_origins_file,
+                               custom_epoch=None):
+    """
+    Read information from origins.out file about all iterations of the Bayesloc
+    MCMC.
+    """
+    # file header:
+    # chain_nr iter_nr ev_id lat lon depth time
+    origin_df = pd.read_csv(bayesloc_origins_file, delimiter=' ')
+    # origin_df.datetime = origin.time
+    
+    # This assumes a default starttime of 1970-01-01T00:00:00
+    origin_times = [time.gmtime(value) for value in origin_df.time.values]
+    # Allow a custom epoch time, e.g., one that starts before 1970
+    if custom_epoch is not None:
+        if isinstance(custom_epoch, UTCDateTime):
+            custom_epoch = custom_epoch.datetime
+        if not isinstance(custom_epoch, datetime):
+            raise TypeError(
+                'custom_epoch needs to be of type datetime.datetime or ' +
+                'UTCDateTime')
+        epoch_correction_s = (
+            custom_epoch - datetime(1970,1,1,0,0,0)).total_seconds()
+        origin_times = [time.gmtime(value + epoch_correction_s)
+                       for value in origin_df.time.values]
+    origin_utctimes = [
+        UTCDateTime(bt.tm_year, bt.tm_mon, bt.tm_mday, bt.tm_hour, bt.tm_min,
+                    bt.tm_sec + (et - int(et)))
+        for bt, et in zip(origin_times, origin_df.time.values)]
+    origin_df['utctime'] = origin_utctimes
+    origin_df['datetime'] = [butc.datetime for butc in origin_utctimes]
+    # Attach dataframe to each Bayesloc origin
+    for event in cat:
+        added_origin_iterations = False
+        for orig in event.origins:
+            # Check if there are origin iterations in the dataframe, then
+            # select all iterations for this origin and attach as dataframe to
+            # origin.
+            if (hasattr(orig, 'extra')
+                    and 'bayesloc_event_id' in orig.extra.keys()
+                    and orig.extra['bayesloc_event_id']['value']
+                    in origin_df.ev_id.values):
+                orig.extra['origin_iterations'] = (
+                    origin_df.loc[origin_df['ev_id'] ==
+                                  orig.extra['bayesloc_event_id']['value']])
+                added_origin_iterations = True
+        if not added_origin_iterations:
+            Logger.debug(
+                'Could not find origin corresponding to origin iteration '
+                'statistics for event %s', event.short_str())
+    return cat, bayes_df
+
 
 
 def read_bayesloc_arrivals(arrival_file, custom_epoch=None):
@@ -982,6 +1093,7 @@ def read_bayesloc_events(bayesloc_output_folder, custom_epoch=None):
 def update_cat_from_bayesloc(
         cat, bayesloc_stats_out_files, custom_epoch=None, agency_id='',
         find_event_without_id=False, s_diff=3, max_bayes_error_km=100,
+        read_all_iterations=False,
         add_arrivals=False, update_phase_hints=False,
         keep_best_fit_pick_only=False, remove_1_suffix=False,
         min_phase_probability=0, **kwargs):
@@ -990,20 +1102,22 @@ def update_cat_from_bayesloc(
     """
     # '/home/felix/Documents2/BASE/Detection/Bitdalsvatnet/Relocation/BayesLoc/'
     #     + 'Bitdalsvatnet_04_prior_955_N_Sg/output/origins_ned_stats.out',
-    
+
     if isinstance(bayesloc_stats_out_files, str):
         bayesloc_stats_out_files = [bayesloc_stats_out_files]
-        
+
     # Loop through multiple bayesloc output folders
     for bayesloc_stats_out_file in bayesloc_stats_out_files:
         bayesloc_folder = bayesloc_stats_out_file
         bayesloc_stats_out_file = get_bayesloc_filepath(
-            bayesloc_stats_out_file, default_output_file='origins_ned_stats.out')
-        
+            bayesloc_stats_out_file,
+            default_output_file='origins_ned_stats.out')
+
         cat, _, bayesloc_solutions_added = read_bayesloc_origins(
             bayesloc_stats_out_file, cat=cat, custom_epoch=custom_epoch,
             agency_id=agency_id, find_event_without_id=find_event_without_id,
-            s_diff=s_diff, max_bayes_error_km=max_bayes_error_km)
+            s_diff=s_diff, max_bayes_error_km=max_bayes_error_km,
+            read_all_iterations=read_all_iterations)
         if not bayesloc_solutions_added:
             continue
         # TODO indicate that this solution is from Bayesloc
@@ -1275,11 +1389,19 @@ def write_arrival_file(
                     # fix P- and S- phase names to Pg / Pn / Sg / Sn?
                     # Sort out picks from stations where there's too few picks:
                     if phases_per_station[
-                        pick.waveform_id.station_code] < minimum_phases_per_station:
+                          pick.waveform_id.station_code] < minimum_phases_per_station:
+                        Logger.error(
+                            'Station %s has not enough phases (%s < %s), '
+                            'skipping pick', pick.waveform_id.station_code,
+                            phases_per_station[pick.waveform_id.station_code],
+                            minimum_phases_per_station)
                         continue
                     if compare_station_to_inventory:
                         sel_inv = inv.select(station=pick.waveform_id.station_code)
                         if len(sel_inv) == 0:
+                            Logger.error(
+                                'Station %s not in inventory, skipping pick',
+                                pick.waveform_id.station_code)
                             continue
                         # Check for case mismatch
                         if sel_inv.networks[
@@ -1333,6 +1455,7 @@ def write_arrival_file(
 
 
 def write_station(inventory, station0_file=None, stations_dat_file=None,
+                  station_df=None, default_elev=0,
                   stations=[], filename="station.dat", write_only_once=True):
     """
     Write a GrowClust formatted station file.
@@ -1396,6 +1519,18 @@ def write_station(inventory, station0_file=None, stations_dat_file=None,
                             elev=line[3] / 1000)
                 station_strings.append(formatter.format(**parts))
                 known_station_names.append(line[0])
+    if station_df is not None:
+        known_station_names += list(station_df.station)
+        for row in station_df.iterrows():
+            if 'elev' in row[1].keys():
+                elev = row[1].elev
+            elif 'elevation' in row[1].keys():
+                elev = row[1].elevation
+            else:
+                elev = default_elev
+            parts = dict(sta=row[1].station[-5:], lat=row[1].lat, lon=row[1].lon,
+                         elev=elev/1000)
+            station_strings.append(formatter.format(**parts))
     with open(filename, "w") as f:
         f.write('sta_id lat lon elev\n')
         f.write("\n".join(station_strings))
@@ -1409,7 +1544,10 @@ def read_stations_dat(path, stations):
     if path is None:
         return None
     stalist = []
-    f = open(path + '/stations.dat', 'r')
+    try:
+        f = open(path + '/stations.dat', 'r')
+    except (FileNotFoundError, NotADirectoryError):
+        f = open(path, 'r')
     for line in f:
         if line[0:5].strip() in stations:
             station = line[0:5].strip()

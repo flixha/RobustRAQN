@@ -10,14 +10,15 @@ from obspy.taup.taup_create import build_taup_model
 # obspy taup velocity models
 
 vel_model_files = glob.glob('*.tvel')
+vel_model_files = glob.glob('Snorre_plusAK135.tvel')
 
 for vel_model_file in vel_model_files:
-    build_taup_model(filename='fescan.tvel', output_folder='.', verbose=True)
+    build_taup_model(filename=vel_model_file, output_folder='.', verbose=True)
 
 
+exit()
 
 velmod = VelocityModel.read_tvel_file(filename='fescan.tvel')
-
 
 model = TauPyModel(model="iasp91")
 

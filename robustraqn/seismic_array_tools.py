@@ -18,6 +18,8 @@ Logger = logging.getLogger(__name__)
 #            "20s()\t%(levelname)s\t%(message)s"))
 
 from collections import Counter, defaultdict
+from multiprocessing import cpu_count
+from concurrent.futures import ThreadPoolExecutor
 
 from obspy import Stream
 from obspy.signal.util import next_pow_2, util_geo_km
@@ -32,6 +34,7 @@ from obspy.core.event import (Catalog, Pick, Arrival, WaveformStreamID,
 from obspy import UTCDateTime
 from obsplus.stations.pd import stations_to_df
 from eqcorrscan.core.match_filter import Party
+from eqcorrscan.utils.despike import _interp_gap
 
 from robustraqn import load_events_for_detection
 
@@ -1037,29 +1040,92 @@ def _check_picks_within_shiftlen(party, event, detection_id, shift_len):
     return event
 
 
-def _non_consecutive(arr):
+def __non_consecutive(arr, neighbor_range=1, neighbor_distance=None):
     """Find non-consecutive numbers in array.
 
     :param arr: sorted array of values
     :type arr: np.array
+    :param neighbor_range:
+        maximum distance across which to consider values as consecutive
+        (i.e. neighbors). 
+    :type neighbor_range: int, defaults to 1.
+    :param neighbor_distance:
+        Distance at which to start comparison of neighboring values (function
+        increases distance recursively from this value. Starts from 1 by 
+        default).
+    :type neighbor_distance: int, Defaults to None.
     :return:
         array of values that appear "isolated" in input, i.e. no neighboring
-        value (i+1, i-1) is in input.
+        value (i+1, i-1) or (i+neighbor_distance, i-neighbor_distance))
+        is in input.
     :rtype: np.array
     """
+    if neighbor_distance is None and neighbor_range > 0:
+        neighbor_distance = 1
     non_consec_values = []
     n_items = len(arr)
     if n_items > 1:
-        for i in range(1, n_items):
-            if arr[i - 1] + 1 != arr[i]:
-                non_consec_values.append(arr[i])
+        for i in range(0, n_items):
+            if i == 0:
+                pass
+            elif arr[i - 1] + neighbor_distance == arr[i]:
+                continue
+            if i == n_items - 1:
+                pass
+            elif arr[i + 1] - neighbor_distance == arr[i]:
+                continue
+            # ELSE:
+            non_consec_values.append(arr[i])
+    # Call function recursively for neighbor-distances larger than 1:
+    if len(non_consec_values) > 1 and neighbor_distance < neighbor_range:
+        non_consec_values = __non_consecutive(
+            np.array(non_consec_values), neighbor_range=neighbor_range,
+            neighbor_distance=neighbor_distance+1)
     return np.array(non_consec_values)
 
 
+def _non_consecutive(arr, neighbor_range=1):
+    """Find non-consecutive numbers in array.
+
+    :param arr: sorted array of values
+    :type arr: np.array
+    :param neighbor_range:
+        maximum distance across which to consider values as consecutive
+        (i.e. neighbors). 
+    :type neighbor_range: int, defaults to 1.
+    :return:
+        array of values that appear "isolated" in input, i.e. no neighboring
+        value (i+1, i-1) or (i+neighbor_distance, i-neighbor_distance))
+        is in input.
+    :rtype: np.array
+    """
+    non_consec_values = []
+    for value in arr:
+        if np.any(np.abs(arr[np.where(
+                arr != value)] - value) <= neighbor_range):
+            continue
+        else:
+            non_consec_values.append(value)
+    return np.array(non_consec_values)
+
+
+def _differentiate_array(arr):
+    """internal function to differentiate 1-D array in parallel
+
+    :param arr: input array
+    :type arr: np.array
+    :return: differentiated array
+    :rtype: np.array
+    """
+    arr = arr[1:] - arr[:-1]
+    return arr
+
+
 def mask_shared_trace_offsets(
-        stream, min_concerned_trace_pct=0.65, min_concerned_traces=3,
-        percentile=99.99, split_taper_stream=True, min_length_s=10.0,
-        max_percentage=0.1, max_length=1.0, **kwargs):
+        stream, min_concerned_trace_pct=0.45, min_concerned_traces=3,
+        percentile=99.99, percentile_exceedance=1.0,
+        split_taper_merge_stream=True, min_length_s=10.0, max_percentage=0.1,
+        max_length=1.0, min_array_step_separation=0.5, cores=None, **kwargs):
     """
     Function to correct steps across a full seismic array.
     These steps often create problematic misdetections in template matching.
@@ -1077,10 +1143,17 @@ def mask_shared_trace_offsets(
         percentile of the largest steps in the data that are checked for being
         overlapping between traces. defaults to 99.9
     :type percentile: float
+    :param min_array_step_separation:
+        minimum separation in seconds by which array steps / signal artefacts
+        need to  separated to be considered as problematic (many closeby sample
+        outliers probably indicate a real high-amplitude wave arrival at the
+        seismic array).
+    :type :min_array_step_separation: float, defaults to 2.0
+
     :return:
         stream where the overlapping steps are masked. By default, the stream
         is already tapered and split into the valid data segments. Use 
-        `split_taper_stream=False` to avoid splitting and tapering.
+        `split_taper_merge_stream=False` to avoid splitting and tapering.
     :rtype: class:`obspy.core.stream.Stream`
     """
     # min_npts = min([tr.stats.npts for tr in st])
@@ -1099,26 +1172,56 @@ def mask_shared_trace_offsets(
             round(n_traces * min_concerned_trace_pct), min_concerned_traces)
         # Trim traces to common start (only if different)
         trace_starts = [tr.stats.starttime for tr in s_stream]
+        trace_ends = [tr.stats.endtime for tr in s_stream]
         if len(list(set([ts.datetime for ts in trace_starts]))) > 1:
             earliest_trace_start = min(trace_starts)
             s_stream.trim(starttime=earliest_trace_start, pad=True)
+        if len(list(set([ts.datetime for ts in trace_ends]))) > 1:
+            latest_trace_end = max(trace_ends)
+            s_stream.trim(endtime=latest_trace_end, pad=True)
 
         ampstep_data_list = []
         # Compute change between consecutive samples for all traces
+        if cores is None:
+            cores = min(len(s_stream), cpu_count())
+        # with ThreadPoolExecutor(max_workers=cores) as executor:
+        #     # Because numpy releases GIL threading can use multiple cores
+        #     ampstep_data_list = executor.map(
+        #         _differentiate_array, [tr.data for tr in s_stream])
         for tr in s_stream:
             ampstep_data_list.append(tr.data[1:] - tr.data[:-1])
         # Store changes in one n_tr x npts array
         ampstep_data = np.abs(np.array(ampstep_data_list))
         # Find the index for the maximum absolute change
-        max_indices = np.argmax(ampstep_data, axis=1)
+        # max_indices = np.argmax(ampstep_data, axis=1)
         # uniq_indices = list(set(max_indices))
         # Find the indices for the 99.xx-percentile values
-        top_percentiles = np.nanpercentile(ampstep_data, percentile, axis=1,
-                                        method='closest_observation')
+
+        # if parallel:
+        # TODO: make this thread-parallel on the numpy-arrays
+        # ampstep_data_list = [np.abs(ampstep_data)
+        #                      for ampstep_data in ampstep_data_list]
+        # with ThreadPoolExecutor(max_workers=cores) as executor:
+        #     # Because numpy releases GIL threading can use multiple cores
+        #     # func_args = {'q': percentile, 'method': 'closest_observation'}
+        #     percentile_list = [percentile for j in ampstep_data_list]
+        #     top_percentiles = executor.map(
+        #         np.nanpercentile, [(ampstep_data, percentile)
+        #                            for ampstep_data in ampstep_data_list])
+        # top_percentiles = [np.nanpercentile(ampstep_data, percentile,
+        #                                     method='closest_observation')
+        #                    for ampstep_data in ampstep_data_list]
+        # trace_top_perc_indices = []
+        # for jt, top_perc in enumerate(top_percentiles):
+        #     trace_top_perc_indices.append(np.where(
+        #         ampstep_data[jt] > percentile_exceedance * top_perc)[0])
+        # else:
+        top_percentiles = np.nanpercentile(
+            ampstep_data, percentile, axis=1, method='closest_observation')
         trace_top_perc_indices = []
         for jt, top_perc in enumerate(top_percentiles):
-            trace_top_perc_indices.append(
-                np.where(ampstep_data[jt,:] > top_perc)[0])
+            trace_top_perc_indices.append(np.where(
+                ampstep_data[jt, :] > percentile_exceedance * top_perc)[0])
         # Quick intersection when all traces need to be concerned
         if min_concerned_trace_pct == 1:
             # find overlap betw index-lists (indices that appear in all lists)
@@ -1137,12 +1240,18 @@ def mask_shared_trace_offsets(
         #        and uniq_indices[0] < min_npts):
 
         # Mask-indices should not be neighboring values - that could indicate
-        # a real high-amplitude arrival
+        # a real high-amplitude arrival. Sort out here all marked samples that
+        # are closer than min_array_step_separation (in seconds) /
+        # array_step_neighbor_range (in samples)
+        array_step_neighbor_range = sampling_rate * min_array_step_separation
         shared_indices.sort()
-        non_consec_shared_indices = _non_consecutive(shared_indices)
+        non_consec_shared_indices = _non_consecutive(
+            shared_indices, neighbor_range=array_step_neighbor_range)
         if len(non_consec_shared_indices) == 0:
             ret_traces += [tr for tr in s_stream]
             continue
+        Logger.debug('Shared indices (n=%s): %s', len(shared_indices),
+                     str(shared_indices))
         Logger.info('Found %s isolated amplitude steps in the seismic array '
                     'data, masking.', len(non_consec_shared_indices))
         Logger.debug('Overlapping step array positions: %s',
@@ -1168,22 +1277,27 @@ def mask_shared_trace_offsets(
             #for mask_index in mask_indices:
             #    mask[mask_index-2 : mask_index+1] = 1
             tr.data = np.ma.MaskedArray(data=tr.data, mask=mask)
+            # for mask_index in mask_indices:  # Interpolate over step?
+            #     tr.data = _interp_gap(tr.data, peak_loc=mask_index,
+            #                           interp_len=0.05)
         ret_traces += [tr for tr in s_stream]
     # Optionally split and taper stream (this is required to make the artefacts
     # caused by the steps disappear in filtered data):
     stream = Stream(ret_traces)
-    if split_taper_stream:
+    if split_taper_merge_stream:
         stream = load_events_for_detection.taper_trace_segments(
             stream, min_length_s=min_length_s, max_percentage=max_percentage,
             max_length=max_length)
+        stream = stream.merge(method=0, fill_value=0, interpolation_samples=0)
     return stream
 
 
 def mask_array_trace_offsets(
         stream, seisarray_prefixes=SEISARRAY_PREFIXES,
-        min_concerned_trace_pct=0.3, min_concerned_traces=3, percentile=99.99,
-        share_masks=False, split_taper_stream=True, min_length_s=10.0,
-        max_percentage=0.1, max_length=1.0, **kwargs):
+        min_concerned_trace_pct=0.45, min_concerned_traces=3,
+        percentile=99.99, percentile_exceedance=1.0, share_masks=False,
+        split_taper_merge_stream=True, min_length_s=10.0, max_percentage=0.1,
+        max_length=1.0, min_array_step_separation=0.5, **kwargs):
     """
     For each seismic array, check whether all (or a set) of the traces display
     a step in the data at the very same time. Mask these steps if present to
@@ -1210,20 +1324,27 @@ def mask_array_trace_offsets(
         Whether the concerning steps should be masked across all traces, no
         matter whether the trace itself has a step there.
     :type share_masks: bool
-    :param split_taper_stream:
+    :param split_taper_merge_stream:
         Whether to split and taper the trace segments (required to actually
         make the step-generated artefacts to disappear in filtered data)
-    :type split_taper_stream: bool
+    :type split_taper_merge_stream: bool
     :param min_length_s: minimum length of trace in seconds to be retained
     :type min_length_s: float
     :param max_percentage: maximum percentage of trace to taper
     :type max_percentage: float
     :param max_length: maximum length (in seconds) of stream to taper
     :type max_length: float
+    :param min_array_step_separation:
+        minimum separation in seconds by which array steps / signal artefacts
+        need to  separated to be considered as problematic (many closeby sample
+        outliers probably indicate a real high-amplitude wave arrival at the
+        seismic array).
+    :type :min_array_step_separation: float, defaults to 2.0
 
-    
+
     """
     Logger.info('Starting checks for overlapping steps on seismic array data.')
+    stream = stream.merge(method=0, fill_value=0, interpolation_samples=0)
     array_st_dict = extract_array_stream(
         stream, seisarray_prefixes=seisarray_prefixes)
     array_traces = [
@@ -1237,7 +1358,9 @@ def mask_array_trace_offsets(
         masked_array_stream = mask_shared_trace_offsets(
             array_stream, min_concerned_trace_pct=min_concerned_trace_pct,
             min_concerned_traces=min_concerned_traces, percentile=percentile,
-            split_taper_stream=False, **kwargs)
+            percentile_exceedance=percentile_exceedance,
+            split_taper_merge_stream=False,
+            min_array_step_separation=min_array_step_separation, **kwargs)
         # the masks between array stations should be similar - apply zeroing-
         # asks to all stations
         if share_masks:
@@ -1255,10 +1378,12 @@ def mask_array_trace_offsets(
         masked_array_traces += masked_array_stream.traces
 
     out_stream = Stream(single_station_traces + masked_array_traces)
-    if split_taper_stream:
+    if split_taper_merge_stream:
         out_stream = load_events_for_detection.taper_trace_segments(
             out_stream, min_length_s=min_length_s,
             max_percentage=max_percentage, max_length=max_length)
+        out_stream = out_stream.merge(
+            method=0, fill_value=0, interpolation_samples=0)
     return out_stream
 
 

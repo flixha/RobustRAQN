@@ -404,6 +404,7 @@ def compute_relative_event_magnitude(
         mag_std = np.round(np.std(delta_mags), 2) + 0
         mag_str = '    '
         if len(previous_magnitudes) == 1:
+            agency_id = None
             try:
                 agency_id = previous_magnitudes[0].creation_info.agency_id
             except AttributeError:

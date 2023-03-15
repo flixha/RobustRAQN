@@ -110,7 +110,7 @@ def prepare_and_update_party(
                 # by how far their origin differs from detection template. Only
                 # accept alternative template within specific bounds.
                 while (not found_ok_match and
-                       choose_index < len(template_name_matches) - 1):
+                       choose_index <= len(template_name_matches) - 1):
                     template_name_match = template_name_matches[choose_index]
                     pick_template = tribe.select(template_name_match)
                     p_origin = pick_template.event.origins[0]
@@ -603,7 +603,7 @@ def pick_events_for_day(
                 threshold_type=threshold_type,
                 re_eval_thresh_factor=re_eval_thresh_factor*0.9,
                 overlap='calculate', plotDir='ReDetectionPlots',
-                plot=plot, multiplot=True, fill_gaps=True,
+                plot=plot, multiplot=multiplot, fill_gaps=True,
                 ignore_bad_data=True, daylong=daylong, ignore_length=True,
                 min_chans=min_det_chans, pre_processed=pre_processed,
                 parallel_process=parallel, cores=cores,

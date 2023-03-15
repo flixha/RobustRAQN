@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 from itertools import chain, repeat
 from collections import Counter
+import copy
 
 from obspy.core.event import (Catalog, Pick, Arrival, WaveformStreamID,
                               CreationInfo)
@@ -649,7 +650,7 @@ def prepare_detection_stream(
 
     # TODO write despiking smartly
     if try_despike:
-        # st_despike = st.copy()
+        # st_dspike = st.copy()
         for tr in st:
             # starttime = tr.stats.starttime
             # endtime = tr.stats.endtime
@@ -1394,10 +1395,17 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
     seed_id_list = [tr.id for tr in day_st]
     unique_seed_id_list = list(dict.fromkeys(seed_id_list))
 
-    # first check for array-wide steps in the data
+    # First check if there are consecutive Zeros in the data (happens for
+    # example in NO array data; this should really be gaps rather than Zeros)
+    day_st = mask_consecutive_zeros(
+        day_st, min_run_length=5, starttime=starttime, endtime=endtime)
+    # Second check for array-wide steps in the data
     if suppress_arraywide_steps:
         day_st = seismic_array_tools.mask_array_trace_offsets(
             day_st, split_taper_stream=False, **kwargs)
+    # Taper all the segments
+    day_st = taper_trace_segments(day_st)
+
     streams = []
     if not parallel:
         for id in unique_seed_id_list:
@@ -1539,10 +1547,14 @@ def init_processing_wRotation(
                      str(starttime))
         return day_st
 
-    # first check for array-wide steps in the data
+    # First check if there are consecutive Zeros in the data (happens for
+    # example in NO array data; this should really be gaps rather than Zeros)
+    day_st = mask_consecutive_zeros(
+        day_st, min_run_length=5, starttime=starttime, endtime=endtime)
+    # Second check for array-wide steps in the data
     if suppress_arraywide_steps:
         day_st = seismic_array_tools.mask_array_trace_offsets(
-            day_st, split_taper_stream=False, **kwargs)
+            day_st, split_taper_stream=True, **kwargs)
 
     # Sort unique-ID list by most common, so that 3-component stations
     # appear first and are processed first in parallel loop (for better load-
@@ -1780,7 +1792,7 @@ def mask_consecutive_zeros(st, min_run_length=5, min_data_percentage=80,
                 else:
                     mask = consecutive_zeros_mask
                 Logger.info(
-                    'Trace %s contains more than %s consecutive zeros, '
+                    'Trace %s contain more than %s consecutive zeros, '
                     'masking Zero data', tr, min_run_length)
                 tr.data = np.ma.MaskedArray(
                     data=tr.data, mask=mask, fill_value=0)
@@ -1869,12 +1881,12 @@ def _init_processing_per_channel(
         Specify whether channels belonging to the same station should be
         normalized to the same (most common) sampling rate).
     """
-    # First check if there are consecutive Zeros in the data (happens for
-    # example in NO array data; this should really be gaps rather than Zeros)
-    st = mask_consecutive_zeros(
-        st, min_run_length=5, starttime=starttime, endtime=endtime)
-    # Taper all the segments
-    st = taper_trace_segments(st)
+    # # First check if there are consecutive Zeros in the data (happens for
+    # # example in NO array data; this should really be gaps rather than Zeros)
+    # st = mask_consecutive_zeros(
+    #     st, min_run_length=5, starttime=starttime, endtime=endtime)
+    # # Taper all the segments
+    # st = taper_trace_segments(st)
     
     if len(st) == 0:
         return st
@@ -1986,13 +1998,13 @@ def _init_processing_per_channel_wRotation(
     """
     outtic = default_timer()
 
-    # First check if there are consecutive Zeros in the data (happens for
-    # example in Norsar data; this should be gaps rather than Zeros)
-    st = mask_consecutive_zeros(st, min_run_length=5)
-    if len(st) == 0:
-        return st
-    # Taper all the segments after inserting nans
-    st = taper_trace_segments(st)
+    # # First check if there are consecutive Zeros in the data (happens for
+    # # example in Norsar data; this should be gaps rather than Zeros)
+    # st = mask_consecutive_zeros(st, min_run_length=5)
+    # if len(st) == 0:
+    #     return st
+    # # Taper all the segments after inserting nans
+    # st = taper_trace_segments(st)
 
     # Second, check trace segments for strange sampling rates and segments that
     # are too short:
@@ -2003,9 +2015,17 @@ def _init_processing_per_channel_wRotation(
         skip_interp_sample_rate_smaller=skip_interp_sample_rate_smaller,
         interpolation_method=interpolation_method)
 
-
+    # If numpy data arrays are read-only (not writeable), need to re-create the
+    # arrays:
+    for tr in st:
+        if not tr.data.flags.writeable:
+            Logger.debug('Array for trace %s: %s', tr, str(tr.data.flags))
+            if isinstance(tr.data, np.ma.MaskedArray):
+                tr.data = np.ma.MaskedArray(tr.data)
+            else:
+                tr.data = np.array(tr.data)
     # Detrend
-    st.detrend(type=detrend_type)
+    st = st.detrend(type=detrend_type)
     # Merge, but keep "copy" of the masked array for filling back
     # Make a copy of the day-stream to find the values that need to be masked.
     masked_st = st.copy()
@@ -2041,7 +2061,7 @@ def _init_processing_per_channel_wRotation(
 
     # Do noise-balancing by the station's PSDPDF average
     if noise_balancing:
-        Logger.info('Applying noise balancing to continuous data.')
+        Logger.debug('Applying noise balancing to continuous data.')
         # if not hasattr(st, "balance_noise"):
         #     bound_method = st_balance_noise.__get__(st)
         #     st.balance_noise = bound_method

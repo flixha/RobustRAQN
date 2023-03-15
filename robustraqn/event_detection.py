@@ -252,7 +252,8 @@ def run_day_detection(
         decluster_metric='thresh_exc', hypocentral_separation=200,
         absolute_values=True, minimum_sample_rate=20,
         time_difference_threshold=3, detect_value_allowed_reduction=2.5,
-        multiplot=False, day_st=Stream(), check_array_misdetections=False,
+        multiplot=False, day_st=Stream(), suppress_arraywide_steps=True,
+        check_array_misdetections=False,
         min_n_station_sites=4, short_tribe=Tribe(), short_tribe2=Tribe(),
         write_party=False, detection_path='Detections', redetection_path=None,
         copy_data=True, return_stream=False, dump_stream_to_disk=False,
@@ -334,7 +335,8 @@ def run_day_detection(
             [tribe.templates, selected_stations, remove_response, inv, output,
              day_stats, noise_balancing, balance_power_coefficient, xcorr_func,
              arch, trig_int, threshold, re_eval_thresh_factor, min_chans,
-             multiplot, check_array_misdetections, short_tribe, short_tribe2,
+             multiplot, check_array_misdetections, suppress_arraywide_steps,
+             short_tribe, short_tribe2,
              write_party, detection_path, redetection_path,
              time_difference_threshold, minimum_sample_rate,
              min_n_station_sites, apply_agc, agc_window_sec, use_weights])
@@ -383,6 +385,7 @@ def run_day_detection(
             remove_response=remove_response, output=output, inv=inv,
             pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],
             parallel=parallel, cores=cores,
+            suppress_arraywide_steps=suppress_arraywide_steps,
             sta_translation_file=sta_translation_file,
             noise_balancing=noise_balancing,
             balance_power_coefficient=balance_power_coefficient, **kwargs)

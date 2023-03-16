@@ -1124,7 +1124,7 @@ def _differentiate_array(arr):
 def mask_shared_trace_offsets(
         stream, min_concerned_trace_pct=0.45, min_concerned_traces=3,
         percentile=99.99, percentile_exceedance=1.0,
-        split_taper_merge_stream=True, min_length_s=10.0, max_percentage=0.1,
+        split_taper_stream=True, min_length_s=10.0, max_percentage=0.1,
         max_length=1.0, min_array_step_separation=0.5, cores=None, **kwargs):
     """
     Function to correct steps across a full seismic array.
@@ -1153,7 +1153,7 @@ def mask_shared_trace_offsets(
     :return:
         stream where the overlapping steps are masked. By default, the stream
         is already tapered and split into the valid data segments. Use 
-        `split_taper_merge_stream=False` to avoid splitting and tapering.
+        `split_taper_stream=False` to avoid splitting and tapering.
     :rtype: class:`obspy.core.stream.Stream`
     """
     # min_npts = min([tr.stats.npts for tr in st])
@@ -1165,6 +1165,8 @@ def mask_shared_trace_offsets(
     # loop across the stations that share the sampling rates here:
     for sampling_rate in uniq_sampling_rates:
         s_stream = stream.select(sampling_rate=sampling_rate)
+        s_stream = s_stream.merge(method=0, fill_value=0,
+                                  interpolation_samples=0)
         s_stream = s_stream.merge(
             method=0, fill_value=0, interpolation_samples=0)
         n_traces = len(s_stream)
@@ -1262,7 +1264,8 @@ def mask_shared_trace_offsets(
             np.array(sorted(list(
                 set(top_indices).intersection(set(non_consec_shared_indices))
                 ))) for top_indices in trace_top_perc_indices]
-        for tr, mask_indices in zip(s_stream, mask_indices_list):
+        for j_tr, (tr, mask_indices) in enumerate(
+                zip(s_stream, mask_indices_list)):
             if len(mask_indices) == 0:
                 continue
             # mask data array around the step - reuse existing mask if present
@@ -1280,11 +1283,14 @@ def mask_shared_trace_offsets(
             # for mask_index in mask_indices:  # Interpolate over step?
             #     tr.data = _interp_gap(tr.data, peak_loc=mask_index,
             #                           interp_len=0.05)
+            # Now trim the trace back to its original length
+            tr = tr.slice(
+                starttime=trace_starts[j_tr], endtime=trace_ends[j_tr])
         ret_traces += [tr for tr in s_stream]
     # Optionally split and taper stream (this is required to make the artefacts
     # caused by the steps disappear in filtered data):
     stream = Stream(ret_traces)
-    if split_taper_merge_stream:
+    if split_taper_stream:
         stream = load_events_for_detection.taper_trace_segments(
             stream, min_length_s=min_length_s, max_percentage=max_percentage,
             max_length=max_length)
@@ -1296,7 +1302,7 @@ def mask_array_trace_offsets(
         stream, seisarray_prefixes=SEISARRAY_PREFIXES,
         min_concerned_trace_pct=0.45, min_concerned_traces=3,
         percentile=99.99, percentile_exceedance=1.0, share_masks=False,
-        split_taper_merge_stream=True, min_length_s=10.0, max_percentage=0.1,
+        split_taper_stream=True, min_length_s=10.0, max_percentage=0.1,
         max_length=1.0, min_array_step_separation=0.5, **kwargs):
     """
     For each seismic array, check whether all (or a set) of the traces display
@@ -1324,10 +1330,10 @@ def mask_array_trace_offsets(
         Whether the concerning steps should be masked across all traces, no
         matter whether the trace itself has a step there.
     :type share_masks: bool
-    :param split_taper_merge_stream:
+    :param split_taper_stream:
         Whether to split and taper the trace segments (required to actually
         make the step-generated artefacts to disappear in filtered data)
-    :type split_taper_merge_stream: bool
+    :type split_taper_stream: bool
     :param min_length_s: minimum length of trace in seconds to be retained
     :type min_length_s: float
     :param max_percentage: maximum percentage of trace to taper
@@ -1344,7 +1350,7 @@ def mask_array_trace_offsets(
 
     """
     Logger.info('Starting checks for overlapping steps on seismic array data.')
-    stream = stream.merge(method=0, fill_value=0, interpolation_samples=0)
+    # stream = stream.merge(method=0, fill_value=0, interpolation_samples=0)
     array_st_dict = extract_array_stream(
         stream, seisarray_prefixes=seisarray_prefixes)
     array_traces = [
@@ -1359,7 +1365,7 @@ def mask_array_trace_offsets(
             array_stream, min_concerned_trace_pct=min_concerned_trace_pct,
             min_concerned_traces=min_concerned_traces, percentile=percentile,
             percentile_exceedance=percentile_exceedance,
-            split_taper_merge_stream=False,
+            split_taper_stream=False,
             min_array_step_separation=min_array_step_separation, **kwargs)
         # the masks between array stations should be similar - apply zeroing-
         # asks to all stations
@@ -1378,12 +1384,15 @@ def mask_array_trace_offsets(
         masked_array_traces += masked_array_stream.traces
 
     out_stream = Stream(single_station_traces + masked_array_traces)
-    if split_taper_merge_stream:
+    if split_taper_stream:
         out_stream = load_events_for_detection.taper_trace_segments(
             out_stream, min_length_s=min_length_s,
             max_percentage=max_percentage, max_length=max_length)
-        out_stream = out_stream.merge(
-            method=0, fill_value=0, interpolation_samples=0)
+        # Do not merge here - the stream could contain traces with same ID and
+        # different sampling rates. This will be handled in the internal loop
+        # in robustraqn.load_events_for_detection._init_processing_per_channel
+        # out_stream = out_stream.merge(
+        #     method=0, fill_value=0, interpolation_samples=0)
     return out_stream
 
 

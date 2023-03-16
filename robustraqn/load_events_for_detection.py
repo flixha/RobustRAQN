@@ -1402,9 +1402,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
     # Second check for array-wide steps in the data
     if suppress_arraywide_steps:
         day_st = seismic_array_tools.mask_array_trace_offsets(
-            day_st, split_taper_stream=False, **kwargs)
-    # Taper all the segments
-    day_st = taper_trace_segments(day_st)
+            day_st, split_taper_stream=True, **kwargs)
 
     streams = []
     if not parallel:
@@ -1844,6 +1842,7 @@ def taper_trace_segments(stream, min_length_s=2.0, max_percentage=0.1,
     :type max_percentage: float, optional
     :param max_length: maximum taper lenght in s, defaults to 1.0
     :type max_length: float, optional
+
     :return: stream with tapered / remaining traces
     :rtype: :class:`obspy.core.stream.Stream`
     """
@@ -2308,7 +2307,6 @@ def check_normalize_sampling_rate(
                         tr.resample(
                             sampling_rate=def_channel_sample_rate,
                             window='hann', no_filter=True, strict_length=False)
-
                         # Make sure data have the same datatype as before
                         if tr.data.dtype is not raw_datatype:
                             tr.data = tr.data.astype(raw_datatype)
@@ -2372,6 +2370,44 @@ def try_remove_responses(
         parallel=False, cores=None, thread_parallel=False, n_threads=1,
         output='DISP', gain_traces=True, **kwargs):
     """
+    Wrapper function to try to remove response from all traces in parallel,
+    taking care of a few common issues with response defintions (e.g.,
+    incorrect location code).
+
+    :param stream: stream containing traces for response-removal
+    :type stream: :class:`obspy.core.stream.Stream`
+    :param inventory: inventory containing all available responses
+    :type inventory: :class:`obspy.core.inventory.Inventory`
+    :param taper_fraction: fraction of trace to be tapered, defaults to 0.05
+    :type taper_fraction: float, optional
+    :param pre_filt:
+        list of optional pre-filtering parameters, defaults to None
+    :type pre_filt: list of float, optional
+    :param parallel: remove responses in parallel, defaults to False
+    :type parallel: bool, optional
+    :param cores: maximum number of cores, defaults to None
+    :type cores: int, optional
+    :param thread_parallel:
+        option to use thread-parallelism when run from within a subprocess
+        (better use parallel=True for proper process-parallelism),
+        defaults to False
+    :type thread_parallel: bool, optional
+    :param n_threads: maximum number of threads, defaults to 1
+    :type n_threads: int, optional
+    :param output:
+        physical output magnitude after response removal (displacement,
+        velocity or acceleration), defaults to 'DISP'
+    :type output: 'DISP', 'VEL', or 'ACC', optional
+    :param gain_traces:
+        whether to multiply traces with a gain-factor so that corrected trace-
+        values fit into float16 / float32 variables (else: float16-error),
+        defaults to True
+    :type gain_traces: bool, optional
+
+    :return:
+        stream with response of each trace removed (if no response found, trace is
+        kept, potentially with dummy filter)
+    :rtype: :class:`obspy.core.stream.Stream`
     """
     if len(stream) == 0:
         Logger.warning('Stream is empty')
@@ -2397,32 +2433,6 @@ def try_remove_responses(
     else:
         if cores is None:
             cores = min(len(stream), cpu_count())
-
-        # If this function is called from a subprocess and asked for parallel
-        # execution, then open a thread-pool to distribute work further.
-        # if current_process().name == 'MainProcess':
-        #     my_pool = get_context("spawn").Pool
-        # else:
-        #     my_pool = ThreadPool
-
-        # with threadpool_limits(limits=1, user_api='blas'):
-        #     with pool_boy(
-        #         Pool=my_pool, traces=len(stream), cores=cores) as pool:
-        #         # params = ((tr, inventory, taper_fraction, parallel, cores)
-        #         #          for tr in stream)
-        #         results = [pool.apply_async(
-        #             _try_remove_responses,
-        #             args=(tr, inventory.select(station=tr.stats.station),
-        #                   taper_fraction, pre_filt, output)
-        #             ) for tr in stream]
-        # traces = [res.get() for res in results]
-        # traces = [tr for tr in traces if tr is not None]
-        # st = Stream(traces=traces)
-
-        # my_pool().close()
-        # my_pool().join()
-        # my_pool().terminate()
-
         with threadpool_limits(limits=n_threads, user_api='blas'):
             streams = Parallel(n_jobs=cores)(
                 delayed(_try_remove_responses)
@@ -2431,26 +2441,36 @@ def try_remove_responses(
                 for tr in stream)
         # st = Stream([tr for trace_st in streams for tr in trace_st])
         stream = Stream([tr for tr in streams])
-
-        # params = ((sub_arr, arr_thresh, trig_int, full_peaks)
-        #             for sub_arr, arr_thresh in zip(arr, thresh))
-
-        # with pool_boy(Pool, len(stream_dict), cores=max_workers) as pool:
-        #     func = partial(
-        #         _meta_filter_stream, stream_dict=stream_dict,
-        #         lowcut=lowcut, highcut=highcut)
-        #     results = [pool.apply_async(func, key)
-        #                 for key in stream_dict.keys()]
-        # for result in results:
-        #     processed_stream_dict.update(result.get())
-
     return stream
 
 
 def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
                           output='DISP', gain_traces=True, **kwargs):
-    """
-    Internal function that tries to remove the response from a trace
+    """Internal function that tries to remove the response from a trace
+
+    :param tr: trace for response-removal
+    :type tr: :class:`obspy.core.trace.Trace`
+    :param inv: inventory containing all available responses
+    :type inv: :class:`obspy.core.inventory.Inventory`
+    :param taper_fraction: fraction of trace to be tapered, defaults to 0.05
+    :type taper_fraction: float, optional
+    :param pre_filt:
+        list of optional pre-filtering parameters, defaults to None
+    :type pre_filt: list of float, optional
+    :param output:
+        physical output magnitude after response removal (displacement,
+        velocity or acceleration), defaults to 'DISP'
+    :type output: 'DISP', 'VEL', or 'ACC', optional
+    :param gain_traces:
+        whether to multiply traces with a gain-factor so that corrected trace-
+        values fit into float16 / float32 variables (else: float16-error),
+        defaults to True
+    :type gain_traces: bool, optional
+
+    :return:
+        trace with response removed (if no response found, dummy filter can be
+        applied to trace)
+    :rtype: :class:`obspy.core.trace.Trace`
     """
     # remove response
     outtic = default_timer()
@@ -2488,7 +2508,6 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
         # similar to the properly corrected traces
         if not found_matching_resp:
             tr.data = tr.data / 1e6
-
     # Set station coordinates
     # initialize
     tr.stats["coordinates"] = {}
@@ -2543,12 +2562,21 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
 
 
 def try_find_matching_response(tr, inv, **kwargs):
-    """
-    If code doesn't find the response, then assume that the trace's
-    metadata lack network or location code. Look for reponse in inv-
-    entory that has the same station code, and check start/endtimes
-    of channel - correct trace stats if there's a match.
-    :returns: bool, trace, inventory
+    """Try to remove response from one trace
+
+    :param tr: trace for response-removal
+    :type tr: :class:`obspy.core.trace.Trace`
+    :param inv: inventory containing all available responses
+    :type inv: :class:`obspy.core.inventory.Inventory`
+
+    :return: trace with response removed
+    :rtype: :class:`obspy.core.trace.Trace`
+
+    Note: If code doesn't find the response, then assume that the trace's
+          metadata lack network or location code. Look for reponse in inv-
+          entory that has the same station code, and check start/endtimes
+          of channel - correct trace stats if there's a match.
+          :returns: bool, trace, inventory
 
     Logic:
     1. only location code is empty:
@@ -2567,11 +2595,11 @@ def try_find_matching_response(tr, inv, **kwargs):
     # 1. only location code is empty:
     if ((tr.stats.location == '' or tr.stats.location == '--')
             and not tr.stats.network == ''):
-        tempInv = inv.select(network=tr.stats.network,
+        temp_inv = inv.select(network=tr.stats.network,
                              station=tr.stats.station,
                              channel=tr.stats.channel)
         found = False
-        for network in tempInv.networks:
+        for network in temp_inv.networks:
             for station in network.stations:
                 for channel in station.channels:
                     if response_stats_match(tr, channel):
@@ -2583,11 +2611,11 @@ def try_find_matching_response(tr, inv, **kwargs):
     #    for an empty location code.
     if (not (tr.stats.location == '' or tr.stats.location == '--') and
             not tr.stats.network == ''):
-        tempInv = inv.select(network=tr.stats.network,
+        temp_inv = inv.select(network=tr.stats.network,
                              station=tr.stats.station,
                              channel=tr.stats.channel)
         found = False
-        for network in tempInv.networks:
+        for network in temp_inv.networks:
             for station in network.stations:
                 for channel in station.channels:
                     if response_stats_match(tr, channel):
@@ -2597,11 +2625,11 @@ def try_find_matching_response(tr, inv, **kwargs):
                         return True, tr, inv
     # 2. network code is empty
     if tr.stats.network == '':
-        tempInv = inv.select(station=tr.stats.station,
+        temp_inv = inv.select(station=tr.stats.station,
                              location=tr.stats.location,
                              channel=tr.stats.channel)
         found = False
-        for network in tempInv.networks:
+        for network in temp_inv.networks:
             for station in network.stations:
                 # chan_codes = [c.code for c in station.channels]
                 for channel in station.channels:
@@ -2612,10 +2640,10 @@ def try_find_matching_response(tr, inv, **kwargs):
                         return True, tr, inv
     # 3. if not found, try again and allow any location code
     if tr.stats.network == '':
-        tempInv = inv.select(station=tr.stats.station,
+        temp_inv = inv.select(station=tr.stats.station,
                              channel=tr.stats.channel)
         found = False
-        for network in tempInv.networks:
+        for network in temp_inv.networks:
             for station in network.stations:
                 for channel in station.channels:
                     if response_stats_match(tr, channel):
@@ -2627,13 +2655,13 @@ def try_find_matching_response(tr, inv, **kwargs):
     # 4 if not found, check if the channel code may contain a space in
     #   the middle
     if tr.stats.channel[1] == ' ' or tr.stats.channel[1] == '0':
-        tempInv = inv.select(network=tr.stats.network,
+        temp_inv = inv.select(network=tr.stats.network,
                              station=tr.stats.station,
                              location=tr.stats.location,
                              channel=tr.stats.channel[0] + '?' +
                              tr.stats.channel[2])
         found = False
-        for network in tempInv.networks:
+        for network in temp_inv.networks:
             for station in network.stations:
                 for channel in station.channels:
                     if response_stats_match(tr, channel):
@@ -2642,12 +2670,12 @@ def try_find_matching_response(tr, inv, **kwargs):
                                                        station, channel)
                         return True, tr, inv
         # 5 if not found, allow space in channel and empty network
-        tempInv = inv.select(station=tr.stats.station,
+        temp_inv = inv.select(station=tr.stats.station,
                              location=tr.stats.location,
                              channel=tr.stats.channel[0] + '?' +
                              tr.stats.channel[2])
         found = False
-        for network in tempInv.networks:
+        for network in temp_inv.networks:
             for station in network.stations:
                 for channel in station.channels:
                     if response_stats_match(tr, channel):
@@ -2657,12 +2685,12 @@ def try_find_matching_response(tr, inv, **kwargs):
                                                        station, channel)
                         return True, tr, inv
         # 6 if not found, allow space in channel and empty location
-        tempInv = inv.select(network=tr.stats.network,
+        temp_inv = inv.select(network=tr.stats.network,
                              station=tr.stats.station,
                              channel=tr.stats.channel[0] + '?' +
                              tr.stats.channel[2])
         found = False
-        for network in tempInv.networks:
+        for network in temp_inv.networks:
             for station in network.stations:
                 for channel in station.channels:
                     if response_stats_match(tr, channel):
@@ -2673,11 +2701,11 @@ def try_find_matching_response(tr, inv, **kwargs):
                         return True, tr, inv
         # 7 if not found, allow space in channel, empty network, and
         #   empty location
-        tempInv = inv.select(station=tr.stats.station,
+        temp_inv = inv.select(station=tr.stats.station,
                              channel=tr.stats.channel[0] + '?' +
                              tr.stats.channel[2])
         found = False
-        for network in tempInv.networks:
+        for network in temp_inv.networks:
             for station in network.stations:
                 for channel in station.channels:
                     if response_stats_match(tr, channel):
@@ -2693,9 +2721,16 @@ def try_find_matching_response(tr, inv, **kwargs):
 
 def response_stats_match(tr, channel, **kwargs):
     """
-    check whether some criteria of the inventory-response and the trace match
-    tr: obspy.trace
-    channel: inv.networks.channel
+    Check whether some criteria (validity period, sampling rate) of the
+    inventory-response and the trace match
+
+    :param tr: trace for which to check the information in the channel-response
+    :type tr: :class:`obspy.core.trace.Trace`
+    :param channel: _description_
+    :type channel: :class:`obspy.core.inventory.Channel`
+
+    :return: Whether the channel response matches with the trace.
+    :rtype: bool
     """
     sample_rate_diff = abs(channel.sample_rate - tr.stats.sampling_rate)
     if (channel.start_date <= tr.stats.starttime
@@ -2708,7 +2743,21 @@ def response_stats_match(tr, channel, **kwargs):
 
 
 def return_matching_response(tr, inv, network, station, channel, **kwargs):
-    """
+    """Return the first matching response for a trace.
+
+    :param tr: trace for which to return matching response
+    :type tr: :class:`obspy.core.trace.Trace`
+    :param inv: inventory with all available responses
+    :type inv: :class:`obspy.core.inventory.Inventory`
+    :param network: selected network
+    :type network: :class:`obspy.core.inventory.Network`
+    :param station: selected station
+    :type station: :class:`obspy.core.inventory.Station`
+    :param channel: selected channel
+    :type channel: :class:`obspy.core.inventory.Channel`
+
+    :return: Inventory containing matching responses only
+    :rtype: :class:`obspy.core.inventory.Inventory`
     """
     inv = inv.select(
         network=network.code, station=station.code, channel=channel.code,
@@ -2728,11 +2777,54 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
                          forbidden_chan_file="", rotate=True,
                          thread_parallel=False, n_threads=1, **kwargs):
     """
-    1. Correct non-FDSN-standard-complicant channel codes
-    2. Rotate to proper ZNE, and hence change codes from [Z12] to [ZNE]
-    3. Translate old station code
-    4. Set all network codes to NS.
-    5. Set all location codes to 00.
+    Normalize Network/station/location/channel codes to a standard so that
+    data from different time periods can be directly compared / correlated.
+
+    That usually requires the following steps:
+        1. Correct non-FDSN-standard-complicant channel codes
+        2. Rotate to proper ZNE, and hence change codes from [Z12] to [ZNE]
+        3. Translate old station code
+        4. Set all network codes to NS.
+        5. Set all location codes to 00.
+
+    :param st: _description_
+    :type st: :class:`obspy.core.stream.Stream`
+    :param inv: _description_
+    :type inv: :class:`obspy.core.inventory.Inventory`
+    :param std_network_code: default network code, defaults to "NS"
+    :type std_network_code: str, optional
+    :param std_location_code: default location code, defaults to "00"
+    :type std_location_code: str, optional
+    :param std_channel_prefix:
+        default channel prefix (band + instrument code), defaults to "BH"
+    :type std_channel_prefix: str, optional
+    :param parallel: run function in parallel, defaults to False
+    :type parallel: bool, optional
+    :param cores: maximum number of cores to use, defaults to None
+    :type cores: int, optional
+    :param sta_translation_file:
+        file which contains 2 columns with station names - 1st col: default
+        station name, 2nd col: any alternative station names for the same
+        station, defaults to "station_code_translation.txt"
+    :type sta_translation_file: str, optional
+    :param forbidden_chan_file:
+        file that contains a list of explicitly disallowed channel names,
+        defaults to ""
+    :type forbidden_chan_file: str, optional
+    :param rotate:
+        Whether to rotate all 3-component channel sets to Z-N-E,
+        defaults to True
+    :type rotate: bool, optional
+    :param thread_parallel:
+        option to use thread-parallelism when run from within a subprocess
+        (better use parallel=True for proper process-parallelism),
+        defaults to False
+    :type thread_parallel: bool, optional
+    :param n_threads: maximum number of threads, defaults to 1
+    :type n_threads: int, optional
+
+    :return: stream with normalized traces
+    :rtype: :class:`obspy.core.stream.Stream`
     """
     # 0. remove forbidden channels that cause particular problems
     if forbidden_chan_file != "":

@@ -51,6 +51,8 @@ def get_waveforms_bulk(self, bulk, parallel=False, cores=16):
     Logger.info('Start bulk-read')
     outtic = default_timer()
     st = Stream()
+    if not bulk:
+        return st
     if parallel:
         if cores is None:
             cores = min(len(bulk), cpu_count())
@@ -111,8 +113,7 @@ def document_client_read_error(s):
 #     """
 #     print("handle signal", sigNum)
 
-def _get_waveforms_bulk_parallel_naive(self, bulk, parallel=True,
-                                           cores=None):
+def _get_waveforms_bulk_parallel_naive(self, bulk, parallel=True, cores=None):
         """
         parallel implementation of get_waveforms_bulk.
         """

@@ -74,7 +74,7 @@ from robustraqn.quality_metrics import (
     create_bulk_request, get_waveforms_bulk, read_ispaq_stats)
     #get_parallel_waveform_client)
 from robustraqn.load_events_for_detection import (
-    prepare_detection_stream, init_processing, init_processing_wRotation,
+    prepare_detection_stream, init_processing, init_processing_w_rotation,
     print_error_plots, get_all_relevant_stations, reevaluate_detections,
     multiplot_detection, try_apply_agc)
 from robustraqn.spectral_tools import (Noise_model,
@@ -379,7 +379,7 @@ def run_day_detection(
         # Do initial processing (rotation, stats normalization, merging)
         # by parallelization across three-component seismogram sets.
         nyquist_f = minimum_sample_rate / 2
-        day_st = init_processing_wRotation(
+        day_st = init_processing_w_rotation(
             day_st, starttime=starttime_req, endtime=endtime_req,
             # day_st, starttime=starttime, endtime=endtime,
             remove_response=remove_response, output=output, inv=inv,

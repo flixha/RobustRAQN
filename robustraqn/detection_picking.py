@@ -35,7 +35,7 @@ from robustraqn.quality_metrics import (
     create_bulk_request, get_waveforms_bulk, read_ispaq_stats,
     get_parallel_waveform_client)
 from robustraqn.load_events_for_detection import (
-    prepare_detection_stream, init_processing, init_processing_wRotation,
+    prepare_detection_stream, init_processing, init_processing_w_rotation,
     get_all_relevant_stations, normalize_NSLC_codes, reevaluate_detections,
     try_apply_agc)
 from robustraqn.templates_creation import (_shorten_tribe_streams)
@@ -456,7 +456,7 @@ def pick_events_for_day(
     #     parallel=parallel, cores=cores, **kwargs)
     
     nyquist_f = minimum_sample_rate / 2
-    day_st = init_processing_wRotation(
+    day_st = init_processing_w_rotation(
         day_st, starttime=starttime_req, endtime=endtime_req,
         remove_response=remove_response, output=output, inv=inv,
         pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],

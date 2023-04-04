@@ -12,7 +12,7 @@ import difflib
 import pandas as pd
 from pathlib import Path
 
-from obspy.core.stream import Stream
+# from obspy.core.stream import Stream
 from obspy.core.event import (Event, Catalog, Origin, Comment, CreationInfo,
                               WaveformStreamID)
 from obspy.io.nordic.core import read_nordic, write_select, _write_nordic
@@ -23,6 +23,7 @@ from eqcorrscan.core.match_filter.tribe import Tribe
 from eqcorrscan.core.match_filter.party import Party
 
 from robustraqn.obspy.clients.filesystem.sds import Client
+from robustraqn.obspy.core import Stream, Trace
 from robustraqn.quality_metrics import (get_waveforms_bulk, read_ispaq_stats)
 from robustraqn.seismic_array_tools import get_station_sites
 from robustraqn.relative_magnitude_util import compute_relative_event_magnitude
@@ -665,10 +666,20 @@ def extract_stream_for_picked_events(
 
 
 def replace_templates_for_picking(party, tribe, set_sample_rate=100.0):
-    """"
+    """
     replace the old templates in the detection-families with those for
     picking (these contain more channels)
+
+    :param party: _description_
+    :type party: _type_
+    :param tribe: _description_
+    :type tribe: _type_
+    :param set_sample_rate: _description_, defaults to 100.0
+    :type set_sample_rate: float, optional
+    :return: _description_
+    :rtype: _type_
     """
+    
 
     for family in party.families:
         family.template.samp_rate = set_sample_rate

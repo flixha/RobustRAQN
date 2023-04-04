@@ -48,6 +48,39 @@ def balance_noise(self, inv, balance_power_coefficient=2,
     """
     Normalize the frequency content of the seismogram recorded at a station
     by the station's noise profile.
+
+    :type self: :class:`~obspy.core.trace.Trace`
+    :param self:
+        Trace for which to balance the noise (i.e., whiten the noise according
+        to the station's noise profile). Signal within the frequency range
+        with least noise will be amplified, while signal within the frequency
+        with most noise will be attenuated.
+    :type inv: :class:`~obspy.core.inventory.inventory.Inventory`
+    :param inv:
+        Inventory object containing the channel responses and the noise model
+        for the station.
+    :type balance_power_coefficient: float
+    :param balance_power_coefficient:
+        Power coefficient to balance the noise by (default: 2, meaning that the
+        signal spectrum will be multiplied by the square of the noise model
+        frequency profile).
+    :type water_level_above_5s_in_db: float
+    :param water_level_above_5s_in_db:
+        Noise profile water level above 5s in dB (default: -150, this is to
+        avoid over-amplification of very low frequency noise).
+    :type ground_motion_input: list
+    :param ground_motion_input:
+        List of the type of ground motion in the input data, can be 'acc',
+        'vel' or 'disp' (if not given, the ground motion type will be inferred
+        from the processing info)
+    :type sta_translation_file: str
+    :param sta_translation_file: Path to the station name translation file.
+    :type max_percentage: float
+    :param max_percentage:
+        Maximum percentage of the trace to be tapered on the sides.
+
+    :return: Trace with balanced noise.
+    :rtype: :class:`~obspy.core.trace.Trace`
     """
     if len(self.data) == 0:
         Logger.warning('Cannot balance trace by noise PDF, there is no data '
@@ -181,6 +214,26 @@ def st_balance_noise(
     """
     Normalize the frequency content of a stream by the mean / mode / median
     noise PDF at that station site.
+
+    :param inv: Inventory object containing the noise model for the stations
+    :type inv: :class:`obspy.core.inventory.inventory.Inventory`
+    :param balance_power_coefficient:
+        Power coefficient to emphasize low-noise frequencies (default: 2).
+    :type balance_power_coefficient: float
+    :param ground_motion_input:
+        Ground motion type of the input data, e.g. VEL, ACC, DISP. If not
+        given, it will be read from the trace's processing-info.
+    :type ground_motion_input: str
+    :type water_level_above_5s_in_db: float
+    :param water_level_above_5s_in_db:
+        Noise profile water level above 5s in dB (default: -150, this is to
+        avoid over-amplification of very low frequency noise).
+    :type water_level_above_5s_in_db: float
+    :param sta_translation_file: Path to station name translation file.
+    :type sta_translation_file: str
+
+    :return: Stream with balanced traces
+    :rtype: :class:`obspy.core.stream.Stream`
     """
     for tr in self:
         # Add balancing-function as bound method to Trace
@@ -204,7 +257,25 @@ def st_balance_noise(
 def sum_station_pdf(inv, pdf_dir, network, station, location="*",
                     channel="???"):
     """
-    create a mega pdf for one network / channel / location / station
+    Create a mega pdf for one network / channel / location / station
+    
+    :param inv: Inventory object containing the noise model for the stations
+    :type inv: :class:`obspy.core.inventory.inventory.Inventory`
+    :param pdf_dir:
+        Directory containing the station pdfs (csv or parquet files) computed
+        by ISPAQ.
+    :type pdf_dir: str
+    :param network: Network code
+    :type network: str
+    :param station: Station code for which to perform the calculation
+    :type station: str
+    :param location: Location code
+    :type location: str
+    :param channel: Channel code
+    :type channel: str
+
+    :return: Tuple of frequencies and amplitudes of the mega pdf
+    :rtype: tuple
     """
     # Get list of existing PDFs for individual NSLC
     pdffiles = wcmatch.glob.glob(
@@ -214,8 +285,8 @@ def sum_station_pdf(inv, pdf_dir, network, station, location="*",
 
     # Sum all individual station PDFs to produce composite pdf
     # or read results from a previous calculation
-    freq_u, db_u = findPDFBounds(pdffiles)
-    freq_u_str = findUniqFreq(pdffiles)
+    freq_u, db_u = find_pdf_bounds(pdffiles)
+    freq_u_str = find_uniq_freq(pdffiles)
 
     station_pdf_folder = 'StationPDFs'
     if not os.path.exists(station_pdf_folder):
@@ -225,7 +296,7 @@ def sum_station_pdf(inv, pdf_dir, network, station, location="*",
         station_pdf_folder, network + '.' + station + '.' + location + '.'
         + channel)
 
-    pdf = calcMegaPDF(
+    pdf = calc_mega_pdf(
         freq_u, freq_u_str, db_u, pdffiles, outpdffile=outpdffile)
     newpdf_norm = normalize_pdf(pdf, freq_u)
 
@@ -248,7 +319,17 @@ def sum_station_pdf(inv, pdf_dir, network, station, location="*",
 
 
 def normalize_pdf(pdf, freq_u):
-    """ Normalize PDF since MUSTANG returns hit counts not %
+    """ Normalize PDF since MUSTANG returns hit counts not probabilities.
+
+    :param pdf:
+        Probability density function matrix (rows: freq, cols: amp) from
+        ISPAQ / MUSTANG.
+    :type pdf: numpy.ndarray
+    :param freq_u: Unique frequencies
+    :type freq_u: numpy.ndarray
+
+    :return: Normalized PDF matrix
+    :rtype: numpy.ndarray
     """
     newpdf_norm = np.zeros(shape=pdf.shape, dtype=np.float_)
     for i in range(len(freq_u)):
@@ -263,6 +344,22 @@ def normalize_pdf(pdf, freq_u):
 def find_unique_sampling_rates(inv, network, station, location, channel):
     """
     Return unique list of sampling rates for the stations/location/channel
+    
+    :param inv: Inventory object containing the noise model for the stations
+    :type inv: :class:`obspy.core.inventory.inventory.Inventory`
+    :param network: Network code
+    :type network: str
+    :param station: Station code
+    :type station: str
+    :param location: Location code
+    :type location: str
+    :param channel: Channel code
+    :type channel: str
+    :return: List of unique sampling rates
+    :rtype: list
+
+    :return: List of unique sampling rates for network/station/location/channel
+    :rtype: list
     """
     sample_rates_list = list()
     # do station=* to allow extended globbing patterns for stations
@@ -281,14 +378,28 @@ def find_unique_sampling_rates(inv, network, station, location, channel):
     return sample_rates_df
 
 
-def calcMegaPDF(freq_u, freq_u_str, db_u, pdffiles, outpdffile='megapdf.npy'):
-    '''
+def calc_mega_pdf(freq_u, freq_u_str, db_u, pdffiles, outpdffile='megapdf.npy'):
+    """
     based on a previous version by Emily Wolin. Integrated from
     https://github.com/ewolin/HighFreqNoiseMustang_paper
 
     Add together all PSDPDFs in pdffiles!
     And save as .npy file for easier reading later
-    '''
+
+    :param freq_u: Frequency boundaries
+    :type freq_u: numpy.ndarray
+    :param freq_u_str: Unique frequencies
+    :type freq_u_str: numpy.ndarray
+    :param db_u: Amplitude boundaries
+    :type db_u: numpy.ndarray
+    :param pdffiles: List of PDF files from ISPAQ / MUSTANG
+    :type pdffiles: list
+    :param outpdffile: Output file name
+    :type outpdffile: str
+
+    :return: Composite PDF matrix
+    :rtype: numpy.ndarray
+    """
     # Set up dictionaries to convert freq and db to integers.
     # Use integers for freq to avoid floating point errors
     # and make binning faster.
@@ -313,8 +424,8 @@ def calcMegaPDF(freq_u, freq_u_str, db_u, pdffiles, outpdffile='megapdf.npy'):
             continue
 
         # check microseism looks ok
-        microseism_ok = isMicroseismOk(freq, db, hits, db_tol=20,
-                                       max_hits_perc=20, f_min=0.2, f_max=0.4)
+        microseism_ok = is_microseism_ok(
+            freq, db, hits, db_tol=20, max_hits_perc=20, f_min=0.2, f_max=0.4)
         # microseism_ok = True
         if microseism_ok:
             logfile.write('{0}\n'.format(infile.split('/')[-1]))
@@ -347,14 +458,32 @@ def calcMegaPDF(freq_u, freq_u_str, db_u, pdffiles, outpdffile='megapdf.npy'):
     return pdf
 
 
-def isMicroseismOk(freq, db, hits, db_tol=5, max_hits_perc=20, f_min=0.2,
+def is_microseism_ok(freq, db, hits, db_tol=5, max_hits_perc=20, f_min=0.2,
                    f_max=0.4):
-    '''
+    """
     copyright Emily Wolin. Integrated from
     https://github.com/ewolin/HighFreqNoiseMustang_paper
 
     Check that a PDF does not fall too far below the Peterson NLNM
-    '''
+
+    :param freq: Frequency
+    :type freq: numpy.ndarray
+    :param db: Amplitude in decibels
+    :type db: numpy.ndarray
+    :param hits: Number of hits
+    :type hits: numpy.ndarray
+    :param db_tol: Tolerance in decibels
+    :type db_tol: int
+    :param max_hits_perc: Maximum percentage of hits
+    :type max_hits_perc: int
+    :param f_min: Minimum frequency
+    :type f_min: float
+    :param f_max: Maximum frequency
+    :type f_max: float
+
+    :return: True if microseism is ok, False otherwise
+    :rtype: bool
+    """
     # find total number of PSDs in PDF
     mode_freq = stats.mode(freq)
     ih = np.where(freq == mode_freq)
@@ -396,7 +525,7 @@ def isMicroseismOk(freq, db, hits, db_tol=5, max_hits_perc=20, f_min=0.2,
     return isok
 
 
-def findPDFBounds(pdffiles):
+def find_pdf_bounds(pdffiles):
     '''
     copyright Emily Wolin. Integrated from
     https://github.com/ewolin/HighFreqNoiseMustang_paper
@@ -440,13 +569,13 @@ def findPDFBounds(pdffiles):
     return freq_u, db_u
 
 
-def findUniqFreq(pdffiles):
+def find_uniq_freq(pdffiles):
     '''
     copyright Emily Wolin. Integrated from
     https://github.com/ewolin/HighFreqNoiseMustang_paper
 
     Find unique frequency values as *strings*
-    for quick lookup in calcMegaPDF.
+    for quick lookup in calc_mega_pdf.
     '''
     j = -1
     first_pdffile_found = False
@@ -591,7 +720,8 @@ def plot_pdf(pdf, freq_u, db_u, station, out_folder, outfile_name, inv,
 
 def get_custom_ispaq_cmap():
     """
-    Extracted from ispaq.ispaq.PDF_aggregator.plot_PDF
+    Extracted from ispaq.ispaq.PDF_aggregator.plot_PDF (LGPL-3.0)
+    See: https://github.com/iris-edu/ispaq/blob/master/ispaq/ispaq.py
     """
     # Set up plotting -- color map
     cmap = plt.get_cmap('gist_rainbow_r', 3000)
@@ -767,7 +897,25 @@ class Station(obspy.core.inventory.station.Station):
 def attach_single_noise_model(inv, pdf_dir, network="*", station="*",
                               location="*", channel="[ESBHCDFNML]??",
                               plot_station_pdf=False):
-    """
+    """Function to attach a noise model to a station in an inventory.
+
+    :type inv: obspy.core.inventory.inventory.Inventory
+    :param inv: Inventory to which the noise model is attached
+    :type pdf_dir: str
+    :param pdf_dir: Directory containing the station PDFs
+    :type network: str
+    :param network: Network code
+    :type station: str
+    :param station: Station code
+    :type location: str
+    .param location: Location code
+    :type channel: str
+    :param channel: Channel code
+    :type plot_station_pdf: bool
+    :param plot_station_pdf: Plot the station PDFs
+
+    :rtype: :class:`obspy.core.inventory.inventory.Inventory`
+    :return: Inventory with attached noise model
     """
     pdf, freq_u, db_u, freq_perc, db_perc = sum_station_pdf(
         inv, pdf_dir, network, station, location=location, channel=channel)

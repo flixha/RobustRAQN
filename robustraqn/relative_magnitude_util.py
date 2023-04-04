@@ -35,9 +35,14 @@ from eqcorrscan.utils.pre_processing import shortproc
 from robustraqn.obspy_utils import _quick_copy_stream
 
 
+
 def _remove_uncorrected_traces(stream=Stream()):
-    """
-    Removes those traces from a stream where the response was not removed.
+    """Removes those traces from a stream where the response was not removed.
+
+    :param stream: _description_, defaults to Stream()
+    :type stream: _type_, optional
+    :return: _description_
+    :rtype: _type_
     """
     remove_traces = []
     for trace in stream:
@@ -50,6 +55,12 @@ def _remove_uncorrected_traces(stream=Stream()):
                     remove_tr = False
             if remove_tr:
                 remove_traces.append(trace)
+        # TODO: remove this temporary solution once proper read/write of trace
+        #       processing has been implemented
+        if (hasattr(tr.stats, 'extra')
+                and 'response_removed' in tr.stats.extra.keys()
+                and tr.stats.extra['response_removed'] is True):
+            remove_traces.append(trace)
     for rm_trace in remove_traces:
         Logger.debug(
             'Removing trace %s for mag-calc because instrument response was ',

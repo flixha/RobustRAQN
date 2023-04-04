@@ -70,6 +70,18 @@ MY_ENV["SEISAN_TOP"] = '/home/felix/Software/SEISANrick'
 def _read_nordic(sfile, unused_kwargs=True, **kwargs):
     """
     Internal function to log while reading Nordic file. 
+    
+    :type sfile: str
+    :param sfile: Path to Nordic file
+    :type unused_kwargs: bool
+    :param unused_kwargs:
+        Parameter to pass to some functions in obspy (which could otherwise
+        raise an error).
+    :type kwargs: dict
+    :param kwargs: Additional kwargs to pass to read_nordic.
+
+    :returns: obspy Catalog object
+    :rtype: :class:`obspy.core.event.Catalog`
     """
     Logger.info('Reading sfile %s', sfile)
     select = read_nordic(sfile, unused_kwargs=unused_kwargs, **kwargs)
@@ -794,41 +806,22 @@ def parallel_rotate(st, inv, parallel=True, cores=None,
     if cores is None:
         cores = min(len(unique_net_sta_loc_list), cpu_count())
 
-    # with pool_boy(Pool=Pool,
-    #               traces=len(unique_net_sta_loc_list), cores=cores) as pool:
-    #     results = [pool.apply_async(
-    #        st.select(network=nsl[0], station=nsl[1], location=nsl[2]).rotate,
-    #        args=(method,),
-    #        kwds=dict(inventory=inv.select(network=nsl[0], station=nsl[1],
-    #                                        location=nsl[2])))
-    #                for nsl in unique_net_sta_loc_list]
-    # streams = [res.get() for res in results]
-    # st = Stream()
-    # for trace_st in streams:
-    #     for tr in trace_st:
-    #         st.append(tr)
-
-    # streams = Parallel(n_jobs=cores)(
-    #     delayed(st.select(network=nsl[0], station=nsl[1],
-    #                       location=nsl[2]).rotate)
-    #     (method, inventory=inv.select(
-    #         network=nsl[0], station=nsl[1], location=nsl[2]))
-    #     for nsl in unique_net_sta_loc_list)
     if thread_parallel and not parallel:
         with parallel_backend('threading', n_jobs=cores):
             streams = Parallel(n_jobs=n_threads, prefer='threads')(delayed(
-                robust_rotate)(
-                    st.select(network=nsl[0], station=nsl[1], location=nsl[2]),
-                    inv.select(network=nsl[0], station=nsl[1], location=nsl[2]),
-                    method=method)
-                for nsl in unique_net_sta_loc_list)
+                st.select(
+                    network=nsl[0], station=nsl[1], location=nsl[2]
+                    ).robust_rotate)(inv.select(
+                        network=nsl[0], station=nsl[1], location=nsl[2]),
+                                     method=method)
+                    for nsl in unique_net_sta_loc_list)
     else:
         streams = Parallel(n_jobs=cores)(delayed(
-            robust_rotate)(
-                st.select(network=nsl[0], station=nsl[1], location=nsl[2]),
-                inv.select(network=nsl[0], station=nsl[1], location=nsl[2]),
-                method=method)
-            for nsl in unique_net_sta_loc_list)
+            st.select(network=nsl[0], station=nsl[1], location=nsl[2]
+                      ).robust_rotate)(
+                          inv.select(network=nsl[0], station=nsl[1],
+                                     location=nsl[2]), method=method)
+                      for nsl in unique_net_sta_loc_list)
     st = Stream([tr for trace_st in streams for tr in trace_st])
     # for trace_st in streams:
     #     for tr in trace_st:
@@ -1319,7 +1312,30 @@ def try_apply_agc(st, tribe, agc_window_sec=5, pre_processed=False,
                   starttime=None, cores=None, parallel=False, n_threads=1,
                   **kwargs):
     """
-    Wrapper to apply agc to a tribe.
+    Wrapper to apply agc to a day-long stream for a particular tribe of
+    templates.
+
+    :type st: :class:`obspy.core.stream.Stream`
+    :param st: Stream object containing the day-long data.
+    :type tribe: :class:`eqcorrscan.core.match_filter.Tribe`
+    :param tribe: Tribe of templates to be used for detection.
+    :type agc_window_sec: float
+    :param agc_window_sec: Length of the window to use for AGC in seconds.
+    :type pre_processed: bool
+    :param pre_processed: If the data are pre-processed, this will be True.
+    :type starttime: :class:`obspy.core.utcdatetime.UTCDateTime`
+    :param starttime: Start time of the data in the stream.
+    :type cores: int
+    :param cores: Number of cores to use for multiprocessing.
+    :type parallel: bool
+    :param parallel: If True, will use multiprocessing to apply the AGC.
+    :type n_threads: int
+    :param n_threads: Number of threads to use for multiprocessing.
+    :type kwargs: dict
+    :param kwargs: Additional arguments to pass to
+
+    :rtype: :class:`obspy.core.stream.Stream`
+    :return: Stream object with the AGC applied.
     """
     lowcuts = list(set([tp.lowcut for tp in tribe]))
     highcuts = list(set([tp.highcut for tp in tribe]))
@@ -1378,7 +1394,59 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
                     suppress_arraywide_steps=True,
                     parallel=False, cores=None, **kwargs):
     """
-    Does an initial processing of the day's stream,
+    Does an initial processing of the day's stream, including removing the
+    response, detrending, and resampling. 
+    
+    :param day_st: Stream of traces for the day.
+    :type day_st: :class:`obspy.core.stream.Stream`
+    :param starttime: Starttime of the day.
+    :type starttime: :class:`obspy.core.utcdatetime.UTCDateTime`
+    :param endtime: Endtime of the day.
+    :type endtime: :class:`obspy.core.utcdatetime.UTCDateTime`
+    :param remove_response: Whether to remove the response or not.
+    :type remove_response: bool
+    :param output: Output units for the response removal, can be 'DISP',
+    :type output: str
+    :param inv: Inventory for the response removal.
+    :type inv: :class:`obspy.core.inventory.inventory.Inventory`
+    :param pre_filt: Pre-filter for the response removal.
+    :type pre_filt: list
+    :param min_segment_length_s: Minimum segment length for the response
+    :type min_segment_length_s: float
+    :param max_sample_rate_diff:
+        Maximum difference in sample rates between trace and metadata.
+    :type max_sample_rate_diff: float
+    :param skip_check_sampling_rates:
+        List of sampling rates to skip in the checks (just assume they are
+        correct).
+    :type skip_check_sampling_rates: list
+    :param skip_interp_sample_rate_smaller:
+        Skip interpolation if the sample rate differs less than this from the
+        metadata.
+    :type skip_interp_sample_rate_smaller: float
+    :param interpolation_method: Interpolation method for the response removal.
+    :type interpolation_method: str
+    :param taper_fraction: Fraction of the trace to taper at the start and end
+    :type taper_fraction: float
+    :param detrend_type: Type of detrending to do.
+    :type detrend_type: str
+    :param downsampled_max_rate: Maximum sample rate to downsample to.
+    :type downsampled_max_rate: float
+    :param noise_balancing: Whether to balance the noise or not.
+    :type noise_balancing: bool
+    :param balance_power_coefficient:
+        Power coefficient for the noise balancing.
+    :type balance_power_coefficient: float
+    :param suppress_arraywide_steps:
+        Whether to suppress arraywide steps or not.
+    :type suppress_arraywide_steps: bool
+    :param parallel: Whether to use parallel processing or not.
+    :type parallel: bool
+    :param cores: Number of cores to use for parallel processing.
+    :type cores: int
+    :param kwargs: Additional keyword arguments to pass to the processing
+    
+    :returns: :class:`obspy.core.stream.Stream`
     """
     # If I merge the traces before removing the response, then the masked
     # arrays / None-values removal will mess up the response-corrected trace
@@ -1409,8 +1477,8 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
         for id in unique_seed_id_list:
             Logger.debug('Starting initial processing of %s for %s - %s.',
                          id, str(starttime)[0:19], str(endtime)[0:19])
-            streams.append(_init_processing_per_channel(
-                day_st.select(id=id), starttime, endtime,
+            streams.append(day_st.select(id=id)._init_processing_per_channel(
+                starttime, endtime,
                 remove_response=remove_response, output=output,
                 inv=inv.select(station=id.split('.')[1]), pre_filt=pre_filt,
                 min_segment_length_s=min_segment_length_s,
@@ -1486,8 +1554,8 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
 
         with threadpool_limits(limits=1, user_api='blas'):
             streams = Parallel(n_jobs=cores)(
-                delayed(_init_processing_per_channel)
-                (day_st.select(id=id), starttime, endtime,
+                delayed(day_st.select(id=id)._init_processing_per_channel)
+                (starttime, endtime,
                  remove_response=remove_response, output=output,
                  inv=inv.select(station=id.split('.')[1], starttime=starttime,
                                 endtime=endtime), pre_filt=pre_filt,
@@ -1514,7 +1582,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
     return st
 
 
-def init_processing_wRotation(
+def init_processing_w_rotation(
         day_st, starttime, endtime, remove_response=False, output='DISP',
         inv=Inventory(), pre_filt=None, sta_translation_file='',
         parallel=False, cores=None, n_threads=1, suppress_arraywide_steps=True,
@@ -1524,8 +1592,63 @@ def init_processing_wRotation(
         taper_fraction=0.005, detrend_type='simple', downsampled_max_rate=None,
         std_network_code="NS", std_location_code="00", std_channel_prefix="BH",
         noise_balancing=False, balance_power_coefficient=2, **kwargs):
-    """
-    Does an initial processing of the day's stream,
+    """Copilot, please write the docstring.
+    :type day_st: :class:`obspy.core.stream.Stream`
+    :param day_st: Stream of data to process
+    :type starttime: :class:`obspy.core.utcdatetime.UTCDateTime`
+    :param starttime: Start time of the data to process
+    :type endtime: :class:`obspy.core.utcdatetime.UTCDateTime`
+    :param endtime: End time of the data to process
+    :type remove_response: bool
+    :param remove_response: Whether to remove the response or not
+    :type output: str
+    :param output: Output units of the data, can be DISP, VEL, ACC
+    :type inv: :class:`obspy.core.inventory.inventory.Inventory`
+    :param inv: Inventory to use for response removal
+    :type pre_filt: list
+    :param pre_filt: Pre-filter to use for response removal
+    :type sta_translation_file: str
+    :param sta_translation_file: Path to station translation file
+    :type parallel: bool
+    :param parallel: Whether to use parallel processing or not
+    :type cores: int
+    :param cores: Number of cores to use for parallel processing
+    :type n_threads: int
+    :param n_threads: Number of threads to use for parallel processing
+    :type suppress_arraywide_steps: bool
+    :param suppress_arraywide_steps: Whether to suppress array-wide steps
+    :type min_segment_length_s: float
+    :param min_segment_length_s: Minimum segment length in seconds
+    :type max_sample_rate_diff: float
+    :param max_sample_rate_diff:
+        Maximum difference in sample rates between traces and metadata.
+    :type skip_check_sampling_rates: list
+    :param skip_check_sampling_rates: Sample rates to skip checking
+    :type skip_interp_sample_rate_smaller: float
+    :param skip_interp_sample_rate_smaller:
+        Maximum sample rate difference between traces and metadata to skip
+        interpolation.
+    :type interpolation_method: str
+    :param interpolation_method: Interpolation method to use
+    :type taper_fraction: float
+    :param taper_fraction: Fraction of trace to taper
+    :type detrend_type: str
+    :param detrend_type: Type of detrending to do
+    :type downsampled_max_rate: float
+    :param downsampled_max_rate: Maximum sample rate to downsample to
+    :type std_network_code: str
+    :param std_network_code: Standard network code to use
+    :type std_location_code: str
+    :param std_location_code: Standard location code to use
+    :type std_channel_prefix: str
+    :param std_channel_prefix: Standard channel prefix to use
+    :type noise_balancing: bool
+    :param noise_balancing: Whether to balance the noise or not
+    :type balance_power_coefficient: float
+    :param balance_power_coefficient: Power coefficient for noise balancing
+    
+    :return: Stream of processed data
+    :rtype: :class:´obspy.core.stream.Stream´
     """
     # If I merge the traces before removing the response, then the masked
     # arrays / None-values removal will mess up the response-corrected trace
@@ -1547,8 +1670,8 @@ def init_processing_wRotation(
 
     # First check if there are consecutive Zeros in the data (happens for
     # example in NO array data; this should really be gaps rather than Zeros)
-    day_st = mask_consecutive_zeros(
-        day_st, min_run_length=5, starttime=starttime, endtime=endtime)
+    day_st = day_st.mask_consecutive_zeros(
+        min_run_length=5, starttime=starttime, endtime=endtime)
     # Second check for array-wide steps in the data
     if suppress_arraywide_steps:
         day_st = seismic_array_tools.mask_array_trace_offsets(
@@ -1583,29 +1706,29 @@ def init_processing_wRotation(
                 Logger.info(
                     'Starting initial 3-component processing with 1 process '
                     'with up to %s threads.', str(n_threads))
-                streams.append(_init_processing_per_channel_wRotation(
-                    day_st.select(
-                        network=nsl[0], station=nsl[1], location=nsl[2]),
-                    starttime, endtime, remove_response=remove_response,
-                    output=output, pre_filt=pre_filt,
-                    inv=inv.select(station=nsl[1], starttime=starttime,
-                                endtime=endtime),
-                    min_segment_length_s=min_segment_length_s,
-                    max_sample_rate_diff=max_sample_rate_diff,
-                    skip_check_sampling_rates=skip_check_sampling_rates,
-                    skip_interp_sample_rate_smaller=
-                    skip_interp_sample_rate_smaller,
-                    interpolation_method=interpolation_method,
-                    sta_translation_file=sta_translation_file,
-                    std_network_code=std_network_code,
-                    std_location_code=std_location_code,
-                    std_channel_prefix=std_channel_prefix,
-                    detrend_type=detrend_type,
-                    downsampled_max_rate=downsampled_max_rate,
-                    taper_fraction=taper_fraction,
-                    noise_balancing=noise_balancing,
-                    balance_power_coefficient=balance_power_coefficient,
-                    **kwargs))
+                streams.append(day_st.select(
+                    network=nsl[0], station=nsl[1], location=nsl[2]
+                    )._init_processing_per_channel_w_rotation(
+                        starttime, endtime, remove_response=remove_response,
+                        output=output, pre_filt=pre_filt,
+                        inv=inv.select(station=nsl[1], starttime=starttime,
+                                    endtime=endtime),
+                        min_segment_length_s=min_segment_length_s,
+                        max_sample_rate_diff=max_sample_rate_diff,
+                        skip_check_sampling_rates=skip_check_sampling_rates,
+                        skip_interp_sample_rate_smaller=
+                        skip_interp_sample_rate_smaller,
+                        interpolation_method=interpolation_method,
+                        sta_translation_file=sta_translation_file,
+                        std_network_code=std_network_code,
+                        std_location_code=std_location_code,
+                        std_channel_prefix=std_channel_prefix,
+                        detrend_type=detrend_type,
+                        downsampled_max_rate=downsampled_max_rate,
+                        taper_fraction=taper_fraction,
+                        noise_balancing=noise_balancing,
+                        balance_power_coefficient=balance_power_coefficient,
+                        **kwargs))
     # elif thread_parallel and n_threads:
 
     else:
@@ -1621,70 +1744,34 @@ def init_processing_wRotation(
         Logger.info('Starting initial 3-component processing with %s parallel '
                     'processes with up to %s threads each.', str(cores),
                     str(n_threads))
-        # with threadpool_limits(limits=1, user_api='blas'):
-        #     with pool_boy(Pool=get_context("spawn").Pool, traces
-        #                  =len(unique_net_sta_loc_list), cores=cores) as pool:
-        #         results = [
-        #             pool.apply_async(
-        #                 _init_processing_per_channel_wRotation,
-        #                 args=(day_st.select(network=nsl[0], station=nsl[1],
-        #                                     location=nsl[2]),
-        #                     starttime, endtime),
-        #                 kwds=dict(
-        #                     remove_response=remove_response,
-        #                     inv=inv.select(station=nsl[1],
-        #                                    starttime=starttime,
-        #                                    endtime=endtime),
-        #                     sta_translation_file=sta_translation_file,
-        #                     min_segment_length_s=min_segment_length_s,
-        #                     max_sample_rate_diff=max_sample_rate_diff,
-        #                     skip_check_sampling_rates=skip_check_sampling_rates,
-        #                     skip_interp_sample_rate_smaller=
-        #                     skip_interp_sample_rate_smaller,
-        #                     interpolation_method=interpolation_method,
-        #                     std_network_code=std_network_code,
-        #                     std_location_code=std_location_code,
-        #                     std_channel_prefix=std_channel_prefix,
-        #                     detrend_type=detrend_type,
-        #                     taper_fraction=taper_fraction,
-        #                     downsampled_max_rate=downsampled_max_rate,
-        #                     noise_balancing=noise_balancing,
-        #                     balance_power_coefficient=balance_power_coefficient,
-        #                     parallel=thread_parallel, cores=n_threads))
-        #             for nsl in unique_net_sta_loc_list]
-        # st = Stream()
-        # if len(results) > 0:
-        #     streams = [res.get() for res in results]
-        #     for trace_st in streams:
-        #         for tr in trace_st:
-        #             st.append(tr)
 
         with threadpool_limits(limits=n_threads, user_api='blas'):
             streams = Parallel(n_jobs=cores)(
-                delayed(_init_processing_per_channel_wRotation)
-                (day_st.select(
-                    network=nsl[0], station=nsl[1], location=nsl[2]),
-                    starttime, endtime, remove_response=remove_response,
-                    output=output, inv=inv.select(
-                        station=nsl[1], starttime=starttime, endtime=endtime),
-                    pre_filt=pre_filt,
-                    sta_translation_file=sta_translation_file,
-                    min_segment_length_s=min_segment_length_s,
-                    max_sample_rate_diff=max_sample_rate_diff,
-                    skip_check_sampling_rates=skip_check_sampling_rates,
-                    skip_interp_sample_rate_smaller=
-                    skip_interp_sample_rate_smaller,
-                    interpolation_method=interpolation_method,
-                    std_network_code=std_network_code,
-                    std_location_code=std_location_code,
-                    std_channel_prefix=std_channel_prefix,
-                    detrend_type=detrend_type,
-                    taper_fraction=taper_fraction,
-                    downsampled_max_rate=downsampled_max_rate,
-                    noise_balancing=noise_balancing,
-                    balance_power_coefficient=balance_power_coefficient,
-                    parallel=False, cores=None, **kwargs)
-                for nsl in unique_net_sta_loc_list)
+                delayed(day_st.select(
+                    network=nsl[0], station=nsl[1], location=nsl[2]
+                    )._init_processing_per_channel_w_rotation)(
+                        starttime, endtime, remove_response=remove_response,
+                        output=output, inv=inv.select(
+                            station=nsl[1], starttime=starttime,
+                            endtime=endtime),
+                        pre_filt=pre_filt,
+                        sta_translation_file=sta_translation_file,
+                        min_segment_length_s=min_segment_length_s,
+                        max_sample_rate_diff=max_sample_rate_diff,
+                        skip_check_sampling_rates=skip_check_sampling_rates,
+                        skip_interp_sample_rate_smaller=
+                        skip_interp_sample_rate_smaller,
+                        interpolation_method=interpolation_method,
+                        std_network_code=std_network_code,
+                        std_location_code=std_location_code,
+                        std_channel_prefix=std_channel_prefix,
+                        detrend_type=detrend_type,
+                        taper_fraction=taper_fraction,
+                        downsampled_max_rate=downsampled_max_rate,
+                        noise_balancing=noise_balancing,
+                        balance_power_coefficient=balance_power_coefficient,
+                        parallel=False, cores=None, **kwargs)
+                    for nsl in unique_net_sta_loc_list)
     st = _merge_streams(streams)
     # st = Stream([tr for trace_st in streams for tr in trace_st])
 
@@ -1702,6 +1789,11 @@ def _merge_streams(streams):
     This fixes rare case where data at the same site were recorded on two 
     different instruments / sampling rates and with different station codes,
     so they cannot be merged.
+    
+    :param streams: List of streams to merge.
+    :type streams: list
+    :return: Merged stream.
+    :rtype: :class:`~obspy.core.stream.Stream`
     """
     stream = Stream()
     for trace_st in streams:
@@ -1727,6 +1819,19 @@ def _mask_consecutive(data, value_to_mask=0, min_run_length=5, axis=-1):
     - posted under license CC-BY-SA 4.0 (compatible with GPLv3 used in
       RobustRAQN, see license: https://creativecommons.org/licenses/by-sa/4.0/)
     - variable names modified
+    
+    :param data: 1D or 2D array of data to mask
+    :type data: :class:`numpy.ndarray`
+    :param value_to_mask: value to mask
+    :type value_to_mask: int
+    :param min_run_length:
+        Minimum number of consecutive values that equal value_to_mask to mask.
+    :type min_run_length: int
+    :param axis: axis along which to mask
+    :type axis: int
+
+    :return: Masked array
+    :rtype: :class:`numpy.ndarray`
     """
     shape = list(data.shape)
     shape[axis] = 1;
@@ -1874,11 +1979,62 @@ def _init_processing_per_channel(
         normalize_all_station_channels=False, exclude_component_codes=['H'],
         n_threads=1, **kwargs):
     """
-    Inner loop over which the initial processing can be parallelized
-    :type normalize_all_station_channels: bool
-    :param normalize_all_station_channels:
+    Inner loop over which the initial processing can be parallelized for
+    individual channels (rather than sets of three-component channels).
+
+    :param st: input stream with traces
+    :type st: :class:`obspy.core.stream.Stream`
+    :param starttime: start time of data to process
+    :type starttime: :class:`obspy.core.utcdatetime.UTCDateTime`
+    :param endtime: end time of data to process
+    :type endtime: :class:`obspy.core.utcdatetime.UTCDateTime`
+    :param remove_response: remove instrument response, defaults to False
+    :type remove_response: bool, optional
+    :param output: output units, defaults to 'DISP'
+    :type output: str, optional
+    :param inv: inventory, defaults to Inventory()
+    :type inv: :class:`obspy.core.inventory.inventory.Inventory`, optional
+    :param min_segment_length_s: minimum segment length in s to keep trace,
+    :type min_segment_length_s: float, optional
+    :param max_sample_rate_diff:
+        Maximum difference in sampling rate between traces and metadata in
+        inventory for which trace will be resampled to match metadata.
+    :type max_sample_rate_diff: float, optional
+    :param skip_check_sampling_rates: sampling rates to skip check for
+    :type skip_check_sampling_rates: list, optional
+    :param skip_interp_sample_rate_smaller: skip interpolation if sampling rate
+    :type skip_interp_sample_rate_smaller: float, optional
+    :param interpolation_method: interpolation method, defaults to 'lanczos'
+    :type interpolation_method: str, optional
+    :param detrend_type: detrend type, defaults to 'simple'
+    :type detrend_type: str, optional
+    :param taper_fraction: taper fraction, defaults to 0.005
+    :type taper_fraction: float, optional
+    :param pre_filt: pre-filter, defaults to None
+    :type pre_filt: list, optional
+    :param downsampled_max_rate: maximum sampling rate after downsampling,
+    :type downsampled_max_rate: float, optional
+    :param noise_balancing: noise balancing, defaults to False
+    :type noise_balancing: bool, optional
+    :param balance_power_coefficient: balance power coefficient, defaults to 2
+    :type balance_power_coefficient: int, optional
+    :param sta_translation_file: station translation file, defaults to ''
+    :type sta_translation_file: str, optional
+    :param normalize_all_station_channels: 
         Specify whether channels belonging to the same station should be
         normalized to the same (most common) sampling rate).
+    :type normalize_all_station_channels: bool, optional
+    :param exclude_component_codes: exclude component codes, defaults to ['H']
+    :type exclude_component_codes: list, optional
+    :param n_threads: number of threads, defaults to 1
+    :type n_threads: int, optional
+    :return: stream with processed traces
+    :rtype: :class:`obspy.core.stream.Stream`
+    :param kwargs: additional keyword arguments
+    :type kwargs: dict
+
+    :return: stream with processed traces
+    :rtype: :class:`obspy.core.stream.Stream`
     """
     # # First check if there are consecutive Zeros in the data (happens for
     # # example in NO array data; this should really be gaps rather than Zeros)
@@ -1892,9 +2048,8 @@ def _init_processing_per_channel(
 
     # Second check trace segments for strange sampling rates and segments that
     # are too short:
-    st, st_normalized = check_normalize_sampling_rate(
-        st, inv,
-        min_segment_length_s=min_segment_length_s,
+    st, st_normalized = st.check_normalize_sampling_rate(
+        inv, min_segment_length_s=min_segment_length_s,
         max_sample_rate_diff=max_sample_rate_diff,
         skip_check_sampling_rates=skip_check_sampling_rates,
         skip_interp_sample_rate_smaller=skip_interp_sample_rate_smaller,
@@ -1905,8 +2060,8 @@ def _init_processing_per_channel(
     # Check whether all the traces at the same station have the same samling
     # rate:
     if normalize_all_station_channels:
-        st = check_normalize_station_sample_rates(
-            stream, exclude_component_codes=exclude_component_codes, **kwargs)
+        st = stream.check_normalize_station_sample_rates(
+            exclude_component_codes=exclude_component_codes, **kwargs)
     
     # Detrend
     st.detrend(type=detrend_type)
@@ -1927,8 +2082,8 @@ def _init_processing_per_channel(
     st.merge(method=1, fill_value=0, interpolation_samples=-1)
     # Correct response (taper should be outside of the main day!)
     if remove_response:
-        st = try_remove_responses(
-            st, inv.select(starttime=starttime, endtime=endtime),
+        st = st.try_remove_responses(
+            inv.select(starttime=starttime, endtime=endtime),
             taper_fraction=taper_fraction, output=output, pre_filt=pre_filt,
             parallel=False, cores=1, n_threads=n_threads)
     # Detrend now?
@@ -1981,7 +2136,7 @@ def _init_processing_per_channel(
     return st
 
 
-def _init_processing_per_channel_wRotation(
+def _init_processing_per_channel_w_rotation(
         st, starttime, endtime, remove_response=False, output='DISP',
         pre_filt=None, inv=Inventory(), sta_translation_file='',
         min_segment_length_s=10, max_sample_rate_diff=1,
@@ -1994,6 +2149,77 @@ def _init_processing_per_channel_wRotation(
         parallel=False, cores=1, thread_parallel=False, n_threads=1, **kwargs):
     """
     Inner loop over which the initial processing can be parallelized
+    
+    :param st: Stream object with three component traces from one station
+    :type st: :class:`~obspy.core.stream.Stream`
+    :param starttime: Starttime of the day to be processed
+    :type starttime: :class:`~obspy.core.utcdatetime.UTCDateTime`
+    :param endtime: Endtime of the day to be processed
+    :type endtime: :class:`~obspy.core.utcdatetime.UTCDateTime`
+    :param remove_response: Remove instrument response
+    :type remove_response: bool
+    :param output:
+        Output units of instrument response removal, can be one of 'DISP',
+        'VEL', 'ACC'.
+    :type output: str
+    :param pre_filt: Pre-filter for instrument response removal
+    :type pre_filt: list
+    :param inv: Inventory object with instrument response information
+    :type inv: :class:`~obspy.core.inventory.inventory.Inventory`
+    :param sta_translation_file: Path to station translation file
+    :type sta_translation_file: str
+    :param min_segment_length_s: Minimum length of trace segments in seconds
+    :type min_segment_length_s: float
+    :param max_sample_rate_diff:
+        Maximum difference between sampling rates of traces and inventory
+        metadata to allow for trace resampling.
+    :type max_sample_rate_diff: float
+    :param skip_check_sampling_rates:
+        Sampling rates that are not checked for match between traces and
+        inventory metadata.
+    :type skip_check_sampling_rates: list
+    :param skip_interp_sample_rate_smaller:
+        When difference in sampling rate between traces and inventory metadata
+        is smaller than this value, no resampling is performed.
+    :type skip_interp_sample_rate_smaller: float
+    :param interpolation_method: Interpolation method for resampling
+    :type interpolation_method: str
+    :param std_network_code: Standard network code
+    :type std_network_code: str
+    :param std_location_code: Standard location code
+    :type std_location_code: str
+    :param std_channel_prefix: Standard channel prefix
+    :type std_channel_prefix: str
+    :param detrend_type: Type of detrending
+    :type detrend_type: str
+    :param taper_fraction: Fraction of trace to taper
+    :type taper_fraction: float
+    :param downsampled_max_rate: Maximum sampling rate of downsampled data
+    :type downsampled_max_rate: float
+    :param noise_balancing: Balance noise levels
+    :type noise_balancing: bool
+    :param balance_power_coefficient: Power coefficient for noise balancing
+    :type balance_power_coefficient: float
+    :param apply_agc: Apply automatic gain control
+    :type apply_agc: bool
+    :param agc_window_sec: Length of automatic gain control window in seconds
+    :type agc_window_sec: float
+    :param agc_method:
+        Method for automatic gain control, can be 'gismo' or 'obspy'
+    :type agc_method: str
+    :param parallel: Parallelize processing
+    :type parallel: bool
+    :param cores: Number of cores to use for parallel processing
+    :type cores: int
+    :param thread_parallel: Parallelize processing with threads
+    :type thread_parallel: bool
+    :param n_threads: Number of threads to use for parallel processing
+    :type n_threads: int
+    :param kwargs: Additional keyword arguments
+    :type kwargs: dict
+
+    :return: Stream object with initially processed traces
+    :rtype: :class:`~obspy.core.stream.Stream`
     """
     outtic = default_timer()
 
@@ -2007,8 +2233,8 @@ def _init_processing_per_channel_wRotation(
 
     # Second, check trace segments for strange sampling rates and segments that
     # are too short:
-    st, st_normalized = check_normalize_sampling_rate(
-        st, inv, min_segment_length_s=min_segment_length_s,
+    st, st_normalized = st.check_normalize_sampling_rate(
+        inv, min_segment_length_s=min_segment_length_s,
         max_sample_rate_diff=max_sample_rate_diff,
         skip_check_sampling_rates=skip_check_sampling_rates,
         skip_interp_sample_rate_smaller=skip_interp_sample_rate_smaller,
@@ -2042,8 +2268,8 @@ def _init_processing_per_channel_wRotation(
     st = st.merge(method=1, fill_value=0, interpolation_samples=-1)
     # Correct response (taper should be outside of the main day!)
     if remove_response:
-        st = try_remove_responses(
-            st, inv.select(starttime=starttime, endtime=endtime),
+        st = st.try_remove_responses(
+            inv.select(starttime=starttime, endtime=endtime),
             taper_fraction=0.005, output=output, pre_filt=pre_filt,
             parallel=parallel, cores=cores, n_threads=n_threads)
     # Trim to full day and detrend again
@@ -2417,15 +2643,15 @@ def try_remove_responses(
     if not parallel and not thread_parallel:
         with threadpool_limits(limits=n_threads, user_api='blas'):
             for tr in stream:
-                tr = _try_remove_responses(
-                    tr, inventory, taper_fraction=taper_fraction,
+                tr = tr.try_remove_response(
+                    inventory, taper_fraction=taper_fraction,
                     pre_filt=pre_filt, output=output, gain_traces=gain_traces)
     elif thread_parallel and not parallel:
         with threadpool_limits(limits=n_threads, user_api='blas'):
             with parallel_backend('threading', n_jobs=n_threads):
                 streams = Parallel(n_jobs=cores, prefer='threads')(
-                    delayed(_try_remove_responses)
-                    (tr, inventory.select(station=tr.stats.station),
+                    delayed(tr.try_remove_response)
+                    (inventory.select(station=tr.stats.station),
                     taper_fraction, pre_filt, output, gain_traces)
                     for tr in stream)
         # st = Stream([tr for trace_st in streams for tr in trace_st])
@@ -2435,8 +2661,8 @@ def try_remove_responses(
             cores = min(len(stream), cpu_count())
         with threadpool_limits(limits=n_threads, user_api='blas'):
             streams = Parallel(n_jobs=cores)(
-                delayed(_try_remove_responses)
-                (tr, inventory.select(station=tr.stats.station),
+                delayed(tr.try_remove_response)
+                (inventory.select(station=tr.stats.station),
                  taper_fraction, pre_filt, output, gain_traces)
                 for tr in stream)
         # st = Stream([tr for trace_st in streams for tr in trace_st])
@@ -2445,7 +2671,8 @@ def try_remove_responses(
 
 
 def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
-                          output='DISP', gain_traces=True, **kwargs):
+                          output='DISP', water_level=10,
+                          gain_traces=True, **kwargs):
     """Internal function that tries to remove the response from a trace
 
     :param tr: trace for response-removal
@@ -2475,7 +2702,8 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
     # remove response
     outtic = default_timer()
     try:
-        tr.remove_response(inventory=inv, output=output, water_level=60,
+        tr.remove_response(inventory=inv, output=output,
+                           water_level=water_level,
                            pre_filt=pre_filt, zero_mean=True, taper=True,
                            taper_fraction=taper_fraction)
         sel_inv = inv.select(
@@ -2496,7 +2724,7 @@ def _try_remove_responses(tr, inv, taper_fraction=0.05, pre_filt=None,
             # a channel code?
             try:
                 tr.remove_response(inventory=sel_inv, output=output,
-                                   water_level=60, pre_filt=pre_filt,
+                                   water_level=water_level, pre_filt=pre_filt,
                                    zero_mean=True, taper=True,
                                    taper_fraction=taper_fraction)
             except Exception as e:
@@ -2898,19 +3126,19 @@ def normalize_NSLC_codes(st, inv, std_network_code="NS",
                 'No inventory information available, cannot rotate channels')
         else:
             if parallel:
-                st = parallel_rotate(st, inv, parallel=parallel, cores=cores,
-                                     thread_parallel=False, n_threads=1,
-                                     method="->ZNE")
+                st = st.parallel_rotate(inv, parallel=parallel, cores=cores,
+                                        thread_parallel=False, n_threads=1,
+                                        method="->ZNE")
             elif thread_parallel:
-                st = parallel_rotate(st, inv, parallel=parallel, cores=cores,
-                                     thread_parallel=True, n_threads=n_threads,
-                                     method="->ZNE")
+                st = st.parallel_rotate(inv, parallel=parallel, cores=cores,
+                                        thread_parallel=True,
+                                        n_threads=n_threads, method="->ZNE")
             else:
                 # st.rotate(method="->ZNE", inventory=inv)
                 # Use parallel-function to initiate error-catching rotation
-                st = parallel_rotate(st, inv, parallel=parallel, cores=1,
-                                     thread_parallel=False, n_threads=1,
-                                     method="->ZNE")
+                st = st.parallel_rotate(inv, parallel=parallel, cores=1,
+                                        thread_parallel=False, n_threads=1,
+                                        method="->ZNE")
 
     # Need to merge again here, because rotate may split merged traces if there
     # are masked arrays (i.e., values filled with None). The merge here will
@@ -2962,7 +3190,16 @@ def get_all_relevant_stations(
         selected_stations, sta_translation_file="station_code_translation.txt",
         **kwargs):
     """
-    return list of relevant stations
+    Return list of relevant stations for a given list of selected stations,
+    considering all alternative station names.
+
+    :param selected_stations: list of selected stations
+    :type selected_stations: list
+    :param sta_translation_file: file with station translation list
+    :type sta_translation_file: str
+
+    :return: list of relevant stations
+    :rtype: list
     """
     relevant_stations = selected_stations
     sta_fortransl_dict, sta_backtrans_dict = load_station_translation_dict(
@@ -2980,6 +3217,11 @@ def load_station_translation_dict(file="station_code_translation.txt",
     """
     reads a list of stations with their alternative names from a file
     returns a dictionary of key:alternative name, value: standard name
+
+    :param file: file with station translation list
+    :type file: str
+    :return: dictionary of alternative station names and standard station names
+    :rtype: dict
     """
     station_forw_translation_dict = dict()
     if file == '' or file is None:
@@ -3006,6 +3248,11 @@ def load_forbidden_chan_file(file="forbidden_chans.txt", **kwargs):
     reads a list of channels that are to be removed from all EQcorrscan-data,
     e.g., because of some critical naming conflict (e.g. station NRS as part of
     the DK network and as Norsar array beam code)
+
+    :param file: file with list of forbidden channels
+    :type file: str
+    :return: list of forbidden channels
+    :rtype: list
     """
     forbidden_chans = []
     try:
@@ -3024,6 +3271,24 @@ def load_forbidden_chan_file(file="forbidden_chans.txt", **kwargs):
 def check_template(st, template_length, remove_nan_strict=True,
                    max_perc_zeros=5, allow_channel_duplication=True, **kwargs):
     """
+    Function to check that templates do not contain NaNs or zeros, do not
+    contain duplicate channels, and that all traces are the same length.
+    
+    :type st: :class:`obspy.core.stream.Stream`
+    :param st: Stream of templates to check.
+    :type template_length: float
+    :param template_length: Length of templates in seconds.
+    :type remove_nan_strict: bool
+    :param remove_nan_strict: If True, will remove traces that contain NaNs
+    :type max_perc_zeros: float
+    :param max_perc_zeros: Maximum percentage of zeros allowed in a trace.
+    :type allow_channel_duplication: bool
+    :param allow_channel_duplication:
+        If True, will allow duplicate channels, otherwise it will remove the
+        later duplicated channel.
+
+    :return: Stream of templates with NaNs removed.
+    :rtype: :class:`obspy.core.stream.Stream`
     """
     # Now check the templates
     # Check that all traces are the same length:
@@ -3093,6 +3358,16 @@ def check_template(st, template_length, remove_nan_strict=True,
 def print_error_plots(st, path='ErrorPlots', time_str=''):
     """
     Prints a daylong-plot of every trace in stream to specified folder.
+
+    :type st: :class:`obspy.core.stream.Stream`
+    :param st: Stream of traces to plot.
+    :type path: str
+    :param path: Path to folder where plots should be saved.
+    :type time_str: str
+    :param time_str: String to add to plot name.
+
+    :return: None
+    :rtype: None
     """
     mid_time = st[0].stats.starttime + (
         st[0].stats.starttime - st[0].stats.endtime) / 2
@@ -3116,6 +3391,21 @@ def multiplot_detection(
         party, tribe, st, out_folder='DetectionPlots', **kwargs):
     """
     Create a plot of a detection including the background stream.
+
+    :type party: :class:`eqcorrscan.core.match_filter.party.Party`
+    :param party: Party containing the detection to plot.
+    :type tribe: :class:`eqcorrscan.core.match_filter.tribe.Tribe`
+    :param tribe: Tribe containing the template used for detection.
+    :type st: :class:`obspy.core.stream.Stream`
+    :param st: Stream containing the background data.
+    :type out_folder: str
+    :param out_folder: Folder to save the plot to.
+    :type kwargs: dict
+    :param kwargs:
+        Additional keyword arguments to pass to
+        :func:`eqcorrscan.utils.plotting.detection_multiplot`.
+
+    :return: None
     """
     if len(party) == 0:
         return
@@ -3162,7 +3452,7 @@ def multiplot_detection(
 def reevaluate_detections(
         party, short_tribe, stream, threshold_type='MAD', threshold=9,
         re_eval_thresh_factor=0.6, trig_int=40.0, overlap='calculate',
-        plot=False, multiplot=False, plotDir='DetectionPlots',
+        plot=False, multiplot=False, plotdir='DetectionPlots',
         daylong=False, fill_gaps=False, ignore_bad_data=False,
         ignore_length=True, pre_processed=False,
         parallel_process=False, cores=None, xcorr_func='fftw',
@@ -3179,6 +3469,94 @@ def reevaluate_detections(
     pass this test are considered misdetections, which can often happen when
     seismic arrays are involved in detection and there is a seismic event near
     one of the arrays.
+
+    :type party: :class:`eqcorrscan.core.match_filter.party.Party`
+    :param party: Party containing the detections to reevaluate.
+    :param short_tribe:
+        Tribe (shortened compared to detection tribe), containing the templates
+        to use for reevaluation of detections.
+    :type stream: :class:`obspy.core.stream.Stream`
+    :param stream: Stream containing the background data.
+    :type threshold_type: str
+    :param threshold_type: Threshold type to use for detection
+    :type threshold: float
+    :param threshold: Threshold to use for detection
+    :type re_eval_thresh_factor: float
+    :param re_eval_thresh_factor:
+        Factor to multiply the original threshold by for match_filter detection
+        with short template.
+    :type trig_int: float
+    :param trig_int: Trigger interval in seconds to use for detection
+    :type overlap: float or str
+    :param overlap:
+    :type plot: bool
+    :param plot: Whether to plot the detections
+    :type multiplot: bool
+    :param multiplot:
+        Whether to plot the detections in a nice multi-channel plot.
+    :type plotdir: str
+    :param plotdir: Directory to save the plots to.
+    :type daylong: bool
+    :param daylong: Whether the data are daylong or not.
+    :type fill_gaps: bool
+    :param fill_gaps: Whether to fill gaps in the data or not.
+    :type ignore_bad_data: bool
+    :param ignore_bad_data: Whether to ignore bad data in EQcorrscan or not.
+    :type ignore_length: bool
+    :param ignore_length: Whether to ignore trace length or not.
+    :type pre_processed: bool
+    :param pre_processed: Whether the data are pre-processed or not.
+    :type parallel_process: bool
+    :param parallel_process:
+    :type cores: int
+    :param cores:
+    :type xcorr_func: str
+    :param xcorr_func: Cross-correlation function to use.
+    :type concurrency: str
+    :param concurrency:
+        Concurrency to use for multiprocessing, can be one of 'concurrent',
+        'multiprocess', 'multithread'. For more details see
+        :func:`eqcorrscan.utils.correlate.get_stream_xcorr`.
+    :type arch: str
+    :param arch: Architecture of fmf / fmf2 to use, can be 'GPU' or 'CPU'.
+    :type group_size: int
+    :param group_size: Size of template group to process at once.
+    :type full_peaks: bool
+    :param full_peaks: Whether to use full peaks or not.
+    :type save_progress: bool
+    :param save_progress: Whether to save progress or not.
+    :type process_cores: int
+    :param process_cores: Number of cores to use for processing.
+    :type spike_test: bool
+    :param spike_test: Whether to use spike test or not.
+    :type min_chans: int
+    :param min_chans:
+        Minimum number of channels to accept a detection as significant.
+    :type time_difference_threshold: float
+    :param time_difference_threshold:
+        Time difference threshold in seconds between detection from long and
+        short templates.
+    :type detect_value_allowed_reduction: float
+    :param detect_value_allowed_reduction:
+        Allowed reduction in detect_value between detections from long and
+        short templates.
+    :type return_party_with_short_templates: bool
+    :param return_party_with_short_templates:
+        Whether to return the party with short templates or with long templates
+        attached to the detections.
+    :type min_n_station_sites: int
+    :param min_n_station_sites:
+        Minimum number of station sites to accept a detection. This is to avoid
+        spurious detections that are only due to one array (i.e., one site.)
+    :type use_weights: bool
+    :param use_weights: Whether to use weights or not.
+    :type copy_data: bool
+    :param copy_data: Whether to copy the data at the start of EQcorrscan.
+    :type kwargs: dict
+    :param kwargs: Additional keyword arguments to pass to match_filter.
+
+    :return: Party with detections that have been reevaluated.
+    :rtype: :class:`eqcorrscan.core.match_filter.party.Party`
     """
     # Maybe do some checks to see if tribe and short_tribe have somewhat of the
     # same templates?
@@ -3283,7 +3661,7 @@ def reevaluate_detections(
     short_party = short_tribe.detect(
         stream=det_st, threshold=threshold, trig_int=trig_int/10,
         threshold_type=threshold_type, overlap=overlap, plot=plot,
-        plotDir=plotDir, daylong=daylong, pre_processed=pre_processed,
+        plotdir=plotdir, daylong=daylong, pre_processed=pre_processed,
         fill_gaps=fill_gaps, ignore_bad_data=ignore_bad_data,
         ignore_length=ignore_length,
         parallel_process=parallel_process, cores=cores,
@@ -3448,4 +3826,4 @@ if __name__ == "__main__":
     st = mask_consecutive_zeros(st, min_run_length=5)
     st = st.split()
     # Taper all the segments
-    st = taper_trace_segments(st)
+    st = st.taper_trace_segments()

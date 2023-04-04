@@ -10,14 +10,14 @@ from itertools import chain, repeat
 from collections import Counter
 from timeit import default_timer
 
-import dill
+# import dill
 # performance improvement for instance method pickling
 # dill is required here so that the monkey-patched instance methods can be
 # pickled (otherwise multiprocessing fails). Speed penalty for big streams
 # appears to be around 5%, but this would be a lot worse with events or
 # inventories (x10).
-dill.settings['byref'] = True
-dill.settings['protocol'] = dill.HIGHEST_PROTOCOL
+# dill.settings['byref'] = True
+# dill.settings['protocol'] = dill.HIGHEST_PROTOCOL
 from joblib import Parallel, delayed, parallel_backend
 # from joblib import wrap_non_picklable_objects
 
@@ -182,8 +182,9 @@ def init_processing(self, starttime, endtime, remove_response=False,
 
         with threadpool_limits(limits=1, user_api='blas'):
             streams = Parallel(n_jobs=cores)(
-                delayed(self.select(id=id)._init_processing_per_channel)
-                (starttime=starttime, endtime=endtime,
+                # delayed(self.select(id=id)._init_processing_per_channel)
+                delayed(_init_processing_per_channel)
+                (self.select(id=id), starttime=starttime, endtime=endtime,
                  remove_response=remove_response, output=output,
                  inv=inv.select(station=id.split('.')[1], starttime=starttime,
                                 endtime=endtime), pre_filt=pre_filt,
@@ -379,10 +380,9 @@ def init_processing_w_rotation(
 
         with threadpool_limits(limits=n_threads, user_api='blas'):
             streams = Parallel(n_jobs=cores)(
-                delayed(self.select(
-                    network=nsl[0], station=nsl[1], location=nsl[2]
-                    )._init_processing_per_channel_w_rotation)
-                (starttime=starttime, endtime=endtime,
+                delayed(_init_processing_per_channel_w_rotation)
+                (self.select(network=nsl[0], station=nsl[1], location=nsl[2]),
+                 starttime=starttime, endtime=endtime,
                  remove_response=remove_response,
                  output=output, inv=inv.select(
                      station=nsl[1], starttime=starttime, endtime=endtime),

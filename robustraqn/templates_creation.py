@@ -22,7 +22,7 @@ from obspy.core.event import Catalog
 from obspy.core.utcdatetime import UTCDateTime
 from obspy.geodetics.base import gps2dist_azimuth
 from obspy.geodetics import kilometers2degrees, degrees2kilometers
-from obspy.core.stream import Stream
+# from obspy.core.stream import Stream
 # from obspy.core.util.base import TypeError
 from obspy.core.event import Event
 from obspy.io.nordic.core import read_nordic
@@ -45,6 +45,7 @@ from eqcorrscan.utils.correlate import pool_boy
 # import load_events_for_detection
 # import spectral_tools
 # reload(load_events_for_detection)
+from robustraqn.obspy.core import Trace, Stream
 from robustraqn.load_events_for_detection import (
     normalize_NSLC_codes, get_all_relevant_stations, load_event_stream,
     try_remove_responses, check_template, prepare_picks,
@@ -305,10 +306,10 @@ def _create_template_objects(
         events_files=[], selected_stations=[], template_length=60,
         lowcut=2.5, highcut=9.9, min_snr=5.0, prepick=0.5, samp_rate=20,
         seisan_wav_path=None, inv=Inventory(), clients=[],
-        remove_response=False, output='DISP', noise_balancing=False,
+        remove_response=False, output='VEL', noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
         apply_agc=False, agc_window_sec=5,
-        min_n_traces=8, min_n_station_sites=4, write_out=False,
+        min_n_traces=8, min_n_station_sites=4,
         write_individual_templates=False, templ_path='Templates/' ,
         make_pretty_plot=False, prefix='',
         check_template_strict=True, allow_channel_duplication=True,
@@ -323,6 +324,98 @@ def _create_template_objects(
         parallel=False, cores=1, thread_parallel=False, n_threads=1,
         unused_kwargs=True, *args, **kwargs):
     """
+    Internal function to create template objects from event files or event
+    objects, to be run in parallel.
+
+    :param events_files: List of event files or event objects.
+    :type events_files: list
+    :param selected_stations: List of selected stations, defaults to None
+    :type selected_stations: list, optional
+    :param template_length: Length of template in seconds, defaults to 60
+    :type template_length: float, optional
+    :param lowcut: Lowcut frequency for bandpass filter, defaults to 2.5
+    :type lowcut: float, optional
+    :param highcut: Highcut frequency for bandpass filter, defaults to 9.9
+    :type highcut: float, optional
+    :param min_snr: Minimum signal-to-noise ratio for template creation,
+    :type min_snr: float, optional
+    :param prepick:
+        Time before the pick in seconds to start the template, defaults to 0.5
+    :type prepick: float, optional
+    :param samp_rate: Sampling rate of the template, defaults to 20 Hz
+    :type samp_rate: float, optional
+    :param seisan_wav_path:
+        Path to single-event waveform files linked from Seisan S-file,
+        defaults to None (then data should be read from a client).
+    :type seisan_wav_path: str, optional
+    :param inv: Inventory object, defaults to None
+    :type inv: :class:`obspy.core.inventory.inventory.Inventory`, optional
+    :param clients: List of obspy FDSN client objects, defaults to None
+    :type clients:
+        list of :class:`obspy.clients.fdsn.client.Client`, or other clients
+        with the same API.
+    :param remove_response: Remove instrument response, defaults to False
+    :type remove_response: bool, optional
+    :param output: Output type of the template, defaults to 'DISP'
+    :type output: str, optional
+    :param noise_balancing: Whether to balance the noise, defaults to False
+    :type noise_balancing: bool, optional
+    :param balance_power_coefficient:
+        Power coefficient for noise balancing, defaults to 2 (see
+        :func:`robustraqn.spectral_tools.balance_noise`)
+    :type balance_power_coefficient: float, optional
+    :param ground_motion_input:
+        List of ground motion input types, can be one of 'DISP', 'VEL', 'ACC',
+        defaults to []
+    :type ground_motion_input: list, optional
+    :param apply_agc:
+        Whether to apply automatic gain control, defaults to False
+    :type apply_agc: bool, optional
+    :param agc_window_sec: AGC window length in seconds, defaults to 5
+    :type agc_window_sec: float, optional
+    :param min_n_traces:
+        Minimum number of traces to define a set of waveforms as template.
+    :type min_n_traces: int, optional
+    :param min_n_station_sites: Minimum number of stations to define a template
+    :type min_n_station_sites: int, optional
+    :param write_individual_templates:
+        Write out individual template files, defaults to False.
+    :type write_individual_templates: bool, optional
+    :param templ_path: Path to write individual template files to, defaults to
+    :type templ_path: str, optional
+    :param make_pretty_plot:
+        Make a pretty plot of the template, defaults to False
+    :type make_pretty_plot: bool, optional
+    :param prefix: Prefix for the template name, defaults to ''
+    :type prefix: str, optional
+    :param check_template_strict:
+        Check template strictly for NaNs, zeroes, and same trace length,
+        defaults to True
+    :type check_template_strict: bool, optional
+    :param allow_channel_duplication:
+        Allow channel duplication, defaults to True
+    :type allow_channel_duplication: bool, optional
+    :param normalize_NSLC: Normalize NSLC codes, defaults to True
+    :type normalize_NSLC: bool, optional
+    :param add_array_picks:
+        Add picks for neighboring stations on a seismic array, defaults to
+        False.
+    :type add_array_picks: bool, optional
+    :param stations_df:
+        Stations dataframe containing station information like coordinates
+    :type stations_df: :class:`pandas.DataFrame`, optional
+    :param add_large_aperture_array_picks:
+        Add picks for large aperture arrays (these can also be parts of a local
+        seismic network if defined as such).
+    :type add_large_aperture_array_picks: bool, optional
+    :param large_aperture_array_df: Large aperture array dataframe
+    :type large_aperture_array_df: :class:`pandas.DataFrame`, optional
+
+    :type kwargs: dict, optional
+    :param kwargs:
+        Additional keyword arguments to be passed to
+        eqcorrscan.utils.preprocessing.shortproc.
+    
     """
     if isinstance(events_files[0], str):
         input_type = 'sfiles'
@@ -414,6 +507,13 @@ def _create_template_objects(
             event = select[0]
             event_str = event_file
             sfile = event_file
+            # Save original filename in event.extra.sfile
+            if not hasattr(event, 'extra'):
+                event['extra'] = AttribDict()
+            event.extra.update({'sfile': {
+                'value': os.path.basename(event_file), 'namespace':
+                    'https://seis.geus.net/software/seisan/node239.html'}})
+            
         else:
             event_str = event_file.short_str()
             Logger.info('Working on event: ' + event_str)
@@ -494,12 +594,19 @@ def _create_template_objects(
         # Taper all the segments
         wavef = taper_trace_segments(wavef)
 
+        # A useful pre-filter makes waterlevel less critical, but also avoids
+        # other issues like overamplication of high-frequency noise on the
+        # Greenland stations with steep FIR filter response.
+        nyquist_f = samp_rate / 2
+        if 'pre_filt' in kwargs.keys():
+            pre_filt = kwargs['pre_filt']
+            kwargs.pop('pre_filt')
+        else:
+            pre_filt = [0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f]
         if remove_response:
-            nyquist_f = samp_rate / 2
-            wavef = try_remove_responses(
-                wavef, inv, output=output, taper_fraction=0.15,
-                pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],
-                parallel=parallel, cores=cores,
+            wavef = wavef.try_remove_responses(
+                inv, output=output, taper_fraction=0.15,
+                pre_filt=pre_filt, parallel=parallel, cores=cores,
                 thread_parallel=thread_parallel, n_threads=n_threads, **kwargs)
             if origin.latitude is None or origin.longitude is None:
                 Logger.warning('Could not compute distances for event %s.',
@@ -576,10 +683,16 @@ def _create_template_objects(
             else:
                 st += tr
 
+        # Extract relevant kwargs for pre_processing.shortproc
+        extra_kwargs = dict()
+        for key, value in kwargs.items():
+            if key in ['starttime', 'endtime', 'seisan_chan_names' 'fill_gaps',
+                       'ignore_length', 'ignore_bad_data', 'fft_threads']:
+                extra_kwargs.update({key: value})
         wavef = pre_processing.shortproc(
             st=st, lowcut=lowcut, highcut=highcut, filt_order=4,
             samp_rate=samp_rate, parallel=False, num_cores=1,
-            fft_threads=n_threads)
+            fft_threads=n_threads, **extra_kwargs)
         # data_envelope = obspy.signal.filter.envelope(st_filt[0].data)
 
         # Make the templates from picks and waveforms
@@ -589,7 +702,7 @@ def _create_template_objects(
             picks=event.picks, st=wavef, length=template_length, swin='all',
             prepick=prepick, all_vert=True, all_horiz=True,
             delayed=True, min_snr=min_snr, horizontal_chans=horizontal_chans,
-            vertical_chans=vertical_chans, **kwargs)
+            vertical_chans=vertical_chans) #, **kwargs)
         # quality-control template
         if len(template_st) == 0:
             Logger.info('Rejected template: event %s (sfile %s): no traces '
@@ -763,7 +876,7 @@ def create_template_objects(
         sfiles=[], catalog=None, selected_stations=[], template_length=60,
         lowcut=2.5, highcut=9.9, min_snr=5.0, prepick=0.5, samp_rate=20,
         seisan_wav_path=None, clients=[], inv=Inventory(),
-        remove_response=False, output='DISP', noise_balancing=False,
+        remove_response=False, output='VEL', noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
         apply_agc=False, agc_window_sec=5,
         min_n_traces=8, write_out=False, write_individual_templates=False,
@@ -853,7 +966,7 @@ def create_template_objects(
     :type std_channel_prefix: str, optional
     :param vertical_chans: _description_, defaults to ['Z', 'H']
     :type vertical_chans: list, optional
-    :param wavetool_path: _description_, defaults to '/home/felix/Software/SEISANrick/PRO/linux64/wavetool'
+    :param wavetool_path: _description_, defaults to '$SEISAN_TOP/PRO/wavetool'
     :type wavetool_path: str, optional
     :param horizontal_chans: _description_, defaults to ['E', 'N', '1', '2', 'X', 'Y']
     :type horizontal_chans: list, optional

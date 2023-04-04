@@ -21,7 +21,7 @@ from collections import Counter, defaultdict
 from multiprocessing import cpu_count
 from concurrent.futures import ThreadPoolExecutor
 
-from obspy import Stream
+# from obspy import Stream
 from obspy.signal.util import next_pow_2, util_geo_km
 from obspy.io.nordic.core import read_nordic, write_select
 from obspy.signal.array_analysis import get_timeshift
@@ -37,6 +37,9 @@ from eqcorrscan.core.match_filter import Party
 from eqcorrscan.utils.despike import _interp_gap
 
 from robustraqn import load_events_for_detection
+# from robustraqn.obspy.core import Trace, Stream
+import robustraqn.obspy.core.stream as robst
+# import robustraqn.obspy.core.stream as robtr
 
 
 # List of extended glob-expressions that match all stations within a seismic
@@ -163,6 +166,74 @@ SEISARRAY_REF_EQUIVALENT_STATIONS = defaultdict(
 3. Picking
 """
 
+# class SeismicArrayNetwork(object):
+#     """
+#     Class for handling a network of seismic arrays.
+
+#     :param object: _description_
+#     :type object: _type_
+#     :raises ValueError: _description_
+#     :raises ValueError: _description_
+#     :raises an: _description_
+#     :raises ValueError: _description_
+#     :return: _description_
+#     :rtype: _type_
+#     """
+#     def __init__(self, seismic_arrays=[]):
+#         self.seismic_arrays = seismic_arrays
+        
+    
+
+# class SeismicArray(object):
+#     """
+#     Class for handling seismic arrays.
+#     """
+#     def __init__(self, stations, seisarray_prefixes=SEISARRAY_PREFIXES,
+#                  ref_stations=SEISARRAY_REF_STATIONS,
+#                  ref_equivalent_stations=SEISARRAY_REF_EQUIVALENT_STATIONS):
+#         self.stations = stations
+#         self.aperture = get_array_aperture(self.stations)
+#         self.seisarray_prefixes = seisarray_prefixes
+#         self.ref_stations = ref_stations
+#         self.ref_equivalent_stations = ref_equivalent_stations
+#         self.station_sites = get_station_sites(
+#             self.stations, seisarray_prefixes=self.seisarray_prefixes)
+#         self.station_sites_dict = get_station_sites_dict(
+#             self.stations, seisarray_prefixes=self.seisarray_prefixes)
+#         self.array_stations = get_array_stations(
+#             self.stations, seisarray_prefixes=self.seisarray_prefixes)
+#         self.array_stations_dict = get_array_stations_dict(
+#             self.stations, seisarray_prefixes=self.seisarray_prefixes)
+#         self.array_station_sites = get_array_station_sites(
+#             self.stations, seisarray_prefixes=self.seisarray_prefixes)
+#         self.array_station_sites_dict = get_array_station_sites_dict(
+#             self.stations, seisarray_prefixes=self.seisarray_prefixes)
+#         self.array_station_sites_dict.update(
+#             get_array_station_sites_dict(
+#                 self.stations, seisarray_prefixes=self.seisarray_prefixes,
+#                 ref_stations=self.ref_stations,
+#                 ref_equivalent_stations=self.ref_equivalent_stations))
+#         self.array_station_sites_dict.update(
+#             get_array_station_sites_dict(
+#                 self.stations, seisarray_prefixes=self.seisarray_prefixes,
+#                 ref_stations=self.ref_stations,
+#                 ref_equivalent_stations=self.ref_equivalent_stations,
+#                 ref_equivalent_stations_only=True))
+#         self.array_station_sites_dict.update(
+#             get_array_station_sites_dict(
+#                 self.stations, seisarray_prefixes=self.seisarray_prefixes,
+#                 ref_stations=self.ref_stations,
+#                 ref_equivalent_stations=self.ref_equivalent_stations,
+#                 ref_equivalent_stations_only=True,
+#                 ref_stations_only=True))
+#         self.array_station_sites_dict.update(
+#             get_array_station_sites_dict(
+#                 self.stations, seisarray_prefixes=self.seisarray_prefixes,
+#                 ref_stations=self.ref_stations,
+#                 ref_equ
+        
+    
+
 def get_station_sites_dict(stations, seisarray_prefixes=SEISARRAY_PREFIXES):
     """
     Return a dict of key: station name, value: station site name (i.e., station
@@ -249,7 +320,7 @@ def filter_array_stations_df(stations_df=pd.DataFrame(), seisarray_prefix=''):
     :param seisarray_prefixes:
         List of extended-glob patterns that match all station codes within
         seismic arrays.
-        
+
     :returns: pandas.dataframe of all stations that belong to the seismic array
     :rtype: pandas.Dataframe    
     """
@@ -334,7 +405,7 @@ def extract_array_stream(st, seisarray_prefixes=SEISARRAY_PREFIXES):
     # defaultdict(list)
     
     for seisarray_prefix in seisarray_prefixes:
-        array_st = Stream()
+        array_st = robst.Stream()
         for tr in st:
             if fnmatch.fnmatch(tr.stats.station, seisarray_prefix,
                                flags=fnmatch.EXTMATCH):
@@ -1042,6 +1113,9 @@ def _check_picks_within_shiftlen(party, event, detection_id, shift_len):
 
 def __non_consecutive(arr, neighbor_range=1, neighbor_distance=None):
     """Find non-consecutive numbers in array.
+    
+    NOTE: this function is probably not needed anymore, as there is a simpler
+          implementation of it in _non_consecutive just below
 
     :param arr: sorted array of values
     :type arr: np.array
@@ -1289,7 +1363,7 @@ def mask_shared_trace_offsets(
         ret_traces += [tr for tr in s_stream]
     # Optionally split and taper stream (this is required to make the artefacts
     # caused by the steps disappear in filtered data):
-    stream = Stream(ret_traces)
+    stream = robst.Stream(ret_traces)
     if split_taper_stream:
         stream = load_events_for_detection.taper_trace_segments(
             stream, min_length_s=min_length_s, max_percentage=max_percentage,
@@ -1383,7 +1457,7 @@ def mask_array_trace_offsets(
         # Append traces to the list that will contribute to return-stream
         masked_array_traces += masked_array_stream.traces
 
-    out_stream = Stream(single_station_traces + masked_array_traces)
+    out_stream = robst.Stream(single_station_traces + masked_array_traces)
     if split_taper_stream:
         out_stream = load_events_for_detection.taper_trace_segments(
             out_stream, min_length_s=min_length_s,

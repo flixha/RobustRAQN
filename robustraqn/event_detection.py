@@ -379,8 +379,8 @@ def run_day_detection(
         # Do initial processing (rotation, stats normalization, merging)
         # by parallelization across three-component seismogram sets.
         nyquist_f = minimum_sample_rate / 2
-        day_st = init_processing_w_rotation(
-            day_st, starttime=starttime_req, endtime=endtime_req,
+        day_st = day_st.init_processing_w_rotation(
+            starttime=starttime_req, endtime=endtime_req,
             # day_st, starttime=starttime, endtime=endtime,
             remove_response=remove_response, output=output, inv=inv,
             pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],

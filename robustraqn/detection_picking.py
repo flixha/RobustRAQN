@@ -454,8 +454,8 @@ def pick_events_for_day(
     #     parallel=parallel, cores=cores, **kwargs)
     
     nyquist_f = minimum_sample_rate / 2
-    day_st = init_processing_w_rotation(
-        day_st, starttime=starttime_req, endtime=endtime_req,
+    day_st = day_st.init_processing_w_rotation(
+        starttime=starttime_req, endtime=endtime_req,
         remove_response=remove_response, output=output, inv=inv,
         pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],
         parallel=parallel, cores=cores,

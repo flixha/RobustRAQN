@@ -18,7 +18,7 @@ import difflib
 
 from obspy.core.event import Catalog, Event, Origin
 from obspy.core.utcdatetime import UTCDateTime
-from obspy import read_inventory, Inventory, Stream
+from obspy import read_inventory, Inventory #, Stream
 from obspy.geodetics.base import degrees2kilometers, locations2degrees
 # from obspy.clients.filesystem.sds import Client
 from robustraqn.obspy.clients.filesystem.sds import Client
@@ -28,9 +28,6 @@ from eqcorrscan.core.lag_calc import LagCalcError
 from eqcorrscan.utils.pre_processing import dayproc, shortproc
 # from eqcorrscan.core.template_gen import _template_gen
 
-# import quality_metrics, spectral_tools, load_events_for_detection
-# reload(quality_metrics)
-# reload(load_events_for_detection)
 from robustraqn.quality_metrics import (
     create_bulk_request, get_waveforms_bulk, read_ispaq_stats,
     get_parallel_waveform_client)
@@ -49,6 +46,7 @@ from robustraqn.lag_calc_postprocessing import (
 from robustraqn.seismic_array_tools import array_lag_calc
 from robustraqn.processify import processify
 from robustraqn.fancy_processify import fancy_processify
+from robustraqn.obspy.core import Stream, Trace
 from robustraqn.obspy_utils import _quick_copy_stream
 
 import logging

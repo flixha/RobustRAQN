@@ -311,7 +311,7 @@ def try_remove_response(self, inv, taper_fraction=0.05, pre_filt=None,
     # Check that data are not NaN:
     if np.isnan(self.data).any():
         Logger.warning('Data for trace %s contain NaN after response-removal,'
-                       + 'will discard this trace.', str(self))
+                       + ' will discard this trace.', str(self))
         return None
 
     return self

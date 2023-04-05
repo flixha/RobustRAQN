@@ -831,7 +831,7 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
                 bayesloc_event_id = origin.extra.get(
                     'bayesloc_event_id')['value']
                 bayes_origins_in_cat = True
-            except AttributeError:
+            except (AttributeError, TypeError):
                 continue
             continue
     if not bayes_origins_in_cat:
@@ -938,7 +938,7 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
                 bayesloc_event_id = origin.extra.get(
                     'bayesloc_event_id')['value']
                 bayesloc_origin = origin
-            except AttributeError:
+            except (AttributeError, TypeError):
                 continue
         if bayesloc_event_id is None:
             Logger.info(
@@ -1150,7 +1150,7 @@ def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
                 bayesloc_event_id = origin.extra.get(
                     'bayesloc_event_id')['value']
                 break
-            except AttributeError:
+            except (AttributeError, TypeError):
                 continue
         if bayesloc_event_id is not None:
             Logger.info(
@@ -1226,7 +1226,7 @@ def _update_bayesloc_phase_hints(cat, remove_1_suffix=False):
                 bayesloc_event_id = origin.extra.get(
                     'bayesloc_event_id')['value']
                 break
-            except AttributeError:
+            except (AttributeError, TypeError):
                 continue
         if bayesloc_event_id is not None:
             Logger.info('Updating phase hints for event %s', event.short_str())

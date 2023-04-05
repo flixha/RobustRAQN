@@ -1249,8 +1249,6 @@ def try_remove_responses(
                     taper_fraction, pre_filt, output, gain_traces=gain_traces,
                     water_level=water_level)
                     for tr in self)
-        # st = Stream([tr for trace_st in streams for tr in trace_st])
-        self = Stream([tr for tr in streams])
     else:
         if cores is None:
             cores = min(len(self), cpu_count())
@@ -1261,8 +1259,8 @@ def try_remove_responses(
                  taper_fraction, pre_filt, output, gain_traces=gain_traces,
                  water_level=water_level)
                 for tr in self)
-        # st = Stream([tr for trace_st in streams for tr in trace_st])
-        self = Stream([tr for tr in streams])
+
+    self = Stream([tr for tr in streams if tr is not None])
     return self
 
 

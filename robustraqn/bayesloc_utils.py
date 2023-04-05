@@ -544,7 +544,7 @@ def read_bayesloc_origins(
                 bayesloc_event_id = origin.extra.get(
                     'bayesloc_event_id')['value']
                 break
-            except AttributeError:
+            except (AttributeError, TypeError):
                 continue
         bayesloc_event_ids.append(bayesloc_event_id)
     if len(cat) > 0 and all([id is not None for id in bayesloc_event_ids]):

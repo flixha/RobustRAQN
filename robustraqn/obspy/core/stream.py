@@ -1240,6 +1240,7 @@ def try_remove_responses(
                     inventory, taper_fraction=taper_fraction,
                     pre_filt=pre_filt, output=output, gain_traces=gain_traces,
                     water_level=water_level)
+        self = Stream([tr for tr in self if tr is not None])
     elif thread_parallel and not parallel:
         with threadpool_limits(limits=n_threads, user_api='blas'):
             with parallel_backend('threading', n_jobs=n_threads):
@@ -1249,6 +1250,8 @@ def try_remove_responses(
                     taper_fraction, pre_filt, output, gain_traces=gain_traces,
                     water_level=water_level)
                     for tr in self)
+        # st = Stream([tr for trace_st in streams for tr in trace_st])
+        self = Stream([tr for tr in streams if tr is not None])
     else:
         if cores is None:
             cores = min(len(self), cpu_count())
@@ -1259,8 +1262,8 @@ def try_remove_responses(
                  taper_fraction, pre_filt, output, gain_traces=gain_traces,
                  water_level=water_level)
                 for tr in self)
-
-    self = Stream([tr for tr in streams if tr is not None])
+        # st = Stream([tr for trace_st in streams for tr in trace_st])
+        self = Stream([tr for tr in streams if tr is not None])
     return self
 
 

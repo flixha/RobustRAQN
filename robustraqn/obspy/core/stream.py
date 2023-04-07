@@ -1187,7 +1187,7 @@ def check_normalize_station_sample_rates(
 def try_remove_responses(
         self, inventory, taper_fraction=0.05, pre_filt=None, water_level=10,
         parallel=False, cores=None, thread_parallel=False, n_threads=1,
-        output='DISP', gain_traces=False, **kwargs):
+        output='DISP', gain_traces=True, **kwargs):
     """
     Wrapper function to try to remove response from all traces in parallel,
     taking care of a few common issues with response defintions (e.g.,

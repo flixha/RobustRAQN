@@ -258,12 +258,15 @@ def try_remove_response(self, inv, taper_fraction=0.05, pre_filt=None,
 
     # TODO: remove this once proper writing / reading of trace
     #       processing is implemented somewhere else...
+    if not hasattr(self.stats, 'extra'):
+        self.stats.extra = AttribDict()
+    # Use int (0) instead of Fale for better I/O compatibility - bool is
+    # subtype of int anyways
+    self.stats.extra.update({'response_removed': 0})
     if found_matching_resp:
         # keep this information in trace.stats.extra for now to allow
         # proper relative amplitde / magnitude calculation
-        if not hasattr(self.stats, 'extra'):
-            self.stats.extra = AttribDict()
-        self.stats.extra.update({'response_removed': True})
+        self.stats.extra.update({'response_removed': 1})
     # Set station coordinates
     # initialize
     self.stats["coordinates"] = {}

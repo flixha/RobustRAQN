@@ -59,7 +59,8 @@ Go to one of the example folders in robustraqn/Examples. There are example scrip
 
 
 # UTILITY / DATABASE SETUP:
-To get the most reliable earthquake catalog out of Robustraqn, consider the following tools:
+To get the most reliable earthquake catalog out of Robustraqn, consider the following steps and/or tools:
 1. Connect to a data quality metrics database or create your own metrics database with [http://services.iris.edu/mustang/](IRIS Mustang) or the standalone [ispaq](https://github.com/iris-edu/ispaq)
 2. Relocate your catalog template events with [Bayesloc](https://gs.llnl.gov/nuclear-threat-reduction/nuclear-explosion-monitoring/bayesloc) to obtain reliable location uncertainties, reduce bias, and recognize problematic events and picks.
-3. Relocate your catalog detections with cross-correlation based differential travelties using [HypoDD](https://www.ldeo.columbia.edu/~felixw/hypoDD.html), [Growclust](https://github.com/dttrugman/GrowClust) or [Growclust3D](https://github.com/dttrugman/GrowClust3D.jl).
+3. Set up definitions for seismic arrays, either for "proper" small/medium/large aperture seismic arrays with [SEISARRAY_PREFIXES in seismic_array_tools](robustraqn/seismic_array_tools.py), or for "virtual" arrays that combine a set of individual stations for distant earthquake observations.
+4. Relocate your catalog detections with cross-correlation based differential travelties using [HypoDD](https://www.ldeo.columbia.edu/~felixw/hypoDD.html), [Growclust](https://github.com/dttrugman/GrowClust) or [Growclust3D](https://github.com/dttrugman/GrowClust3D.jl).

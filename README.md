@@ -40,3 +40,16 @@ In a conda environment:
 - `python setup.py develop`
 
 Some functionality may require EQcorrscan's `master ` branch, and some considerable speedups (e.g., for response correction) are not yet merged into obspy's master branch.
+
+If you want to process large datasets, consider the following packages for accelerated cross-correlation calculation:
+- https://github.com/beridel/fast_matched_filter for GPU-accelerated correlations on Nvidia / CUDA-supported hardware
+- https://github.com/nordmoen/fmf2 for CPU-accelarated correlations on CPUs with AVX2/AVX512 support, and for GPU-accelerated correlations on systems with a hipSYCL compiler (e.g., Nvidia, AMD, or Intel GPUs)
+
+
+# GET STARTED:
+
+Go to one of the example folders in robustraqn/Examples. There are example scripts to start the three top-level tasks that you will need to run for a full earthquake detection objective:
+1. 01_make_templates.py: creates the set of templates for detection
+2. 02_detect_events.py: runs the computationally most expensive task of cross-correlating all templates and data
+3. 03_pick_events.py: returns a robust set of arrival picks for significant detections made in the previous task
+Each of these tasks can be run on a single-node server or on multi-node clusters. For clusters running Slurm job scheduling, you can find Slurm batch scripts that interface with the python scripts to split the problem set across nodes. Note that the memory requirements of your job is a critical parameter that controls how you can split up the full job (e.g., memory consumption for template making scales linearly with number of cores, while memory consumption for task 2 and 3 can to an extent be controlled with the parameter ´n_templates_per_group´)

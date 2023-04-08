@@ -1,9 +1,7 @@
 
 # %%
 import os
-# from attr import Attribute
 import numpy as np
-import matplotlib
 
 import pandas as pd
 import numpy as np
@@ -26,22 +24,10 @@ from obspy.taup import TauPyModel
 from obspy.core.util.attribdict import AttribDict
 from obspy.io.nordic.ellipse import Ellipse
 
-from obsplus.events.validate import attach_all_resource_ids
-from obsplus import events_to_df
-from obsplus.utils.time import to_datetime64
-from obsplus.constants import EVENT_DTYPES, TIME_COLUMNS
-from obsplus.structures.dfextractor import DataFrameExtractor
-
-
-
 from robustraqn.seismic_array_tools import get_station_sites
 
 import logging
 Logger = logging.getLogger(__name__)
-# logging.basicConfig(level=logging.INFO)
-#logging.basicConfig(
-#    level=logging.INFO,
-#    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 
 
 def _cc_round(num, dp):
@@ -103,7 +89,7 @@ def readSTATION0(path, stations):
             if lat[4] == '.':
                 lat = (int(lat[0:2]) + float(lat[2:-1]) / 60) * NS
             else:
-                degrees = lat[0:2]
+                # degrees = lat[0:2]
                 # if degrees.strip() == '':
                 #     degrees = '0'
                 # # minutes = lat[2:4]
@@ -114,7 +100,8 @@ def readSTATION0(path, stations):
                 # #     decimal_minutes = decimal_minutes.replace(' ', '0')
                 lat = (int(lat[0:2]) + float(lat[2:4] + '.' + lat[4:-1]) /
                        60) * NS
-                # lat = (int(degrees) + float(minutes + '.' + decimal_minutes) /
+                # lat = (
+                #     int(degrees) + float(minutes + '.' + decimal_minutes)
                 #        60) * NS
             lon = line[14:23].replace(' ', '0')
             if lon[-1] == 'W':
@@ -133,9 +120,10 @@ def readSTATION0(path, stations):
                 # decimal_minutes = lon[5:-1]
                 # if ' ' in decimal_minutes:
                 #     decimal_minutes = decimal_minutes.replace(' ', '0')
-                lon = (int(lon[0:3]) + float(lon[3:5] + '.' + lon[5:-1]) /
-                      60) * EW
-                # lon = (int(degrees) + float(minutes + '.' + decimal_minutes) /
+                lon = (int(
+                    lon[0:3]) + float(lon[3:5] + '.' + lon[5:-1]) / 60) * EW
+                # lon = (
+                #  int(degrees) + float(minutes + '.' + decimal_minutes) /
                 #        60) * EW
             try:
                 elev = float(line[23:-1].strip())
@@ -165,10 +153,17 @@ def write_station(inventory, station0_file=None, stations=[],
     :param inventory:
         Inventory of stations to write - should include channels if
         use_elevation=True to incorporate channel depths.
-    :type use_elevation: bool
-    :param use_elevation: Whether to write elevations (requires hypoDD >= 2)
+    :type station0_file: str
+    :param station0_file: Path to a station0 file to read in stations from.
+    :type stations: list
+    :param stations: List of stations to write to file.
     :type filename: str
     :param filename: File to write stations to.
+    :type write_only_once: bool
+    :param write_only_once: Whether to write stations only once to file.
+
+    :rtype: list
+    :returns: List of station names written to file.
     """
     station_strings = []
     # formatter = "{sta:<5s}{lat:>9.4f}{lon:>10.4f}{elev:>10.3f}"
@@ -222,6 +217,40 @@ def _select_best_origin(
     """
     Select the best origin (considering how much information it has available)
     and append it to priors
+
+    :type event: :class:`~obspy.core.event.Event`
+    :param event: Event to select origin from
+    :type evid: int
+    :param evid: Event ID
+    :type priors: list
+    :param priors: List of prior origins to append to:
+    :type fix_depth: float
+    :param fix_depth: Depth to fix all origins to (in km)
+    :type default_depth: float
+    :param default_depth: Default depth to use if no depth is available
+    :type def_dep_error_m: float
+    :param def_dep_error_m: Default depth error to use if no depth error is
+    :type default_lat: float
+    :param default_lat: Default latitude to use if no lat is available
+    :type default_lon: float
+    :param default_lon: Default longitude to use if no lon is available
+    :type def_hor_error_deg: float
+    :param def_hor_error_deg:
+        Default horizontal error to use if no error is available
+    :type def_time_error_s: float
+    :param def_time_error_s: Default time error to use if no error is available
+    :type default_start: :class:`~datetime.datetime`
+    :param default_start: Default start time to use if no time is available
+    :type default_start: :class:`~datetime.datetime`
+    :param default_start:
+        Default reference epoch start time to use, defaults to the Linux epoch
+        default of 1970-01-01T00:00:00. Consider to use earlier epoch starts
+        for earthquake catalogs that start earlier..
+
+    :rtype: tuple
+    :return:
+        Tuple of (origin, origin_epoch_time, hor_uncertainty_km,
+        depth_uncertainty_km, time_uncertainty_s)
     """
     orig = event.preferred_origin() or event.origins[0]
     # Select the best origin - it should have lat/lon, and the smaller the
@@ -237,12 +266,13 @@ def _select_best_origin(
     orig_epoch_time = (
         orig.time._get_datetime() - default_start).total_seconds()
 
+    # Check uncertainties of the origins
     hor_uncertainty_km = None
     if (orig.origin_uncertainty is not None and
             orig.origin_uncertainty.max_horizontal_uncertainty):
         hor_uncertainty_km = (
             orig.origin_uncertainty.max_horizontal_uncertainty / 1000)
-    elif (orig.origin_uncertainty is not None and 
+    elif (orig.origin_uncertainty is not None and
             orig.origin_uncertainty.horizontal_uncertainty):
         hor_uncertainty_km = (
             orig.origin_uncertainty.horizontal_uncertainty / 1000)
@@ -254,7 +284,7 @@ def _select_best_origin(
             (orig.latitude_errors.uncertainty or def_hor_error_deg) +
             (orig.longitude_errors.uncertainty or def_hor_error_deg)) / 2)
     elif (orig.longitude_errors is not None
-          and orig.longitude_errors.uncertainty  is not None):
+          and orig.longitude_errors.uncertainty is not None):
         hor_uncertainty_km = degrees2kilometers(
             orig.longitude_errors.uncertainty)
     elif (orig.latitude_errors is not None
@@ -266,7 +296,7 @@ def _select_best_origin(
 
     if orig.depth is not None:
         o_depth = orig.depth / 1000
-    else: 
+    else:
         o_depth = default_depth / 1000
 
     if orig.depth_errors.uncertainty is not None:
@@ -284,6 +314,28 @@ def _select_best_origin(
 
 def _get_traveltime(models, degree, depth, phase, model_cutoff_distances=[]):
     """
+    Retrieve the traveltime for a given phase, distance and depth from a
+    velocity model.
+
+    :type models: list
+    :param models:
+        List of velocity models to use (see model_cutoff_distances parameter
+        when supplying multiple models). Supply models as
+        ´obspy.taup.TauPyModel´
+    :type degree: float
+    :param degree: Distance in degrees
+    :type depth: float
+    :param depth: Depth in km
+    :type phase: str
+    :param phase: Phase name
+    :type model_cutoff_distances: list
+    :param model_cutoff_distances: List of cutoff distances in degrees for the
+        velocity models. The first model in the list will be used for all
+        distances smaller than the first cutoff distance, etc. If no cutoff
+        is given, the first model will be used for all distances.
+
+    :rtype: float
+    :return: Traveltime in seconds
     """
     if len(model_cutoff_distances) < len(models):
         model = models[0]
@@ -293,8 +345,8 @@ def _get_traveltime(models, degree, depth, phase, model_cutoff_distances=[]):
         model = None
         for jm, cutoff_dist in enumerate(model_cutoff_distances):
             if jm == 0:
-               if degree <= cutoff_dist:
-                   model = models[jm]
+                if degree <= cutoff_dist:
+                    model = models[jm]
             elif (degree <= cutoff_dist
                     and degree > model_cutoff_distances[jm-1]):
                 model = models[jm]
@@ -306,32 +358,42 @@ def _get_traveltime(models, degree, depth, phase, model_cutoff_distances=[]):
         try:
             arrivals = model.get_travel_times(depth, degree,
                                               phase_list=phase_list)
-            return(min([arrival.time for arrival in arrivals]))
+            return min([arrival.time for arrival in arrivals])
         except (IndexError, ValueError):
-            return(np.nan)
+            return np.nan
     else:
         try:
             arrival = model.get_travel_times(depth, degree, phase_list=[phase])
-            return(arrival[0].time)
+            return arrival[0].time
         except IndexError:
             # if there's no path, try with an upgoing path Pg --> P / p
             try:
                 arrival = model.get_travel_times(
                     depth, degree, phase_list=[phase[0]])
-                return(arrival[0].time)
+                return arrival[0].time
             except IndexError:
                 try:
                     arrival = model.get_travel_times(
                         depth, degree, phase_list=[phase[0].lower()])
-                    return(arrival[0].time)
+                    return arrival[0].time
                 except IndexError:
-                    return(np.nan)
+                    return np.nan
 
 
 def _get_nordic_event_id(event, return_generic_nordic_id=False):
     """
     Get the event id that is mentioned in the most recent comment in event read
     from Nordic file.
+
+    :type event: :class:`~obspy.core.event.event.Event`
+    :param event: Event to get the nordic event id from.
+    :type return_generic_nordic_id: bool
+    :param return_generic_nordic_id:
+        If True, return a generic nordic event if no "real" Nordic event id is
+        found.
+
+    :rtype: int
+    :return: Nordic event id.
     """
     if hasattr(event, 'extra') and 'nordic_event_id' in event.extra.keys():
         event_id = event.extra['nordic_event_id']['value']
@@ -341,17 +403,17 @@ def _get_nordic_event_id(event, return_generic_nordic_id=False):
         comments = [comment for comment in comments
                     if len(comment.text.split(' ')) > 1]
         comments = sorted(comments, key=lambda x: x.text.split(' ')[1],
-                            reverse=True)
+                          reverse=True)
         try:
             event_id = int(
                 [com.text.split('ID:')[-1].strip('SdLRD ')
-                for com in comments if 'ID:' in com.text][0])
+                 for com in comments if 'ID:' in com.text][0])
         except IndexError:
             event_id = None
     # Return generic nordic ID in case no specific ID is saved in file.
     if event_id is None and return_generic_nordic_id:
         event_id = int(event.short_str(
-            )[0:19].replace('-', '').replace(':', '').replace('T',''))
+            )[0:19].replace('-', '').replace(':', '').replace('T', ''))
     if isinstance(event_id, str):
         event_id = int(event_id)
     return event_id
@@ -365,6 +427,61 @@ def write_ttimes_files(
         degree_step=0.2, outpath='.', print_first_arriving_PS=True,
         full_teleseismic_phases=False, parallel=False, cores=40):
     """
+    Write a traveltime lookup table file with travel times for each supplied
+    phase, for a list of velocity models used at different distances
+
+    :type models: list
+    :param models:
+        List of velocity models to use (see model_cutoff_distances
+        parameter when supplying multiple models). Supply models as
+        ´obspy.taup.TauPyModel´
+    :tpye model_cutoff_distances: list
+    :param model_cutoff_distances:
+        List of cutoff distances in degrees for the velocity models. The first
+        model in the list will be used for all distances smaller than the first
+        cutoff distance, etc. If no cutoff is given, the first model will be
+        used for all distances.
+    :type mod_names: list
+    :param mod_names:
+        List of names for the velocity models. If not supplied, the model names
+        will be taken from the model file names.
+    :type out_name: str
+    :param out_name: Name of the output file
+    :type phase_list: list
+    :param phase_list: List of phases to calculate travel times for
+    :type min_depth: float
+    :param min_depth: Minimum depth to calculate travel times for
+    :type max_depth: float
+    :param max_depth: Maximum depth to calculate travel times for
+    :type depth_step: float
+    :param depth_step: Depth step to calculate travel times for
+    :type min_degrees: float
+    :param min_degrees: Minimum epicentral distance to calculate travel times
+    :type max_degrees: float
+    :param max_degrees: Maximum epicentral distance to calculate travel times
+    :type degree_step: float
+    :param degree_step: Epicentral distance step to calculate travel times
+    :type outpath: str
+    :param outpath: Path to write the output file to
+    :type print_first_arriving_PS: bool
+    :param print_first_arriving_PS:
+        Print out additional files for the the first arriving P and S phases
+        "P1" and "S1" (default: True)
+    :type full_teleseismic_phases: bool
+    :param full_teleseismic_phases:
+        For full telsesmic phases, use as lower distance limit the distance in
+        min_tele_degrees.
+    :type parallel: bool
+    :param parallel: Calculate travel times in parallel
+    :type cores: int
+    :param cores: Number of cores to use for parallel calculation
+    :type min_tele_degrees: float
+    :param min_tele_degrees:
+        Minimum epicentral distance to calculate travel times for teleseismic
+        phases
+
+    :rtype: None
+    :return: None
     """
     used_models = []
     for jm, model in enumerate(models):
@@ -382,8 +499,8 @@ def write_ttimes_files(
     # model = TauModel.from_file('NNSN1D_plusAK135.npz')
     # a list of epicentral distances without a travel time, and a flag:
     # notimes = []
-    #plotted = False
-    
+    # plotted = False
+
     # calculate the arrival times and plot vs. epicentral distance:
     depths = np.arange(min_depth, max_depth, depth_step)
     # degrees = np.linspace(min_degrees, max_degrees, npoints)
@@ -442,24 +559,6 @@ def write_ttimes_files(
                                                       for degree in degrees)
                     ttimes = [np.nanmin([ttimes[j], n_ttimes[j], b_ttimes[j]])
                               for j, ttime in enumerate(ttimes)]
-
-            # ttimes = []
-            # for degree in degrees:
-            #     try:
-            #         arrival = model.get_travel_times(
-            #             depth, degree,phase_list=[phase])
-            #         # convert time from minutes to seconds # NO?
-            #         ttimes.append(arrival[0].time)
-            #     except IndexError:
-            #         # if there's no path, try with an upgoing path (e.g., make
-            #         # 'Pg' to 'p' to complete travetimetable)
-            #         try:
-            #             arrival = model.get_travel_times(
-            #                 depth, degree, phase_list=[phase[0].lower()])
-            #         except IndexError:
-            #             ttimes.append(np.nan)
-                # ax = arrivals.plot_times(phase_list=phase_list, show=True,
-                #                          ax=ax, plot_all=True)
             f.write('Travel time at depth = %8.2f km.\n' % depth)
             for ttime in ttimes:
                 f.write('%11.4f\n' % ttime)
@@ -468,6 +567,15 @@ def write_ttimes_files(
 
 def _fill_bayes_origin_quality(event, orig):
     """
+    Fill in origin quality information from Bayesloc output origin.
+
+    :type event: :class:`~obspy.core.event.event.Event`
+    :param event: Event to fill in origin quality information for.
+    :type orig: :class:`~obspy.core.event.origin.Origin`
+    :param orig: Origin to fill in origin quality information for.
+
+    :rtype: :class:`~obspy.core.event.origin.OriginQuality`
+    :return: Origin quality information.
     """
     if orig is not None and orig.quality is not None:
         orig_quality = orig.quality
@@ -484,13 +592,18 @@ def _fill_bayes_origin_quality(event, orig):
 
 def _fill_bayes_origin_uncertainty(row):
     """
-    Uncertainty ellipse from Bayesloc output:
-    row: pandas dataframe Series or dataframe row
+    Fill in an uncertainty ellipse into an obspy origin from Bayesloc output.
+
+    :type row: :class:`~pandas.core.series.Series`
+    :param row: Row of Bayesloc output dataframe.
+
+    :rtype: :class:`~obspy.core.event.origin.OriginUncertainty`
+    :return: Origin uncertainty information.
     """
     if isinstance(row, pd.DataFrame):
         row = row.iloc[0]
     cov = [[row.east_sd, row.north_east_cor],
-            [row.north_east_cor, row.north_sd]]
+           [row.north_east_cor, row.north_sd]]
     # IF there are any nans or infs:
     if np.any(np.isnan(cov)) or np.any(np.isinf(cov)):
         ellipse = AttribDict()
@@ -527,7 +640,40 @@ def read_bayesloc_origins(
         custom_epoch=None, agency_id='', find_event_without_id=False,
         s_diff=3, max_bayes_error_km=100, read_all_iterations=False):
     """
-    Read bayesloc origins into Catalog and pandas datafrane
+    Read bayesloc origins into Catalog and pandas datafrane.
+
+    :type bayesloc_origins_ned_stats_file: str
+    :param bayesloc_origins_ned_stats_file:
+        Path to Bayesloc origins file or the bayesloc execution directory.
+    :type cat: :class:`~obspy.core.event.catalog.Catalog`
+    :param cat: Catalog to add bayesloc origins to.
+    :type custom_epoch: :class:`~obspy.core.utcdatetime.UTCDateTime`
+    :param custom_epoch: Custom epoch to use for bayesloc origins.
+    :type agency_id: str
+    :param agency_id: Agency ID to use for bayesloc origins.
+    :type find_event_without_id: bool
+    :param find_event_without_id: Find event in catalog without ID.
+    :type s_diff: float
+    :param s_diff:
+        Maximum difference in seconds between bayesloc origin time and event
+        to be considered the same event.
+    :type max_bayes_error_km: float
+    :param max_bayes_error_km:
+        Maximum error between bayesloc origin and event to be matched as the
+        same event.
+    :type read_all_iterations: bool
+    :param read_all_iterations:
+        Whether to read all iterations of bayesloc origin realizations (this
+        can be slow for large datasets). Default is False.
+    :type return_df: bool
+    :param return_df: Whether to return the dataframe of bayesloc origins.
+    :type return_cat: bool
+    :param return_cat: Whether to return the catalog of bayesloc origins.
+    :type return_bayesloc_event_ids: bool
+    :param return_bayesloc_event_ids: Whether to return the bayesloc event IDs.
+
+    :rtype: :class:`~obspy.core.event.catalog.Catalog`
+    :return: Catalog of events with bayesloc origins.
     """
     bayesloc_solutions_added = False
     catalog_empty = False
@@ -557,20 +703,15 @@ def read_bayesloc_origins(
     bayes_times = [time.gmtime(value) for value in bayes_df.time_mean.values]
     # Allow a custom epoch time, e.g., one that starts before 1970
     if custom_epoch is not None:
-        # if not isinstance(custom_epoch, np.datetime64):
-        # raise TypeError(
-        #         'custom_epoch needs to be of type numpy.datetime64')
-        # np.datetime64('1960-01-01T00:00:00') - 
-        #     np.datetime64('1970-01-01T00:00:00')
         if isinstance(custom_epoch, UTCDateTime):
             custom_epoch = custom_epoch.datetime
         if not isinstance(custom_epoch, datetime):
             raise TypeError(
                 'custom_epoch needs to be of type datetime.datetime or ' +
                 'UTCDateTime')
-        # custom_epoch = datetime.datetime(1960,1,1,0,0,0)
+        # 1970-01-01T00:00:00 is the default epoch start time.
         epoch_correction_s = (
-            custom_epoch - datetime(1970,1,1,0,0,0)).total_seconds()
+            custom_epoch - datetime(1970, 1, 1, 0, 0, 0)).total_seconds()
         bayes_times = [time.gmtime(value + epoch_correction_s)
                        for value in bayes_df.time_mean.values]
     bayes_utctimes = [
@@ -579,10 +720,6 @@ def read_bayesloc_origins(
         for bt, et in zip(bayes_times, bayes_df.time_mean.values)]
     bayes_df['utctime'] = bayes_utctimes
     bayes_df['datetime'] = [butc.datetime for butc in bayes_utctimes]
-
-    # cat_SgLoc = read_seisan_database('Sfiles_MAD10_Saga_02_Sg')
-    # cat_Sgloc_df = events_to_df(cat_SgLoc)
-    # cat_Sgloc_df['events'] = cat_SgLoc.events
 
     # remove arrivals to avoid error in conversion to dataframe
     orig = None
@@ -608,7 +745,7 @@ def read_bayesloc_origins(
 
     # Code to sort in the new locations from BAYESLOC / Seisan into catalog
     if catalog_empty:
-        bayes_df = bayes_df.reset_index() 
+        bayes_df = bayes_df.reset_index()
         for row in bayes_df.itertuples():
             origin_quality = _fill_bayes_origin_quality(None, orig)
             origin_uncertainty = _fill_bayes_origin_uncertainty(row)
@@ -669,7 +806,7 @@ def read_bayesloc_origins(
                     tmp_cat_df.depth_sd.iloc[0] * 1000)
                 bayes_orig.time_errors.uncertainty = (
                     tmp_cat_df.time_sd.iloc[0])
-                bayes_orig.creation_info=CreationInfo(
+                bayes_orig.creation_info = CreationInfo(
                     agency_id=agency_id, author='Bayesloc')
                 bayes_orig.arrivals = arrivals
                 bayes_orig.quality = _fill_bayes_origin_quality(
@@ -711,12 +848,26 @@ def _cat_add_origin_iterations(cat, bayes_df, bayesloc_origins_file,
     """
     Read information from origins.out file about all iterations of the Bayesloc
     MCMC.
+
+    :type cat: :class:`~obspy.core.event.catalog.Catalog`
+    :param cat: Catalog with events to add origin iterations to.
+    :type bayes_df: :class:`pandas.DataFrame`
+    :param bayes_df: DataFrame with Bayesloc origin information.
+    :type bayesloc_origins_file: str
+    :param bayesloc_origins_file: Path to Bayesloc origins.out file.
+    :type custom_epoch:
+        :class:`datetime.datetime` or
+        :class:`~obspy.core.utcdatetime.UTCDateTime`
+    :param custom_epoch: Custom epoch time to use for Bayesloc origin times.
+
+    :rtype: :class:`~obspy.core.event.catalog.Catalog`
+    :return: Catalog with events to add origin iterations to.
     """
     # file header:
     # chain_nr iter_nr ev_id lat lon depth time
     origin_df = pd.read_csv(bayesloc_origins_file, delimiter=' ')
     # origin_df.datetime = origin.time
-    
+
     # This assumes a default starttime of 1970-01-01T00:00:00
     origin_times = [time.gmtime(value) for value in origin_df.time.values]
     # Allow a custom epoch time, e.g., one that starts before 1970
@@ -728,9 +879,9 @@ def _cat_add_origin_iterations(cat, bayes_df, bayesloc_origins_file,
                 'custom_epoch needs to be of type datetime.datetime or ' +
                 'UTCDateTime')
         epoch_correction_s = (
-            custom_epoch - datetime(1970,1,1,0,0,0)).total_seconds()
+            custom_epoch - datetime(1970, 1, 1, 0, 0, 0)).total_seconds()
         origin_times = [time.gmtime(value + epoch_correction_s)
-                       for value in origin_df.time.values]
+                        for value in origin_df.time.values]
     origin_utctimes = [
         UTCDateTime(bt.tm_year, bt.tm_mon, bt.tm_mday, bt.tm_hour, bt.tm_min,
                     bt.tm_sec + (et - int(et)))
@@ -759,12 +910,21 @@ def _cat_add_origin_iterations(cat, bayes_df, bayesloc_origins_file,
     return cat, bayes_df
 
 
-
 def read_bayesloc_arrivals(arrival_file, custom_epoch=None):
     """
+    Read Bayesloc arrival file.
+
+    :type arrival_file: str
+    :param arrival_file: Path to Bayesloc arrivals.out file.
+    :type custom_epoch:
+    :param custom_epoch:
+        Custom epoch time start to use for Bayesloc origin times.
+
+    :rtype: :class:`pandas.DataFrame`
+    :return: DataFrame with Bayesloc arrival information.
     """
     arrival_df = pd.read_csv(arrival_file, delimiter=' ')
-    
+
     # This assumes a default starttime of 1970-01-01T00:00:00
     arrival_times = [time.gmtime(value) for value in arrival_df.time.values]
     # Allow a custom epoch time, e.g., one that starts before 1970
@@ -776,7 +936,7 @@ def read_bayesloc_arrivals(arrival_file, custom_epoch=None):
                 'custom_epoch needs to be of type datetime.datetime')
         # custom_epoch = datetime.datetime(1960,1,1,0,0,0)
         epoch_correction_s = (
-            custom_epoch - datetime(1970,1,1,0,0,0)).total_seconds()
+            custom_epoch - datetime(1970, 1, 1, 0, 0, 0)).total_seconds()
         arrival_times = [time.gmtime(value + epoch_correction_s)
                          for value in arrival_df.time.values]
     bayes_utctimes = [
@@ -791,6 +951,12 @@ def read_bayesloc_arrivals(arrival_file, custom_epoch=None):
 def read_bayesloc_phases(phases_file):
     """
     Function to read output/phases_freq_stats.out file.
+
+    :type phases_file: str
+    :param phases_file: Path to Bayesloc phases_freq_stats.out file.
+
+    :rtype: :class:`pandas.DataFrame`
+    :return: DataFrame with Bayesloc phase information.
     """
     phases_df = pd.read_csv(phases_file, delimiter=' ')
     return phases_df
@@ -801,6 +967,14 @@ def get_bayesloc_filepath(
     """
     Check if a string is either the final path or the directory to a Bayesloc
     run - in the latter case, return the path to the relevant file.
+
+    :type path_or_file: str
+    :param path_or_file: Path to Bayesloc output file or directory.
+    :type default_output_file: str
+    :param default_output_file: Default Bayesloc output file name.
+
+    :rtype: str
+    :return: Path to Bayesloc output file.
     """
     if os.path.isdir(path_or_file):
         test_f = os.path.join(path_or_file, default_output_file)
@@ -820,6 +994,20 @@ def get_bayesloc_filepath(
 def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
     """
     Add bayesloc arrivals to a catalog
+
+    :type arrival_file: str
+    :param arrival_file: Path to Bayesloc arrivals.out file.
+    :type catalog: :class:`obspy.core.event.Catalog`
+    :param catalog: Catalog to add Bayesloc arrivals to.
+    :type custom_epoch:
+        :class:`datetime.datetime` or :class:`obspy.UTCDateTime`
+    :param custom_epoch:
+        Custom epoch time start to use for Bayesloc origin times.
+    :type phases_file: str
+    :param phases_file: Path to Bayesloc phases_freq_stats.out file.
+
+    :rtype: :class:`obspy.core.event.Catalog`
+    :return: Catalog with Bayesloc arrivals added.
     """
     # Check if any of the events in the catalog can be updated with arrivals,
     # if not return to save time
@@ -853,15 +1041,15 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
     if phases_file is not None:
         phases_df = read_bayesloc_phases(phases_file)
         # need to remove event_id column so they don't become duplicated
-        
+
         if len(phases_df) == len(arrival_df):
             # Actually, input and output are not sorted exactly in the same way
             # output phases_freq_stats is sorted by:
-            # event_id, earliest arrival time at station (but all picks at 
+            # event_id, earliest arrival time at station (but all picks at
             # station together), pick times at station
 
             # Logger.info('Merging input and output arrival dataframes...')
-            
+
             # # Get a dataframe with unique combinations of ev_id + sta_id
             # unique_evid_station_df = arrival_df[
             #     ['ev_id', 'sta_id']].drop_duplicates()
@@ -877,7 +1065,7 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
             #         event_station_df.time)
             # # Concatenate all dataframes
             # sorted_arrival_df = pd.concat(event_station_dfs)
-            
+
             arrival_df['earliest_event_station_time'] = arrival_df.groupby(
                 ['ev_id', 'sta_id'])['time'].transform('min')
             # Sort full dataframe by: ev_id, earliest arrival time per station
@@ -887,39 +1075,39 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
             # Set a new index within each group, which increases with pick-time
             sorted_arrival_df['internal_index'] = sorted_arrival_df.groupby(
                 ['ev_id', 'sta_id', 'phase']).cumcount()
-            
+
             # Write the same type of internal index into phases_df (here we can
             # assume that within each group, phases_df is sorted by pick time)
             phases_df['internal_index'] = phases_df.groupby(
                 ['ev_id', 'sta_id', 'phase']).cumcount()
-
             arrival_df = sorted_arrival_df.merge(
                 phases_df, on=['ev_id', 'sta_id', 'phase', 'internal_index'])
-            
             # Assert that the order of ev_id, sta_id_phase matches in both dfs:
             # assert(sorted_arrival_df[['ev_id', 'sta_id', 'phase']].equals(
             #     phases_df[['ev_id', 'sta_id', 'phase']]))
             # phases_df = phases_df.rename(columns={
             #    'ev_id': 'ev_id2', 'sta_id': 'sta_id2', 'phase': 'phase2'})
             # phases_df = phases_df.drop(columns=['ev_id', 'sta_id', 'phase'])
-                        
+
             # Concatenate arrival- and phases-output files:
-            #arrival_df = pd.concat([sorted_arrival_df, phases_df], axis=1)
+            # arrival_df = pd.concat([sorted_arrival_df, phases_df], axis=1)
             # Logger.info('Done merging input and output arrival dataframes.')
-            
+
             # Check where the dataframes still differ
-            # diff_df = arrival_df[arrival_df['sta_id'] != arrival_df['sta_id2']]
+            # diff_df = arrival_df[arrival_df['sta_id'] != arrival_df[
+            #     'sta_id2']]
             # df = (
             #     df.assign(key=df.groupby('c2')['c1'].transform('max'))
-            #     .sort_values(['key', 'c2', 'c1'], ascending=False, ignore_index=True)
-            #     .drop(columns=['key'])
-            
+            #     .sort_values(['key', 'c2', 'c1'], ascending=False,
+            #      ignore_index=True).drop(columns=['key'])
+
             # Maybe this is a way to write it quicker, but doesn't work yet.
             # arrival_df.assign(
-            #     earliest_event_station_time=arrival_df.groupby(
-            #         ['ev_id', 'sta_id']))['time'].transform('min').sort_values(
-            #             ['ev_id', 'earliest_event_station_time'], ascending=True,
-            #             ignore_index=True).drop(columns=['earliest_event_station_time'])
+            #  earliest_event_station_time=arrival_df.groupby(
+            #      ['ev_id', 'sta_id']))['time'].transform('min').sort_values(
+            #         ['ev_id', 'earliest_event_station_time'], ascending=True,
+            #          ignore_index=True).drop(columns=[
+            #     'earliest_event_station_time'])
             # groupby(by='ev_id')
         else:
             Logger.error(
@@ -930,7 +1118,7 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
     # Add picks and arrivals if there are no picks in catalog yet
     if len([p for ev in catalog for p in ev.picks]) == 0:
         add_picks = True
-    
+
     for event in catalog:
         bayesloc_event_id = None
         for origin in event.origins:
@@ -946,18 +1134,18 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
                 ' for event %s', event.short_str())
             continue
 
-        # Need to read in residuals files - which ones?
-        # Either read directly  from file XXX
-        # or compute residuals from arrival times and corections for:
-        # station, phase, event, distance with files
-        # tte_station_shifts_stats.out
-        # tte_station_phase_shifts_stats.out,
-        # tte_phase_dist_scales_stats.out
-        # 
-        # atep_event_factors_stats.out
-        # 
+        # TODO: Add residuals to each arrival
+        #       - bayesloc does not output residuals directly
+        #       . compute residuals from arrival times and corections for:
+        #           station, phase, event, distance with files
+        #       - apply residual corrections factors from those files to
+        #         residuals: tte_station_shifts_stats.out
+        #                    tte_station_phase_shifts_stats.out,
+        #                    tte_phase_dist_scales_stats.out
+        #                    atep_event_factors_stats.out
+        #
         # Select arrivals / picks
-        event_arrival_df = arrival_df[arrival_df.ev_id==bayesloc_event_id]
+        event_arrival_df = arrival_df[arrival_df.ev_id == bayesloc_event_id]
         Logger.info('Adding bayesloc-arrivals to origin for event %s',
                     event.short_str())
         for row in event_arrival_df.itertuples():
@@ -966,8 +1154,8 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
             # matches the bayesloc-arrival.
             if not add_picks:
                 pick = [p for p in event.picks
-                        if p.waveform_id.station_code==row.sta_id and
-                        p.time==row.utctime and p.phase_hint==row.phase]
+                        if p.waveform_id.station_code == row.sta_id and
+                        p.time == row.utctime and p.phase_hint == row.phase]
                 if len(pick) == 1:
                     pick_found = True
                     new_pick = pick[0]
@@ -975,9 +1163,9 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
                 elif (len(pick) == 0 and len(row.phase) > 1 and
                         row.phase[-1] == '1'):
                     pick = [p for p in event.picks
-                        if p.waveform_id.station_code==row.sta_id and
-                        p.time==row.utctime and p.phase_hint and
-                        p.phase_hint[0]==row.phase.removesuffix('1')]
+                            if p.waveform_id.station_code == row.sta_id and
+                            p.time == row.utctime and p.phase_hint and
+                            p.phase_hint[0] == row.phase.removesuffix('1')]
                     if len(pick) == 1:
                         pick_found = True
                         new_pick = pick[0]
@@ -992,9 +1180,8 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
                 event.picks.append(new_pick)
             # Add arrivals to origin
             # - time_correction: sum of bayesloc corrections
-            # - time_residual: hmm... does Bayesloc output residual?
             # - also need to add: most likely phase hint and probability for
-            #   input phase hint 
+            #   input phase hint
             # First, let's try to find the corresponding arrival in bayesloc-
             # origin that was copied over from previous location (contains data
             # like azimuth, apparent velocity, and residuals that Bayesloc does
@@ -1012,61 +1199,64 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
                 new_arrival = Arrival(pick_id=new_pick.resource_id,
                                       phase=row.phase,
                                       # time_correction=,  # TODO
-                                      #time_residual=,
+                                      # time_residual=,
                                       )
             nsp = 'Bayesloc'
             if not hasattr(new_arrival, 'extra'):
                 new_arrival.extra = AttribDict()
-            # bayes_orig.extra = {
-            #         'bayesloc_event_id': {
-            #             'value': row.ev_id,
-            #             'namespace': 'Bayesloc'}}
             try:
-                new_arrival.extra.update({'original_phase':
-                    {'value': row.phase, 'namespace': nsp}})
+                new_arrival.extra.update(
+                    {'original_phase': {'value': row.phase, 'namespace': nsp}})
             except AttributeError:
                 pass
             try:
-                new_arrival.extra.update({'prob_as_called':
-                    {'value': row.prob_as_called, 'namespace': nsp}})
+                new_arrival.extra.update(
+                    {'prob_as_called':
+                        {'value': row.prob_as_called, 'namespace': nsp}})
             except AttributeError:
                 pass
             try:
-                new_arrival.extra.update({'most_prob_phase': 
-                    {'value': row.most_prob_phase, 'namespace': nsp}})
+                new_arrival.extra.update(
+                    {'most_prob_phase':
+                        {'value': row.most_prob_phase, 'namespace': nsp}})
             except AttributeError:
                 pass
             # Need to find the field with the probability for the new phasehint
             try:
                 new_arrival.extra.update({
-                    'prob_as_suggested': 
+                    'prob_as_suggested':
                         {'value': getattr(row, row.most_prob_phase),
-                        'namespace': nsp}})
+                         'namespace': nsp}})
             except AttributeError:
                 pass
             try:
-                new_arrival.extra.update({'n': {'value': row.n, 'namespace': nsp}})
+                new_arrival.extra.update({'n': {'value': row.n,
+                                                'namespace': nsp}})
             except AttributeError:
                 pass
 
             # TODO could add probabilities for all other the other phase hints,
-            #      that the pick/arrival could refer to, but that may not be 
+            #      that the pick/arrival could refer to, but that may not be
             #      very useful.
             if new_arrival not in bayesloc_origin.arrivals:
                 bayesloc_origin.arrivals.append(new_arrival)
-        # try:
-        #     origin = [orig for orig in event.origins
-        #               if orig.creation_info.author=='Bayesloc'][0]
-        # except (AttributeError, KeyError, IndexError):
-        #     Logger.warning('Could not find Bayesloc origin for event %s',
-        #                    event.short_str())
-        #     continue
     return catalog
 
 
 def update_tribe_from_bayesloc(tribe, bayesloc_stats_out_file,
                                custom_epoch=None):
     """
+    Update ´eqcorrscan.core.match_filter.Tribe´ with Bayesloc results.
+
+    :type tribe: eqcorrscan.core.match_filter.Tribe
+    :param tribe: Tribe to update
+    :type bayesloc_stats_out_file: str
+    :param bayesloc_stats_out_file: Path to Bayesloc output file
+    :type custom_epoch: :class:`obspy.core.utcdatetime.UTCDateTime`
+    :param custom_epoch: Custom epoch to use for Bayesloc output
+
+    :rtype: eqcorrscan.core.match_filter.Tribe
+    :return: Updated tribe
     """
     cat = Catalog([t.event for t in tribe])
     cat = update_cat_from_bayesloc(cat, bayesloc_stats_out_file,
@@ -1078,6 +1268,15 @@ def update_tribe_from_bayesloc(tribe, bayesloc_stats_out_file,
 
 def read_bayesloc_events(bayesloc_output_folder, custom_epoch=None):
     """
+    Read Bayesloc output files and return a catalog.
+
+    :type bayesloc_output_folder: str
+    :param bayesloc_output_folder: Path to Bayesloc output folder
+    :type custom_epoch: :class:`obspy.core.utcdatetime.UTCDateTime`
+    :param custom_epoch: Custom epoch to use for Bayesloc output
+
+    :rtype: :class:`obspy.core.event.Catalog`
+    :return: Catalog with Bayesloc events
     """
     catalog, bayes_df, _ = read_bayesloc_origins(
         bayesloc_origins_ned_stats_file=os.path.join(
@@ -1098,11 +1297,44 @@ def update_cat_from_bayesloc(
         keep_best_fit_pick_only=False, remove_1_suffix=False,
         min_phase_probability=0, **kwargs):
     """
-    Update a catalog's locations from a bayesloc-relocation run
-    """
-    # '/home/felix/Documents2/BASE/Detection/Bitdalsvatnet/Relocation/BayesLoc/'
-    #     + 'Bitdalsvatnet_04_prior_955_N_Sg/output/origins_ned_stats.out',
+    Update a catalog's locations from a bayesloc-relocation run.
 
+    :type cat: :class:`obspy.core.event.Catalog`
+    :param cat: Catalog to update
+    :type bayesloc_stats_out_files: str or list
+    :param bayesloc_stats_out_files: A list of files containing the
+        output from bayesloc_stats_out.py
+    :type agency_id: str
+    :param agency_id: The agency id to use for the events
+    :type custom_epoch: :class:`~obspy.core.utcdatetime.UTCDateTime`
+    :param custom_epoch: An optional custom epoch to use for the event
+        times
+    :type s_diff: float
+    :param s_diff: The maximum difference in seconds between the event and
+        the bayesloc origin time to consider the event to be the same.
+    :type max_bayes_error_km: float
+    :param max_bayes_error_km: The maximum error in km to consider the
+        bayesloc origin to be the same as the event origin.
+    :type read_all_iterations: bool
+    :param read_all_iterations: If True, read in all bayesloc iterations, if
+        False, only read in the final iteration
+    :type add_arrivals: bool
+    :param add_arrivals: If True, add an arrival for each phase
+    :type update_phase_hints: bool
+    :param update_phase_hints: If True, update the phase hints
+    :type keep_best_fit_pick_only: bool
+    :param keep_best_fit_pick_only:
+        If True, only keep the arrival with the highest likelihood
+    :type remove_1_suffix: bool
+    :param remove_1_suffix: If True, remove the '_1' suffix from the
+        phase hints
+    :type min_phase_probability: float
+    :param min_phase_probability: Remove any arrivals with a phase
+        probability less than this
+
+    :rtype: :class:`obspy.core.event.Catalog`
+    :returns: Updated catalog.
+    """
     if isinstance(bayesloc_stats_out_files, str):
         bayesloc_stats_out_files = [bayesloc_stats_out_files]
 
@@ -1120,10 +1352,6 @@ def update_cat_from_bayesloc(
             read_all_iterations=read_all_iterations)
         if not bayesloc_solutions_added:
             continue
-        # TODO indicate that this solution is from Bayesloc
-        # TODO: load phase probabilities, take the one that is most likely
-        #       the "correct" pick for each phase, and fix picks
-        #       accordingly.
         if add_arrivals:
             cat = add_bayesloc_arrivals(
                 bayesloc_folder, catalog=cat, custom_epoch=custom_epoch)
@@ -1141,6 +1369,18 @@ def update_cat_from_bayesloc(
 
 def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
     """
+    Select the best fitting pick for each phase-hint at each station.
+
+    :type cat: :class:`obspy.core.event.Catalog`
+    :param cat: Catalog to update
+    :type min_phase_probability: float
+    :param min_phase_probability: Remove any arrivals with a phase probability
+        less than this (default: 0)
+    :type remove_1_suffix: bool
+    :param remove_1_suffix: If True, remove the '_1' suffix from the phase
+
+    :rtype: :class:`obspy.core.event.Catalog`
+    :returns: Updated catalog.
     """
     for event in cat:
         bayesloc_event_id = None
@@ -1217,6 +1457,14 @@ def _select_bestfit_bayesloc_picks(cat, min_phase_probability=0):
 def _update_bayesloc_phase_hints(cat, remove_1_suffix=False):
     """
     Update arrivals and picks with phase hints indicated by Bayesloc.
+
+    :type cat: :class:`obspy.core.event.Catalog`
+    :param cat: Catalog to update
+    :type remove_1_suffix: bool
+    :param remove_1_suffix: If True, remove the '_1' suffix from the phase
+
+    :rtype: :class:`obspy.core.event.Catalog`
+    :returns: Updated catalog.
     """
     for event in cat:
         bayesloc_event_id = None
@@ -1268,32 +1516,106 @@ def _update_bayesloc_phase_hints(cat, remove_1_suffix=False):
 
 
 def write_arrival_file(
-        cat, path='.', split_into_months=False, custom_epoch=datetime(1970,1,1,0,0,0),
-        abs_min_n_stations=0, abs_min_n_phases=0,
-        allowed_phases=['P', 'S', 'Pn', 'Pg', 'Sn', 'Sg', 'P1', 'S1', 'Pb', 'Sb'],
+        cat, path='.', split_into_months=False,
+        custom_epoch=datetime(1970, 1, 1, 0, 0, 0),
+        abs_min_n_stations=0, abs_min_n_phases=0, allowed_phases=[
+            'P', 'S', 'Pn', 'Pg', 'Sn', 'Sg', 'P1', 'S1', 'Pb', 'Sb'],
         known_station_names=[],
         min_n_station_sites=0, minimum_phases_per_station=0,
         inv=Inventory(), compare_station_to_inventory=False,
         min_n_teleseismic_stations=0, include_good_regional_events=True,
-        min_n_regional_stations=0, min_latitude=None, max_latitude=None,
+        min_n_regional_stations=0, min_n_obs_stations=0,
+        min_latitude=None, max_latitude=None,
         min_longitude=None, max_longitude=None,
         fix_depth=None, default_depth=10, def_dep_error_m=15000,
         default_lat=None, default_lon=None, def_hor_error_deg=None,
         def_time_error_s=5, obs_prefixes=()):
     """
     Function to write bayesloc arrival file.
+
+    :type cat: :class:`obspy.core.event.Catalog`
+    :param cat: Catalog to write
+    :type path: str
+    :param path: Path to write arrival file to
+    :type split_into_months: bool
+    :.param split_into_months:
+        If True, split catalog into 12 separate arrival files, with the
+        big events overlapping between files, but otherwise only events from
+        each month printed into each file (this is useful to chunk up a big
+        bayesloc relocation setup)
+    :type custom_epoch: :class:`datetime.datetime`
+    :param custom_epoch:
+        Custom epoch start time to use for bayesloc files (bayesloc only works
+        with seconds since epoch start, not with time objects)
+    :type abs_min_n_stations: int
+    :param abs_min_n_stations: Absolute minimum number of stations
+    :type abs_min_n_phases: int
+    :param abs_min_n_phases: Absolute minimum number of phases
+    :type allowed_phases: list
+    :param allowed_phases: List of allowed phases
+    :type known_station_names: list
+    :param known_station_names: List of known station names
+    :type min_n_station_sites: int
+    :param min_n_station_sites: Minimum number of station sites
+    :type minimum_phases_per_station: int
+    :param minimum_phases_per_station: Minimum number of phases per station
+    :type inv: :class:`obspy.core.inventory.inventory.Inventory`
+    :param inv: Inventory to use for station information
+    :type compare_station_to_inventory: bool
+    :param compare_station_to_inventory: If True, compare station names to
+        inventory
+    :type min_n_teleseismic_stations: int
+    :param min_n_teleseismic_stations:
+        Minimum number of teleseismic stations for event to be included
+        as a teleseismic event.
+    :type include_good_regional_events: bool
+    :param include_good_regional_events:
+        If True, include good regional events as "anchor" events that
+        overlap between months / files.
+    :type min_n_regional_stations: int
+    :param min_n_regional_stations: Minimum number of regional stations
+    :type min_latitude: float
+    :param min_latitude: Minimum latitude for event to be included in file
+    :type max_latitude: float
+    :param max_latitude: Maximum latitude for event to be included in file
+    :type min_longitude: float
+    :param min_longitude: Minimum longitude for event to be included in file
+    :type max_longitude: float
+    :param max_longitude: Maximum longitude for event to be included in file
+    :type fix_depth: float
+    :param fix_depth: Fix depth to this value, if None, use depth from event
+    :type default_depth: float
+    :param default_depth: Default depth to use if no depth is given
+    :type def_dep_error_m: float
+    :param def_dep_error_m:
+        Default depth error to use if no depth error is given
+    :type default_lat: float
+    :param default_lat: Default latitude to use if no latitude is given
+    :type default_lon: float
+    :param default_lon: Default longitude to use if no longitude is given
+    :type def_hor_error_deg: float
+    :param def_hor_error_deg: Default horizontal error to use if no error is
+        given
+    :type def_time_error_s: float
+    :param def_time_error_s: Default time error to use if no error is given
+    :type obs_prefixes: list
+    :param obs_prefixes: List of prefixes to use for ocean bottom seismometer
+        stations (these can be treated as more important than others)
+
+    :rtype: list
+    :return: List of arrival files written
     """
     Logger.info('Step 2.6 Collecting arrivals that fulfill criteria')
-
     phases_per_station = Counter([pick.waveform_id.station_code
                                   for event in cat
                                   for pick in event.picks])
 
-    # Write one output file for all events in each of the 12 months of all years
+    # Write one output file for all events in each of the 12 months of all yrs
     if split_into_months:
         months_list = [[mo] for mo in np.arange(1, 13)]
-        Logger.info('Splitting input files into %s unqiue bayesloc runs / folders',
-                    len(months_list))
+        Logger.info(
+            'Splitting input files into %s unqiue bayesloc runs / folders',
+            len(months_list))
     else:
         months_list = [list(np.arange(1, 13))]
 
@@ -1308,16 +1630,16 @@ def write_arrival_file(
         run_folder = path + folder_suffix
         for j, event in enumerate(cat):
             orig = event.preferred_origin() or event.origins[0]
-            
             if min_latitude and orig.latitude and orig.latitude < min_latitude:
                 continue
             if max_latitude and orig.latitude and orig.latitude > max_latitude:
                 continue
-            if min_longitude and orig.longitude and orig.longitude < min_longitude:
+            if (min_longitude and orig.longitude
+                    and orig.longitude < min_longitude):
                 continue
-            if max_longitude and orig.longitude and orig.longitude > max_longitude:
+            if (max_longitude and orig.longitude
+                    and orig.longitude > max_longitude):
                 continue
-            
             # Set minimum number of stations and phases
             unique_stations_list = list(set([p.waveform_id.station_code
                                             for p in event.picks]))
@@ -1335,23 +1657,24 @@ def write_arrival_file(
                 sta_dist_tuples.append((pick.waveform_id.station_code,
                                         arrival.distance))
             n_teleseismic_stations = len(list(set(
-                sdt[0] for sdt in sta_dist_tuples if sdt[1] and sdt[1] > 15 )))
+                sdt[0] for sdt in sta_dist_tuples if sdt[1] and sdt[1] > 15)))
             # distances = event_distances[j]
             # n_teleseismic_stations = len(list(set(
-            #     [p.waveform_id.station_code for jp, p in enumerate(event.picks)
+            #     [p.waveform_id.station_code for jp, p in
+            #       enumerate(event.picks)
             #     if distances[jp] is not None and distances[jp] > 15])))
 
             if obs_prefixes:
                 n_obs_stations = len(list(set(
                     [p.waveform_id.station_code for p in event.picks
-                    if p.waveform_id.station_code.startswith(obs_prefixes)])))
+                     if p.waveform_id.station_code.startswith(obs_prefixes)])))
 
-            # Absolute minimum number of phases and stations - otherwise DO NOT use
-            if (n_stations < abs_min_n_stations or n_phases < abs_min_n_phases or
-                    n_station_sites < min_n_station_sites):
+            # Absolute minimum number of phases and stations - else DO NOT use
+            if (n_stations < abs_min_n_stations or n_phases < abs_min_n_phases
+                    or n_station_sites < min_n_station_sites):
                 Logger.info(
-                    'Not enough stations / sites / phases: %s stations, %s sites '
-                    ' (%s teleseismic), %s phases', str(n_stations),
+                    'Not enough stations / sites / phases: %s stations, %s '
+                    'sites  (%s teleseismic), %s phases', str(n_stations),
                     str(n_station_sites), str(n_teleseismic_stations),
                     str(n_phases))
                 continue
@@ -1359,8 +1682,8 @@ def write_arrival_file(
             has_local_solution = False
             if orig.creation_info.agency_id in ['AWI']:
                 has_local_solution = True
-            # First round of relocations: select only events with at least 5? teleseismic
-            # arrivals to pin down residuals better
+            # First round of relocations: select only events with at least 5?
+            # teleseismic arrivals to pin down residuals better
             if (n_teleseismic_stations >= min_n_teleseismic_stations or
                     n_obs_stations >= min_n_obs_stations):
                 pass
@@ -1372,7 +1695,9 @@ def write_arrival_file(
             else:
                 # When splitting into one Bayesloc run across all equal months,
                 # then keep even worse observed events
-                if not strict or (split_into_months and orig.time.month in months):
+                # if not strict or (split_into_months and
+                #       orig.time.month in months):
+                if split_into_months and orig.time.month in months:
                     pass
                 else:
                     continue
@@ -1388,8 +1713,8 @@ def write_arrival_file(
                 if pick.phase_hint in allowed_phases:
                     # fix P- and S- phase names to Pg / Pn / Sg / Sn?
                     # Sort out picks from stations where there's too few picks:
-                    if phases_per_station[
-                          pick.waveform_id.station_code] < minimum_phases_per_station:
+                    if (phases_per_station[pick.waveform_id.station_code]
+                            < minimum_phases_per_station):
                         Logger.error(
                             'Station %s has not enough phases (%s < %s), '
                             'skipping pick', pick.waveform_id.station_code,
@@ -1397,35 +1722,34 @@ def write_arrival_file(
                             minimum_phases_per_station)
                         continue
                     if compare_station_to_inventory:
-                        sel_inv = inv.select(station=pick.waveform_id.station_code)
+                        sel_inv = inv.select(
+                            station=pick.waveform_id.station_code)
                         if len(sel_inv) == 0:
                             Logger.error(
                                 'Station %s not in inventory, skipping pick',
                                 pick.waveform_id.station_code)
                             continue
                         # Check for case mismatch
-                        if sel_inv.networks[
-                                0].stations[0].code != pick.waveform_id.station_code:
+                        if (sel_inv.networks[0].stations[0].code
+                                != pick.waveform_id.station_code):
                             continue
-                    epoch_time = ( pick.time._get_datetime() - custom_epoch
+                    epoch_time = (pick.time._get_datetime() - custom_epoch
                                   ).total_seconds()
                     arrivals.append(
                         (evid, pick.waveform_id.station_code.upper(),
                          pick.phase_hint, epoch_time))
-            # PRIOR file
-            # evid = int(
-            #     [com.text.split('ID:')[-1].strip('S').strip('d').strip('LRD').strip().strip('d')
-            #      for com in event.comments if 'ID:' in com.text ][0])
+            # Get info for PRIOR file
             orig, priors = _select_best_origin(
                 event, evid, priors, fix_depth=fix_depth,
                 default_depth=default_depth, def_dep_error_m=def_dep_error_m,
                 default_lat=default_lat, default_lon=default_lon,
                 def_hor_error_deg=def_hor_error_deg,
                 def_time_error_s=def_time_error_s, default_start=custom_epoch)
-            
-        Logger.info('Step 3.2 Writing %s arrivals to arrival file', str(len(arrivals)))
+
+        Logger.info('Step 3.2 Writing %s arrivals to arrival file',
+                    str(len(arrivals)))
         arrfile = 'arrival.dat'
-        
+
         if not os.path.exists(run_folder):
             os.makedirs(run_folder)
         arrivalfile = os.path.join(run_folder, arrfile)
@@ -1433,25 +1757,28 @@ def write_arrival_file(
         f.write('ev_id sta_id phase time\n')
         for arrival in arrivals:
             eid, scode, phase, time = arrival
-            # Only write out arrivals for known stations - bayesloc may otherwise crash
+            # Only write out arrivals for known stations - bayesloc may
+            # otherwise crash
             if known_station_names and scode not in known_station_names:
                 continue
             f.write('%i %s %s %.3f\n' % (eid, scode, phase, time))
         f.close()
 
-        Logger.info('Step 3.3 Writing %s origins to prior file', str(len(priors)))
-        prifile = 'prior.dat' #??
+        Logger.info('Step 3.3 Writing %s origins to prior file',
+                    str(len(priors)))
+        prifile = 'prior.dat'
         priorfile = os.path.join(run_folder, prifile)
-        f = open(priorfile,'wt')
-        f.write('ev_id lat_mean lon_mean dist_sd depth_mean depth_sd time_mean time_sd\n')
+        f = open(priorfile, 'wt')
+        f.write('ev_id lat_mean lon_mean dist_sd depth_mean depth_sd ' +
+                'time_mean time_sd\n')
         for prior in priors:
             evid, plat, plon, dist_sd, pdepth, dep_sd, ptime, time_sd = prior
             # f.write('%i %9.4f %9.4f %4.1f %6.1f %4.1f %16.3f %4.1f\n' %
-            #        (evid, plat, plon, dist_sd, pdepth, dep_sd, ptime, time_sd))
+            #      (evid, plat, plon, dist_sd, pdepth, dep_sd, ptime, time_sd))
             f.write('%i %9.4f %9.4f %7.1f %6.1f %7.1f %16.3f %6.1f\n' %
-                    (evid, plat, plon, dist_sd, pdepth, dep_sd, ptime, time_sd))
+                    (evid, plat, plon, dist_sd, pdepth, dep_sd, ptime, time_sd)
+                    )
         f.close()
-
 
 
 def write_station(inventory, station0_file=None, stations_dat_file=None,
@@ -1464,10 +1791,23 @@ def write_station(inventory, station0_file=None, stations_dat_file=None,
     :param inventory:
         Inventory of stations to write - should include channels if
         use_elevation=True to incorporate channel depths.
-    :type use_elevation: bool
-    :param use_elevation: Whether to write elevations (requires hypoDD >= 2)
+    :type station0_file: str
+    :param station0_file: Path to station0 file to read station names from.
+    :type stations_dat_file: str
+    :param stations_dat_file: Path to stations.dat file to read station names
+    :type station_df: pandas.DataFrame
+    :param station_df: DataFrame of station names to read station names from.
+    :type default_elev: float
+    :param default_elev: Default elevation to use if not in inventory.
+    :type stations: list
+    :param stations: List of stations to write to file.
     :type filename: str
     :param filename: File to write stations to.
+    :type write_only_once: bool
+    :param write_only_once: Only write stations to file once.
+
+    :rtype: list
+    :return: List of station strings.
     """
     station_strings = []
     # formatter = "{sta:<5s}{lat:>9.4f}{lon:>10.4f}{elev:>10.3f}"
@@ -1506,7 +1846,7 @@ def write_station(inventory, station0_file=None, stations_dat_file=None,
                     if line[0] in known_station_names:
                         continue
                 parts = dict(sta=line[0], lat=line[1], lon=line[2],
-                            elev=line[3] / 1000)
+                             elev=line[3] / 1000)
                 station_strings.append(formatter.format(**parts))
                 known_station_names.append(line[0])
         if stations_dat_file:
@@ -1516,7 +1856,7 @@ def write_station(inventory, station0_file=None, stations_dat_file=None,
                     if line[0] in known_station_names:
                         continue
                 parts = dict(sta=line[0], lat=line[1], lon=line[2],
-                            elev=line[3] / 1000)
+                             elev=line[3] / 1000)
                 station_strings.append(formatter.format(**parts))
                 known_station_names.append(line[0])
     if station_df is not None:
@@ -1528,8 +1868,8 @@ def write_station(inventory, station0_file=None, stations_dat_file=None,
                 elev = row[1].elevation
             else:
                 elev = default_elev
-            parts = dict(sta=row[1].station[-5:], lat=row[1].lat, lon=row[1].lon,
-                         elev=elev/1000)
+            parts = dict(sta=row[1].station[-5:], lat=row[1].lat,
+                         lon=row[1].lon, elev=elev/1000)
             station_strings.append(formatter.format(**parts))
     with open(filename, "w") as f:
         f.write('sta_id lat lon elev\n')
@@ -1539,7 +1879,15 @@ def write_station(inventory, station0_file=None, stations_dat_file=None,
 
 def read_stations_dat(path, stations):
     """
-    function to read ISF station.dat-file
+    function to read ISF (International seismic format) station.dat-file
+
+    :type path: str
+    :param path: path to station.dat-file
+    :type stations: list
+    :param stations: list of stations to read
+
+    :rtype: list
+    :return: list of station strings
     """
     if path is None:
         return None
@@ -1567,7 +1915,7 @@ def read_stations_dat(path, stations):
             if lon[5] == '.':
                 lon = (int(lon[0:3]) + float(lon[3:-1]) / 60) * EW
             else:
-                lon = (int(lon[0:3]) + float(lon[3:5]) / 60 
+                lon = (int(lon[0:3]) + float(lon[3:5]) / 60
                        + float(lon[5:-1]) / (60 * 60)) * EW
             try:
                 elev = float(line[25:32].strip())
@@ -1586,12 +1934,6 @@ def read_stations_dat(path, stations):
     return stalist
 
 
-# %%
-    # cat = read_bayesloc_events('/home/felix/Software/Bayesloc/Example_Ridge_Gibbons_2017/output')
-
-
-
-
 # %% TEST TEST TEST
 if __name__ == "__main__":
     import logging
@@ -1604,7 +1946,7 @@ if __name__ == "__main__":
     from obspy.io.nordic.core import read_nordic
     catalog = read_nordic(
         '/home/seismo/WOR/felix/R/SEI/REA/INTEU/2020/12/14-1935-58R.S202012')
-        # '/home/seismo/WOR/felix/R/SEI/REA/INTEU/2021/07/05-0423-41R.S202107')
+    # '/home/seismo/WOR/felix/R/SEI/REA/INTEU/2021/07/05-0423-41R.S202107')
     # 'a8598f5d-d25d-4b69-8547-298589d29bc3'
 
     Logger.info('Updating catalog from bayesloc solutions')

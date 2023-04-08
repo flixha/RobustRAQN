@@ -56,3 +56,10 @@ Go to one of the example folders in robustraqn/Examples. There are example scrip
 **SLURM support**: Each of these tasks can be run on a single-node server or on multi-node clusters. For clusters running Slurm job scheduling, you can find Slurm batch scripts that interface with the python scripts to split the problem set across nodes.
 
 **Resource requirements**: The memory requirements of your job is a critical parameter that controls how you can split up the full job (e.g., memory consumption for template making scales linearly with number of cores, while memory consumption for task 2 and 3 can to an extent be controlled with the parameter ´n_templates_per_group´)
+
+
+# UTILITY / DATABASE SETUP:
+To get the most reliable earthquake catalog out of Robustraqn, consider the following tools:
+1. Connect to a data quality metrics database or create your own metrics database with [http://services.iris.edu/mustang/](IRIS Mustang) or the standalone [ispaq](https://github.com/iris-edu/ispaq)
+2. Relocate your catalog template events with [Bayesloc](https://gs.llnl.gov/nuclear-threat-reduction/nuclear-explosion-monitoring/bayesloc) to obtain reliable location uncertainties, reduce bias, and recognize problematic events and picks.
+3. Relocate your catalog detections with cross-correlation based differential travelties using [HypoDD](https://www.ldeo.columbia.edu/~felixw/hypoDD.html), [Growclust](https://github.com/dttrugman/GrowClust) or [Growclust3D](https://github.com/dttrugman/GrowClust3D.jl).

@@ -28,26 +28,26 @@ from eqcorrscan.core.lag_calc import LagCalcError
 from eqcorrscan.utils.pre_processing import dayproc, shortproc
 # from eqcorrscan.core.template_gen import _template_gen
 
-from robustraqn.quality_metrics import (
+from robustraqn.utils.quality_metrics import (
     create_bulk_request, get_waveforms_bulk, read_ispaq_stats,
     get_parallel_waveform_client)
-from robustraqn.load_events_for_detection import (
+from robustraqn.core.load_events import (
     prepare_detection_stream, init_processing, init_processing_w_rotation,
     get_all_relevant_stations, normalize_NSLC_codes, reevaluate_detections,
     try_apply_agc)
-from robustraqn.templates_creation import (_shorten_tribe_streams)
-from robustraqn.event_detection import (
+from robustraqn.core.templates_creation import (_shorten_tribe_streams)
+from robustraqn.core.event_detection import (
     prepare_day_overlap, get_multi_obj_hash, append_list_completed_days)
-from robustraqn.spectral_tools import (
+from robustraqn.utils.spectral_tools import (
     Noise_model, get_updated_inventory_with_noise_models)
-from robustraqn.lag_calc_postprocessing import (
+from robustraqn.core.event_postprocessing import (
     check_duplicate_template_channels, postprocess_picked_events,
     add_origins_to_detected_events)
-from robustraqn.seismic_array_tools import array_lag_calc
-from robustraqn.processify import processify
-from robustraqn.fancy_processify import fancy_processify
+from robustraqn.core.seismic_array import array_lag_calc
+from robustraqn.utils.processify import processify
+from robustraqn.utils.fancy_processify import fancy_processify
 from robustraqn.obspy.core import Stream, Trace
-from robustraqn.obspy_utils import _quick_copy_stream
+from robustraqn.utils.obspy import _quick_copy_stream
 
 import logging
 Logger = logging.getLogger(__name__)

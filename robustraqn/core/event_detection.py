@@ -43,44 +43,37 @@ from obspy import read_inventory
 #from obspy.core.event import Event, Origin, Catalog
 # from obspy.core.stream import Stream
 from obspy.core.inventory.inventory import Inventory
-#from obspy import read as obspyread
 from obspy import UTCDateTime
 from obspy.core.util.attribdict import AttribDict
 from obspy.core.util.deprecation_helpers import ObsPyDeprecationWarning
-# from obspy.io.mseed import InternalMSEEDError
-# from obspy.clients.filesystem.sds import Client
 from robustraqn.obspy.clients.filesystem.sds import Client
 
-from robustraqn.processify import processify
-from robustraqn.fancy_processify import fancy_processify
+from robustraqn.utils.processify import processify
+from robustraqn.utils.fancy_processify import fancy_processify
 
 from eqcorrscan.utils import pre_processing
-# from eqcorrscan.core import match_filter, lag_calc
-# from eqcorrscan.utils.correlate import CorrelationError
 from eqcorrscan.core.match_filter import Template, Tribe, MatchFilterError
 from eqcorrscan.core.match_filter.party import Party, Family
 # from eqcorrscan.utils.clustering import extract_detections
 from eqcorrscan.utils.plotting import detection_multiplot
-# from eqcorrscan.utils.despike import median_filter
-# from eqcorrscan.core.match_filter import _spike_test
 from eqcorrscan.utils.pre_processing import dayproc, shortproc
 from eqcorrscan.core.template_gen import _rms
 
-# import quality_metrics, spectral_tools, load_events_for_detection
+# import quality_metrics, spectral_tools, load_events
 # reload(quality_metrics)
-# reload(load_events_for_detection)
+# reload(load_events)
 from robustraqn.obspy.core import Stream, Trace
-from robustraqn.quality_metrics import (
+from robustraqn.utils.quality_metrics import (
     create_bulk_request, get_waveforms_bulk, read_ispaq_stats)
     #get_parallel_waveform_client)
-from robustraqn.load_events_for_detection import (
+from robustraqn.core.load_events import (
     prepare_detection_stream, init_processing, init_processing_w_rotation,
     print_error_plots, get_all_relevant_stations, reevaluate_detections,
     multiplot_detection, try_apply_agc)
-from robustraqn.spectral_tools import (Noise_model,
+from robustraqn.utils.spectral_tools import (Noise_model,
                                        get_updated_inventory_with_noise_models)
-from robustraqn.templates_creation import create_template_objects
-from robustraqn.obspy_utils import _quick_copy_stream
+from robustraqn.core.templates_creation import create_template_objects
+from robustraqn.utils.obspy import _quick_copy_stream
 
 Logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.INFO)

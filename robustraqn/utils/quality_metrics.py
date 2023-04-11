@@ -112,79 +112,6 @@ def get_waveforms_bulk(client, bulk, parallel=False, cores=16):
     return st
 
 
-# def get_waveforms_bulk_old(client, bulk, parallel=False, cores=None):
-#     """
-#     Perform a bulk-waveform request in parallel. Return one stream.
-
-#     :type client: obspy.obspy.Client
-#     :param name: Client to request the data from.
-#     :type bulk: list of tuples
-#     :param bulk: Information about the requested data.
-#     :type parallel: book
-#     :param parallel: Whether to run reading of waveform files in parallel.
-#     :type cores: int
-#     :param bulk: Number of parallel processors to use.
-
-#     :rtype: obspy.core.Stream
-#     """
-#     # signal(SIGSEGV, sigsegv_handler)
-#     Logger.info('Start bulk-read')
-#     outtic = default_timer()
-#     st = Stream()
-#     if parallel:
-#         if cores is None:
-#             cores = min(len(bulk), cpu_count())
-#         # There seems to be a negative effect on speed if there's too many
-#         # read-threads - For now set limit to 16
-#         cores = min(cores, 16)
-
-#         # Logger.info('Start bulk-read paralle pool')
-#         # Process / spawn handles segmentation fault better?
-#         #with pool_boy(Pool=get_context("spawn").Pool, traces=len(bulk),
-#         #              cores=cores) as pool:
-#         #with pool_boy(Pool=ThreadPool, traces=len(bulk), cores=cores) as pool:
-#         with pool_boy(Pool=Pool, traces=len(bulk), cores=cores) as pool:
-#             results = [pool.apply_async(
-#                 client.get_waveforms,
-#                 args=arg,
-#                 error_callback=document_client_read_error)
-#                        for arg in bulk]
-
-#         # ORRRR
-#         # with pool_boy(Pool=Pool, traces=len(bulk), cores=cores) as pool:
-#         #     results = [pool.apply_async(
-#         #         get_waveforms_bulk,
-#         #         args=(client, [arg]),
-#         #         kwds=dict(parallel=False, cores=None))
-#         #                for arg in bulk]
-#         # Need to handle possible read-errors in each request when getting each
-#         # request-result.
-#         # Logger.info('Get bulk-read pool results')
-#         st_list = list()
-#         for res in results:
-#             try:
-#                 st_list.append(res.get())
-#             # InternalMSEEDError
-#             except Exception as e:
-#                 Logger.error(e)
-#                 pass
-#         # Concatenate all NSLC-streams into one stream
-#         for st_part in st_list:
-#             st += st_part
-#     else:
-#         for arg in bulk:
-#             try:
-#                 st += client.get_waveforms(*arg)
-#             except Exception as e:
-#                 document_client_read_error(e)
-#                 continue
-
-#     outtoc = default_timer()
-#     Logger.info('Bulk-reading of waveforms took: {0:.4f}s'.format(
-#         outtoc - outtic))
-#     return st
-
-
 def document_client_read_error(s):
     """
     Function to be called when an exception occurs within one worker in
@@ -258,28 +185,6 @@ def get_parallel_waveform_client(waveform_client):
 
     return waveform_client
 
-
-# def get_waveform_client(waveform_client):
-#     """
-#     Bind a `get_waveforms_bulk` method to waveform_client if it doesn't
-#     already have one.
-#     Copyright Calum Chamberlain, 2020
-#     """
-#     def _get_waveforms_bulk_naive(self, bulk_arg):
-#         """
-#         a naive implementation of get_waveforms_bulk that uses iteration.
-#         """
-#         st = Stream()
-#         for arg in bulk_arg:
-#             st += self.get_waveforms(*arg)
-#         return st
-
-#     # add waveform_bulk method dynamically if it doesn't exist already
-#     if not hasattr(waveform_client, "get_waveforms_bulk"):
-#         bound_method = _get_waveforms_bulk_naive.__get__(waveform_client)
-#         setattr(waveform_client, "get_waveforms_bulk", bound_method)
-
-#     return waveform_client
 
 def check_request_for_wildcards(stats, pattern_list, pattern_position):
     """

@@ -32,9 +32,9 @@ from obspy.core.inventory import Inventory
 # import robustraqn
 from robustraqn.obspy.core.trace import Trace
 # from robustraqn.obspy.core.threecomp_stream import Stream
-import robustraqn.seismic_array_tools as seismic_array_tools
-import robustraqn.load_events_for_detection as load_events_for_detection
-import robustraqn.spectral_tools as spectral_tools
+import robustraqn.core.seismic_array as seismic_array
+import robustraqn.core.load_events as load_events
+import robustraqn.utils.spectral_tools as spectral_tools
 
 import logging
 Logger = logging.getLogger(__name__)
@@ -129,7 +129,7 @@ def init_processing(self, starttime, endtime, remove_response=False,
         min_run_length=5, starttime=starttime, endtime=endtime)
     # Second check for array-wide steps in the data
     if suppress_arraywide_steps:
-        self = seismic_array_tools.mask_array_trace_offsets(
+        self = seismic_array.mask_array_trace_offsets(
             self, split_taper_stream=True, **kwargs)
 
     streams = []
@@ -202,7 +202,7 @@ def init_processing(self, starttime, endtime, remove_response=False,
                  balance_power_coefficient=balance_power_coefficient)
                 for id in unique_seed_id_list)
             # st = Stream([tr for trace_st in streams for tr in trace_st])
-    self = load_events_for_detection._merge_streams(streams)
+    self = load_events._merge_streams(streams)
 
     outtoc = default_timer()
     Logger.info(
@@ -305,7 +305,7 @@ def init_processing_w_rotation(
         min_run_length=5, starttime=starttime, endtime=endtime)
     # Second check for array-wide steps in the data
     if suppress_arraywide_steps:
-        self = seismic_array_tools.mask_array_trace_offsets(
+        self = seismic_array.mask_array_trace_offsets(
             self, split_taper_stream=True, **kwargs)
 
     # Sort unique-ID list by most common, so that 3-component stations
@@ -405,7 +405,7 @@ def init_processing_w_rotation(
                  balance_power_coefficient=balance_power_coefficient,
                  parallel=False, cores=None, **kwargs)
                 for nsl in unique_net_sta_loc_list)
-    self = load_events_for_detection._merge_streams(streams)
+    self = load_events._merge_streams(streams)
     # st = Stream([tr for trace_st in streams for tr in trace_st])
 
     outtoc = default_timer()
@@ -1325,7 +1325,7 @@ def normalize_nslc_codes(self, inv, std_network_code="NS",
     """
     # 0. remove forbidden channels that cause particular problems
     if forbidden_chan_file != "":
-        forbidden_chans = load_events_for_detection.load_forbidden_chan_file(
+        forbidden_chans = load_events.load_forbidden_chan_file(
             file=forbidden_chan_file)
         st_copy = self.copy()
         for tr in st_copy:
@@ -1395,7 +1395,7 @@ def normalize_nslc_codes(self, inv, std_network_code="NS",
     # 3. +4 +5 Translate station codes, Set network and location codes
     # load list of tuples for station-code translation
     sta_fortransl_dict, sta_backtrans_dict = (
-        load_events_for_detection.load_station_translation_dict(
+        load_events.load_station_translation_dict(
             file=sta_translation_file))
     intermed_trace_ids = [tr.id for tr in self]
     updated_trace_ids = []

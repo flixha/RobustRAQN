@@ -24,11 +24,11 @@ from eqcorrscan.core.match_filter.party import Party
 
 from robustraqn.obspy.clients.filesystem.sds import Client
 from robustraqn.obspy.core import Stream, Trace
-from robustraqn.quality_metrics import (get_waveforms_bulk, read_ispaq_stats)
-from robustraqn.seismic_array_tools import get_station_sites
-from robustraqn.relative_magnitude_util import compute_relative_event_magnitude
+from robustraqn.utils.quality_metrics import (get_waveforms_bulk, read_ispaq_stats)
+from robustraqn.core.seismic_array import get_station_sites
+from robustraqn.utils.relative_magnitude import compute_relative_event_magnitude
 
-from robustraqn.load_events_for_detection import (get_all_relevant_stations)
+from robustraqn.core.load_events import (get_all_relevant_stations)
 
 import logging
 Logger = logging.getLogger(__name__)

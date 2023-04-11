@@ -24,7 +24,7 @@ from obspy.taup import TauPyModel
 from obspy.core.util.attribdict import AttribDict
 from obspy.io.nordic.ellipse import Ellipse
 
-from robustraqn.seismic_array_tools import get_station_sites
+from robustraqn.core.seismic_array import get_station_sites
 
 import logging
 Logger = logging.getLogger(__name__)
@@ -1035,7 +1035,7 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
 
     if len(catalog) == 0:
         raise TypeError(
-            'Catalog is empty, use bayesloc_utils.read_bayesloc_origins')
+            'Catalog is empty, use utils.bayesloc.read_bayesloc_origins')
     arrival_df = read_bayesloc_arrivals(
         arrival_file, custom_epoch=custom_epoch)
     if phases_file is not None:

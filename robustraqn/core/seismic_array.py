@@ -36,7 +36,7 @@ from obsplus.stations.pd import stations_to_df
 from eqcorrscan.core.match_filter import Party
 from eqcorrscan.utils.despike import _interp_gap
 
-from robustraqn import load_events_for_detection
+from robustraqn.core import load_events
 # from robustraqn.obspy.core import Trace, Stream
 import robustraqn.obspy.core.stream as robst
 # import robustraqn.obspy.core.stream as robtr
@@ -513,7 +513,7 @@ def find_array_picks_baz_appvel(
     backazimuth and the apparent velocity, either from measurements or from the
     computed arrivals. Return dictionaries of picks, baz, and app-vel for each
     phase.
-    
+
     returns 2-level dictionaries (1st level keys are array-prefixes, 2nd level
     keys are phase-hints) for:
     - all picks of same phase-hint at each array
@@ -537,7 +537,7 @@ def find_array_picks_baz_appvel(
         dictionary of seismic-array prefixes and a
         class:`obspy.core.stream.Stream` containing all traces recorded at the
         stations of the array (output from
-        robustraqn.seismic_array_tools.extract_array_picks).
+        robustraqn.core.seismic_array.extract_array_picks).
     :type array_baz_dict: dict or None
     :param array_baz_dict:
         2-level dictionary of seismic-array-prefixes (keys), phase_hints (keys)
@@ -557,7 +557,7 @@ def find_array_picks_baz_appvel(
     :param mod_file:
         Path to a model file (*.tvel and *.npz) containing a taup / velocity
         model conforming to class:`obspy.taup.velocity_model.VelocityModel`
-        
+
     :returns:
         Tuple of three dictionaries of seismic-array prefixes and phase-hints
         as keys (2 levels), and the picks, backazimuth value, and apparent
@@ -814,7 +814,7 @@ def add_array_station_picks(
         dictionary of seismic-array prefixes and a
         class:`obspy.core.stream.Stream` containing all traces recorded at the
         stations of the array (output from
-        robustraqn.seismic_array_tools.extract_array_picks).
+        robustraqn.core.seismic_array.extract_array_picks).
     :type array_baz_dict: dict or None
     :param array_baz_dict:
         2-level dictionary of seismic-array-prefixes (keys), phase_hints (keys)
@@ -851,7 +851,7 @@ def add_array_station_picks(
     :param mod_file:
         Path to a *.tvel-file containing a velocity model conforming to
         class:`obspy.taup.velocity_model.VelocityModel`
-        
+
     :returns:
         Event with picks added for all individual stations at seismic arrays
         for which picks could be computed from array arrivals.
@@ -1113,7 +1113,7 @@ def _check_picks_within_shiftlen(party, event, detection_id, shift_len):
 
 def __non_consecutive(arr, neighbor_range=1, neighbor_distance=None):
     """Find non-consecutive numbers in array.
-    
+
     NOTE: this function is probably not needed anymore, as there is a simpler
           implementation of it in _non_consecutive just below
 
@@ -1121,11 +1121,11 @@ def __non_consecutive(arr, neighbor_range=1, neighbor_distance=None):
     :type arr: np.array
     :param neighbor_range:
         maximum distance across which to consider values as consecutive
-        (i.e. neighbors). 
+        (i.e. neighbors).
     :type neighbor_range: int, defaults to 1.
     :param neighbor_distance:
         Distance at which to start comparison of neighboring values (function
-        increases distance recursively from this value. Starts from 1 by 
+        increases distance recursively from this value. Starts from 1 by
         default).
     :type neighbor_distance: int, Defaults to None.
     :return:
@@ -1165,7 +1165,7 @@ def _non_consecutive(arr, neighbor_range=1):
     :type arr: np.array
     :param neighbor_range:
         maximum distance across which to consider values as consecutive
-        (i.e. neighbors). 
+        (i.e. neighbors).
     :type neighbor_range: int, defaults to 1.
     :return:
         array of values that appear "isolated" in input, i.e. no neighboring
@@ -1365,7 +1365,7 @@ def mask_shared_trace_offsets(
     # caused by the steps disappear in filtered data):
     stream = robst.Stream(ret_traces)
     if split_taper_stream:
-        stream = load_events_for_detection.taper_trace_segments(
+        stream = load_events.taper_trace_segments(
             stream, min_length_s=min_length_s, max_percentage=max_percentage,
             max_length=max_length)
         stream = stream.merge(method=0, fill_value=0, interpolation_samples=0)
@@ -1386,7 +1386,7 @@ def mask_array_trace_offsets(
     :param stream:
         stream of all traces (can be for arrays and single stations together)
     :type stream: class:`obspy.core.stream.Stream`
-    :param seisarray_prefixes: 
+    :param seisarray_prefixes:
         List of extended-glob patterns that match all station codes within
         seismic arrays., defaults to SEISARRAY_PREFIXES
     :type seisarray_prefixes: list, optional
@@ -1459,12 +1459,12 @@ def mask_array_trace_offsets(
 
     out_stream = robst.Stream(single_station_traces + masked_array_traces)
     if split_taper_stream:
-        out_stream = load_events_for_detection.taper_trace_segments(
+        out_stream = load_events.taper_trace_segments(
             out_stream, min_length_s=min_length_s,
             max_percentage=max_percentage, max_length=max_length)
         # Do not merge here - the stream could contain traces with same ID and
         # different sampling rates. This will be handled in the internal loop
-        # in robustraqn.load_events_for_detection._init_processing_per_channel
+        # in robustraqn.load_events._init_processing_per_channel
         # out_stream = out_stream.merge(
         #     method=0, fill_value=0, interpolation_samples=0)
     return out_stream
@@ -1566,7 +1566,7 @@ def array_lag_calc(
         If False (default), errors will be raised if data are excessively
         gappy or are mostly zeros. If True then no error will be raised,
         but an empty trace will be returned (and not used in detection).
-        
+
     :returns:
         catalog containing events where lag-calc based cross-correlation picks
         have been added for phases arriving at seismic arrays.
@@ -1862,13 +1862,13 @@ def get_updated_stations_df(inv):
 if __name__ == "__main__":
     from obspy.clients.filesystem.sds import Client
     from eqcorrscan.core.match_filter import Party, Tribe
-    from robustraqn.templates_creation import create_template_objects
-    from robustraqn.event_detection import run_day_detection
-    from robustraqn.detection_picking import pick_events_for_day
-    from robustraqn.quality_metrics import read_ispaq_stats
-    from robustraqn.lag_calc_postprocessing import (
+    from robustraqn.core.templates_creation import create_template_objects
+    from robustraqn.core.event_detection import run_day_detection
+    from robustraqn.core.detection_picking import pick_events_for_day
+    from robustraqn.utils.quality_metrics import read_ispaq_stats
+    from robustraqn.core.event_postprocessing import (
         check_duplicate_template_channels, postprocess_picked_events)
-    from robustraqn.spectral_tools import get_updated_inventory_with_noise_models
+    from robustraqn.utils.spectral_tools import get_updated_inventory_with_noise_models
 
     parallel = True
     cores = 32
@@ -1885,7 +1885,7 @@ if __name__ == "__main__":
     picks_before = str(len(event.picks))
     # array_picks_dict = extract_array_picks(event)
     # event2 = add_array_station_picks(event, array_picks_dict, stations_df)
-    
+
     inv_file = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.xml'
     # inv = read_inventory(os.path.expanduser(invile))
     inv = get_updated_inventory_with_noise_models(
@@ -1993,7 +1993,7 @@ if __name__ == "__main__":
         pre_processed=False, shift_len=0.8, min_cc_from_mean_cc_factor=0.6,
         horizontal_chans=['E', 'N', '1', '2'], vertical_chans=['Z'],
         parallel=False, cores=1, daylong=True)
-    
+
 # %%
     # arr_st_dict = extract_array_stream(day_st)
 

@@ -9,14 +9,14 @@ from obsplus.stations.pd import stations_to_df
 from obspy.clients.filesystem.sds import Client
 from obspy.core.event import Catalog
 from eqcorrscan.core.match_filter import Party, Tribe
-from robustraqn.templates_creation import create_template_objects
-from robustraqn.event_detection import run_day_detection
-from robustraqn.detection_picking import pick_events_for_day
-from robustraqn.quality_metrics import read_ispaq_stats
-from robustraqn.lag_calc_postprocessing import (
+from robustraqn.core.templates_creation import create_template_objects
+from robustraqn.core.event_detection import run_day_detection
+from robustraqn.core.detection_picking import pick_events_for_day
+from robustraqn.utils.quality_metrics import read_ispaq_stats
+from robustraqn.core.event_postprocessing import (
     check_duplicate_template_channels, postprocess_picked_events)
-from robustraqn.spectral_tools import get_updated_inventory_with_noise_models
-from robustraqn.seimic_array_tools import (
+from robustraqn.utils.spectral_tools import get_updated_inventory_with_noise_models
+from robustraqn.core.seimic_array import (
     add_array_station_picks, extract_array_picks, array_lac_calc)
 
 parallel = True
@@ -154,7 +154,7 @@ from robustraqn.templates_creation import create_template_objects
 from robustraqn.event_detection import run_day_detection
 from robustraqn.detection_picking import pick_events_for_day
 from robustraqn.quality_metrics import read_ispaq_stats
-from robustraqn.lag_calc_postprocessing import (
+from robustraqn.event_postprocessing import (
     check_duplicate_template_channels, postprocess_picked_events)
 from robustraqn.spectral_tools import get_updated_inventory_with_noise_models
 from robustraqn.obspy.clients.filesystem.sds import Client

@@ -25,21 +25,17 @@ import pickle
 import obspy
 from obspy import read_inventory
 from obspy import read as obspyread
-# from obspy.core.stream import Stream
-# from obspy.core.event import Event
 from obspy import UTCDateTime
-# from obspy.io.mseed import InternalMSEEDError
-# from obspy.imaging.cm import pqlx
 from obspy.signal.spectral_estimation import get_nlnm
 
-# from robustraqn.quality_metrics import ()
+# from robustraqn.utils.quality_metrics import ()
 import logging
 Logger = logging.getLogger(__name__)
 #logging.basicConfig(
 #    level=logging.INFO,
 #    format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s")
-from robustraqn import seismic_array_tools # import SEISARRAY_PREFIXES
-import robustraqn.load_events_for_detection
+from robustraqn.core import seismic_array # import SEISARRAY_PREFIXES
+import robustraqn.core.load_events
 
 
 def balance_noise(self, inv, balance_power_coefficient=2,
@@ -115,7 +111,7 @@ def balance_noise(self, inv, balance_power_coefficient=2,
         sta_inv = inv.select(station=self.stats.station)
         if len(sta_inv) == 0 and sta_translation_file is not None:
             sta_fortransl_dict, sta_backtrans_dict = (
-                robustraqn.load_events_for_detection.\
+                robustraqn.core.load_events.\
                     load_station_translation_dict(file=sta_translation_file))
             if self.stats.station in sta_backtrans_dict:
                 sta_inv = inv.select(station=sta_backtrans_dict.get(
@@ -258,7 +254,7 @@ def sum_station_pdf(inv, pdf_dir, network, station, location="*",
                     channel="???"):
     """
     Create a mega pdf for one network / channel / location / station
-    
+
     :param inv: Inventory object containing the noise model for the stations
     :type inv: :class:`obspy.core.inventory.inventory.Inventory`
     :param pdf_dir:
@@ -344,7 +340,7 @@ def normalize_pdf(pdf, freq_u):
 def find_unique_sampling_rates(inv, network, station, location, channel):
     """
     Return unique list of sampling rates for the stations/location/channel
-    
+
     :param inv: Inventory object containing the noise model for the stations
     :type inv: :class:`obspy.core.inventory.inventory.Inventory`
     :param network: Network code
@@ -960,7 +956,7 @@ def attach_noise_models(inv, pdf_dir, outfile='inv.pickle',
     # at the array.
     seisarray_list = list()
     single_station_list = station_list.copy()
-    seisarray_prefixes = seismic_array_tools.SEISARRAY_PREFIXES
+    seisarray_prefixes = seismic_array.SEISARRAY_PREFIXES
     # alternative pattern 'E*K!(O)*' (works only  in wcmatch, not glob)
     # ''E*K[!O]*'
     for seisarray_prefix in seisarray_prefixes:

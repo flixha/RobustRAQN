@@ -51,9 +51,9 @@ from obsplus.stations.pd import stations_to_df
 
 # import obustraqn.spectral_tools
 from robustraqn.obspy.core.stream import Stream
-import robustraqn.spectral_tools  # absolute import to avoid circular import
-from robustraqn.quality_metrics import get_parallel_waveform_client
-from robustraqn import seismic_array_tools
+import robustraqn.utils.spectral_tools  # absolute import to avoid circular import
+from robustraqn.utils.quality_metrics import get_parallel_waveform_client
+from robustraqn.core import seismic_array
 # get_station_sites, get_station_sites_dict, mask_array_trace_offsets)
 from robustraqn.obspy.clients.filesystem.sds import Client
 from timeit import default_timer
@@ -1470,7 +1470,7 @@ def init_processing(day_st, starttime, endtime, remove_response=False,
         day_st, min_run_length=5, starttime=starttime, endtime=endtime)
     # Second check for array-wide steps in the data
     if suppress_arraywide_steps:
-        day_st = seismic_array_tools.mask_array_trace_offsets(
+        day_st = seismic_array.mask_array_trace_offsets(
             day_st, split_taper_stream=True, **kwargs)
 
     streams = []
@@ -1675,7 +1675,7 @@ def init_processing_w_rotation(
         min_run_length=5, starttime=starttime, endtime=endtime)
     # Second check for array-wide steps in the data
     if suppress_arraywide_steps:
-        day_st = seismic_array_tools.mask_array_trace_offsets(
+        day_st = seismic_array.mask_array_trace_offsets(
             day_st, split_taper_stream=True, **kwargs)
 
     # Sort unique-ID list by most common, so that 3-component stations
@@ -3575,7 +3575,7 @@ def reevaluate_detections(
     # Get list of unique station names in party for station-site dict lookup
     unique_stations = list(set(
         [chan[0] for fam in party for det in fam for chan in det.chans]))
-    station_sites_dict = seismic_array_tools.get_station_sites_dict(
+    station_sites_dict = seismic_array.get_station_sites_dict(
         unique_stations)
 
     if min_n_station_sites > 1:

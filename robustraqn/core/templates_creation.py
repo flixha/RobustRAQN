@@ -17,13 +17,11 @@ from itertools import groupby
 from timeit import default_timer
 import numpy as np
 
-# from obspy import read_events, read_inventory
 from obspy.core.event import Catalog
 from obspy.core.utcdatetime import UTCDateTime
 from obspy.geodetics.base import gps2dist_azimuth
 from obspy.geodetics import kilometers2degrees, degrees2kilometers
 # from obspy.core.stream import Stream
-# from obspy.core.util.base import TypeError
 from obspy.core.event import Event
 from obspy.io.nordic.core import read_nordic
 from obspy.core.inventory.inventory import Inventory
@@ -32,35 +30,29 @@ from obspy.core.util.attribdict import AttribDict
 from obsplus import events_to_df
 from obsplus.stations.pd import stations_to_df
 
-# reload(eqcorrscan)
 from eqcorrscan.utils import pre_processing
 from eqcorrscan.core import template_gen
 from eqcorrscan.utils.catalog_utils import filter_picks
 from eqcorrscan.core.match_filter import Template, Tribe
-# from eqcorrscan.utils.clustering import cluster
-# from eqcorrscan.utils.stacking import linstack, PWS_stack
 from eqcorrscan.utils.plotting import pretty_template_plot
 from eqcorrscan.utils.correlate import pool_boy
 
-# import load_events_for_detection
-# import spectral_tools
-# reload(load_events_for_detection)
 from robustraqn.obspy.core import Trace, Stream
-from robustraqn.load_events_for_detection import (
+from robustraqn.core.load_events import (
     normalize_NSLC_codes, get_all_relevant_stations, load_event_stream,
     try_remove_responses, check_template, prepare_picks,
     fix_phasehint_capitalization, mask_consecutive_zeros, taper_trace_segments)
-from robustraqn.spectral_tools import (
+from robustraqn.utils.spectral_tools import (
     st_balance_noise, Noise_model, get_updated_inventory_with_noise_models)
-from robustraqn.quality_metrics import (
+from robustraqn.utils.quality_metrics import (
     create_bulk_request, get_parallel_waveform_client)
-from robustraqn.seismic_array_tools import (
+from robustraqn.core.seismic_array import (
     extract_array_picks, add_array_station_picks, get_station_sites,
     LARGE_APERTURE_SEISARRAY_PREFIXES, get_updated_stations_df,
     mask_array_trace_offsets)
-from robustraqn.bayesloc_utils import update_cat_from_bayesloc
+from robustraqn.utils.bayesloc import update_cat_from_bayesloc
 from robustraqn.obspy.clients.filesystem.sds import Client
-from robustraqn.obspy_utils import _quick_copy_stream
+from robustraqn.utils.obspy import _quick_copy_stream
 
 import logging
 Logger = logging.getLogger(__name__)
@@ -362,7 +354,7 @@ def _create_template_objects(
     :type noise_balancing: bool, optional
     :param balance_power_coefficient:
         Power coefficient for noise balancing, defaults to 2 (see
-        :func:`robustraqn.spectral_tools.balance_noise`)
+        :func:`robustraqn.utils.spectral_tools.balance_noise`)
     :type balance_power_coefficient: float, optional
     :param ground_motion_input:
         List of ground motion input types, can be one of 'DISP', 'VEL', 'ACC',

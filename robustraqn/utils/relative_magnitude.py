@@ -32,7 +32,7 @@ from eqcorrscan.core.match_filter.party import Party
 from eqcorrscan.utils.mag_calc import relative_magnitude
 from eqcorrscan.utils.pre_processing import shortproc
 
-from robustraqn.obspy_utils import _quick_copy_stream
+from robustraqn.utils.obspy import _quick_copy_stream
 
 
 
@@ -193,7 +193,7 @@ def compute_relative_event_magnitude(
             highcut=templ1.highcut, filt_order=templ1.filt_order,
             samp_rate=templ1.samp_rate, parallel=parallel, num_cores=cores,
             fft_threads=n_threads)
-    
+
     # When response should have been removed, check that it was indeed removed
     # from both template and detection - otherwise can't compute relative
     # amplitudes.
@@ -240,7 +240,7 @@ def compute_relative_event_magnitude(
     #     min_cc=0.7, use_s_picks=True, correlations=None, shift=0.4,
     #     return_correlations=False, correct_mag_bias=True)
     # delta_mags.append([delta_mag])
-    
+
     # if len(delta_mag) > 0 and len(delta_mag_S) > 0:
     #     break
 
@@ -263,36 +263,6 @@ def compute_relative_event_magnitude(
                     and (m.creation_info.agency_id in accepted_magnitude_agencies
                         if m.creation_info else True)]
         prev_mags = [m.mag for m in previous_magnitudes]
-    
-    # try:
-    #     previous_magnitudes = []
-    #     for mag_pref in magnitude_agency_type_pref:
-    #         if len(previous_magnitudes) 
-    #         try:
-    #             previous_magnitudes = [
-    #                 m for m in templ1.event.magnitudes
-    #                 if m.magnitude_type == mag_pref[1]
-    #                 and (m.creation_info.agency_id == mag_pref[0]
-    #                      if m.creation_info else False)]
-    #         except Exception as e:
-    #             pass
-        # # First try to be string about accepted magnitude agencies
-        # try:
-        #     previous_magnitudes = [
-        #         m for m in templ1.event.magnitudes
-        #         if m.magnitude_type in accepted_magnitude_types
-        #         and (m.creation_info.agency_id in accepted_magnitude_agencies
-        #                 if m.creation_info else False)]
-        # except Exception as e:
-        #     pass
-        # If there are no magnitudes for accepted agencies, allow others.
-        # if len(prev_mags) == 0:
-        #     previous_magnitudes = [
-        #         m for m in templ1.event.magnitudes
-        #         if m.magnitude_type in accepted_magnitude_types
-        #         and (m.creation_info.agency_id in accepted_magnitude_agencies
-        #             if m.creation_info else True)]
-        # prev_mags = [m.mag for m in previous_magnitudes]
     except Exception as e:
         Logger.warning(e)
         Logger.warning(
@@ -309,26 +279,6 @@ def compute_relative_event_magnitude(
 
     Logger.debug('Event %s: found %s previous template-magnitudes (%s)',
                  j_ev, len(prev_mags), str(prev_mags))
-    # new_mags_rel = [delta_mag[key] for key in delta_mag]
-    # new_mag = prev_mag + np.mean(new_mags_rel)
-    
-    # if not np.isnan(new_mag) and len(new_mags_rel) > 0:
-    #     detected_event.magnitudes.append(Magnitude(
-    #         # "resource_id"=ResourceIdentifier,
-    #         #"mag", float=ATTRIBUTE_HAS_ERRORS,
-    #         mag=new_mag,
-    #         magnitude_type='ML',
-    #         origin_id=detected_event.preferred_origin().resource_id,
-    #         # "method_id"=ResourceIdentifier,
-    #         station_count=len(delta_mag),
-    #         # "azimuthal_gap"=float,
-    #         evaluation_mode=EvaluationMode('automatic'),
-    #         evaluation_status=EvaluationStatus('preliminary'),
-    #         creation_info=CreationInfo(agency_id='BER', author='FH',
-    #                                    creation_time=UTCDateTime(),
-    #                                    version=None)))
-
-    # [sm.mag for sm in detected_event.station_magnitudes]
     delta_mags = [_delta_mag[1] for _delta_mag in delta_mag_corr.items()]
     # av_mag = prev_mag + np.dot(
     #     np.array(delta_mags), np.array(mag_ccs)) / np.sum(mag_ccs)z

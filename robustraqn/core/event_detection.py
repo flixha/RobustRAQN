@@ -70,8 +70,8 @@ from robustraqn.core.load_events import (
     prepare_detection_stream, init_processing, init_processing_w_rotation,
     print_error_plots, get_all_relevant_stations, reevaluate_detections,
     multiplot_detection, try_apply_agc)
-from robustraqn.utils.spectral_tools import (Noise_model,
-                                       get_updated_inventory_with_noise_models)
+from robustraqn.utils.spectral_tools import (
+    Noise_model, get_updated_inventory_with_noise_models)
 from robustraqn.core.templates_creation import create_template_objects
 from robustraqn.utils.obspy import _quick_copy_stream
 

@@ -506,7 +506,7 @@ def find_array_picks_baz_appvel(
         event, phase_hints=None, seisarray_prefixes=SEISARRAY_PREFIXES,
         array_picks_dict=None, array_baz_dict=None, array_app_vel_dict=None,
         vel_mod=None, taup_mod=None, mod_file=os.path.join(
-            os.path.dirname(__file__), 'models','NNSN1D_plusAK135'),
+            os.path.dirname(__file__), '..', 'models','NNSN1D_plusAK135'),
         origin_default_depth=10000):
     """
     For one event, for every phase, find all picks at the same array, find the
@@ -782,8 +782,8 @@ def add_array_station_picks(
         event, stations_df, array_picks_dict=None, array_baz_dict=None,
         array_app_vel_dict=None, baz=None, app_vel=None,
         seisarray_prefixes=SEISARRAY_PREFIXES, min_array_distance_factor=8,
-        mod_file=os.path.join(os.path.dirname(__file__), 'models',
-                              'NNSN1D_plusAK135'),
+        mod_file=os.path.join(
+            os.path.dirname(__file__), '..', 'models', 'NNSN1D_plusAK135'),
         origin_default_depth=10000, **kwargs):
     """
     Returns all picks at array stations from 

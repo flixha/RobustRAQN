@@ -934,7 +934,7 @@ def extract_detections(detections, templates, archives, archive_types,
     >>> # Get the path to the test data
     >>> import eqcorrscan
     >>> import os
-    >>> TEST_PATH = os.path.dirname(eqcorrscan.__file__) + '/tests/test_data'
+    >>> TEST_PATH = os.path.dirname(eqcorrscan.__file__) + '../tests/test_data'
     >>> # Use some dummy detections, you would use real one
     >>> detections = [Detection(
     ...     template_name='temp1', detect_time=UTCDateTime(2012, 3, 26, 9, 15),

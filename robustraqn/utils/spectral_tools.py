@@ -1,5 +1,5 @@
 
-# %% 
+# %%
 import os
 
 import pandas as pd
@@ -16,7 +16,6 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from cycler import cycler
 
-# from scipy import stats
 import statistics as stats
 from scipy.interpolate import interp1d
 
@@ -30,12 +29,9 @@ from obspy.signal.spectral_estimation import get_nlnm
 
 # from robustraqn.utils.quality_metrics import ()
 import logging
-Logger = logging.getLogger(__name__)
-#logging.basicConfig(
-#    level=logging.INFO,
-#    format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s")
-from robustraqn.core import seismic_array # import SEISARRAY_PREFIXES
+from robustraqn.core import seismic_array  # import SEISARRAY_PREFIXES
 import robustraqn.core.load_events
+Logger = logging.getLogger(__name__)
 
 
 def balance_noise(self, inv, balance_power_coefficient=2,
@@ -111,8 +107,8 @@ def balance_noise(self, inv, balance_power_coefficient=2,
         sta_inv = inv.select(station=self.stats.station)
         if len(sta_inv) == 0 and sta_translation_file is not None:
             sta_fortransl_dict, sta_backtrans_dict = (
-                robustraqn.core.load_events.\
-                    load_station_translation_dict(file=sta_translation_file))
+                robustraqn.core.load_events.
+                load_station_translation_dict(file=sta_translation_file))
             if self.stats.station in sta_backtrans_dict:
                 sta_inv = inv.select(station=sta_backtrans_dict.get(
                     self.stats.station))
@@ -151,9 +147,9 @@ def balance_noise(self, inv, balance_power_coefficient=2,
     except Exception as e:
         ground_m_type = []
 
-    if   "VEL"  in ground_m_type or "VEL"  in ground_motion_input:
+    if "VEL" in ground_m_type or "VEL" in ground_motion_input:
         pass  # don't need to correct then
-    elif "ACC"  in ground_m_type or "ACC"  in ground_motion_input:
+    elif "ACC" in ground_m_type or "ACC" in ground_motion_input:
         # * np.sqrt(-1)
         amp_filter = amp_filter * (2 * np.pi * f_filter)
     elif "DISP" in ground_m_type or "DISP" in ground_motion_input:
@@ -374,7 +370,8 @@ def find_unique_sampling_rates(inv, network, station, location, channel):
     return sample_rates_df
 
 
-def calc_mega_pdf(freq_u, freq_u_str, db_u, pdffiles, outpdffile='megapdf.npy'):
+def calc_mega_pdf(freq_u, freq_u_str, db_u, pdffiles,
+                  outpdffile='megapdf.npy'):
     """
     based on a previous version by Emily Wolin. Integrated from
     https://github.com/ewolin/HighFreqNoiseMustang_paper
@@ -455,7 +452,7 @@ def calc_mega_pdf(freq_u, freq_u_str, db_u, pdffiles, outpdffile='megapdf.npy'):
 
 
 def is_microseism_ok(freq, db, hits, db_tol=5, max_hits_perc=20, f_min=0.2,
-                   f_max=0.4):
+                     f_max=0.4):
     """
     copyright Emily Wolin. Integrated from
     https://github.com/ewolin/HighFreqNoiseMustang_paper
@@ -630,7 +627,7 @@ def find_percentile(freq_u, db_u, newpdf_norm, perc, ax, fnyqs=[],
         dum = 0
         for j in range(len(fslice)):
             dum += fslice[j]
-            if(dum >= perc):
+            if (dum >= perc):
                 db_perc[i] = db_u[j]
                 break
     # plot and/or write percentile line
@@ -731,9 +728,9 @@ def get_custom_ispaq_cmap():
         second = cmaplist[nchange][1]
         third = cmaplist[nchange][2]
         scaleFactor = (nchange-1-i)/float(nchange)
-        df = ((1-first)  * scaleFactor) + first
-        ds = ((1-second) * scaleFactor) + second
-        dt = ((1-third)  * scaleFactor) + third
+        df = ((1 - first) * scaleFactor) + first
+        ds = ((1 - second) * scaleFactor) + second
+        dt = ((1 - third) * scaleFactor) + third
         cmaplist[i] = (df, ds, dt, 1)
 
     cmaplist[0] = (1, 1, 1, 1)
@@ -789,13 +786,13 @@ def setupPSDPlot():
     # icheck, = np.where((nlnm[0] >= 1./0.4)&(nlnm[0]<=1./0.2))
     f_min = 0.2
     f_max = 0.4
-    icheck, = np.where((nlnm[0] >= 1./f_max)&(nlnm[0]<=1./f_min))
+    icheck, = np.where((nlnm[0] >= 1./f_max) & (nlnm[0] <= 1./f_min))
     ax.plot(nlnm[0][icheck], nlnm[1][icheck]-5, linewidth=1, color='grey',
             linestyle='--')
     # print(nlnm[0][icheck])
 
     # Plot high-frequency extensions
-    # ax.plot(nlpermb[0], nlpermb[1], color='grey', ls='-.', lw=3, 
+    # ax.plot(nlpermb[0], nlpermb[1], color='grey', ls='-.', lw=3,
     #         label='Low Permanent Baseline')
     ax.plot(nlportb[0], nlportb[1], linewidth=3, ls='--', color='grey',
             label='Low Portable Baseline')
@@ -993,7 +990,7 @@ def attach_noise_models(inv, pdf_dir, outfile='inv.pickle',
                 channel="[ESBHCDFNML]??", plot_station_pdf=plot_station_pdf)
         except Exception as e:
             Logger.warning('Cannot add noise model for station %s: %s',
-                            station, e)
+                           station, e)
 
     # inv.write('test_inv.xml', format="STATIONXML")
     pickle.dump(inv, open(outfile, "wb"), protocol=4)
@@ -1033,7 +1030,8 @@ def test_noise_balancing():
     starttime = UTCDateTime(2019, 9, 24, 0, 0, 0)
     endtime = UTCDateTime(2019, 9, 25, 0, 0, 0)
     st = obspyread(
-        '/data/seismo-wav/SLARCHIVE/2019/NS/ASK/HHZ.D/NS.ASK.00.HHZ.D.2019.267')
+        '/data/seismo-wav/SLARCHIVE/2019/NS/ASK/HHZ.D/NS.ASK.00.HHZ.D.2019.267'
+        )
 
     tr = st[0]
     tr = tr.detrend().taper(0.01, type='hann', max_length=None, side='both')

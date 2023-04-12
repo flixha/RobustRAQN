@@ -33,7 +33,7 @@ from eqcorrscan.utils.correlate import pool_boy
 
 import logging
 Logger = logging.getLogger(__name__)
-#logging.basicConfig(
+# logging.basicConfig(
 #    level=logging.INFO,
 #    format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t" +
 #    "%(levelname)s\t%(message)s")
@@ -76,21 +76,10 @@ def get_waveforms_bulk(client, bulk, parallel=False, cores=16):
     if parallel:
         if cores is None:
             cores = min(len(bulk), cpu_count())
-
         # Switch to Process Pool for now. Threadpool is quicker, but it is not
         # stable against errors that need to be caught in Mseed-library. Then
         # as segmentation fault can crash the whole program. ProcessPool needs
         # to be spawned, otherwise this can cause a deadlock.
-
-        # Logger.info('Start bulk-read paralle pool')
-        # Process / spawn handles segmentation fault better?
-        #with pool_boy(Pool=ThreadPool, traces=len(bulk), cores=cores) as pool:
-        # with pool_boy(Pool=Pool, traces=len(bulk), cores=cores) as pool:
-
-        # with pool_boy(Pool=get_context("spawn").Pool, traces=len(bulk),
-        #               cores=cores) as pool:
-        #     results = [pool.apply_async(
-        #         _get_waveforms_bulk, args=(client, [arg])) for arg in bulk]
 
         # Use joblib with loky-pools; this is the most stable
         results = Parallel(n_jobs=cores)(
@@ -98,11 +87,7 @@ def get_waveforms_bulk(client, bulk, parallel=False, cores=16):
         # Concatenate all NSLC-streams into one stream
         st = Stream()
         for res in results:
-            # st += res.get()
             st += res
-        # pool.close()
-        # pool.join()
-        # pool.terminate()
     else:
         st = _get_waveforms_bulk(client, bulk)
 
@@ -142,7 +127,6 @@ def get_parallel_waveform_client(waveform_client):
         parallel implementation of get_waveforms_bulk.
         """
         # signal.signal(signal.SIGSEGV, sigsegv_handler)
-
         st = Stream()
         if parallel:
             if cores is None:
@@ -194,10 +178,11 @@ def check_request_for_wildcards(stats, pattern_list, pattern_position):
     if stats.empty:
         return []
     if pattern_position[0] not in [0, 1, 2]:
-        raise(IndexError, 'first pattern_position can only be 0, 1, or 2')
+        raise (IndexError, 'first pattern_position can only be 0, 1, or 2')
     if len(pattern_position) > 1:
         if pattern_position[1] not in [0, 1, 2]:
-            raise(IndexError, 'second pattern_position can only be 0, 1, or 2')
+            raise (
+                IndexError, 'second pattern_position can only be 0, 1, or 2')
     # Check for wildcards in station names
     full_pattern_list = list()
     for pattern in pattern_list:
@@ -321,7 +306,7 @@ def create_bulk_request(
             stats['startday'] = stats['start'].str[0:10]
         except KeyError:
             Logger.error('No data quality metrics available for %s - %s.',
-                        str(starttime)[0:19], str(endtime)[0:19])
+                         str(starttime)[0:19], str(endtime)[0:19])
             return None, None, None
         stats = stats.set_index(['startday'])
     if 'short_target' not in stats.columns:
@@ -330,8 +315,7 @@ def create_bulk_request(
     try:
         day_stats = stats.loc[str(reqtime1)[0:10]]
     except KeyError:
-        Logger.warning('No data quality metrics for %s',
-                        str(reqtime1)[0:10])
+        Logger.warning('No data quality metrics for %s', str(reqtime1)[0:10])
         return None, None, None
     # Now set "short_target" as index-column to speed up the selection in
     # the loop across stations below.
@@ -348,7 +332,7 @@ def create_bulk_request(
             delayed(get_station_bulk_request)(
                 inventory.select(station=station, time=reqtime1),
                 station, location_priority, band_priority, instrument_priority,
-                components, # send only stats relevant to station to worker
+                components,  # send only stats relevant to station to worker
                 day_stats[day_stats.index.str.startswith(station + '.')],
                 minimum_sample_rate, reqtime1, starttime, endtime, **kwargs)
             for station in stations)
@@ -478,9 +462,9 @@ def get_station_bulk_request(
                             continue
                     else:
                         msg = ('Data quality metrics dataframe is missing '
-                            + 'expected column headers short_target or ' +
-                            ' startday')
-                        raise(KeyError, msg)
+                               + 'expected column headers short_target or '
+                               + ' startday')
+                        raise (KeyError, msg)
 
                     try:
                         availability = chn_stats[
@@ -797,7 +781,7 @@ def _sample_rate_ok(inventory, time, minimum_sample_rate, station_code,
         time=time)
     if len(sel_inv.networks) > 0:
         channels = [channel for net in sel_inv.networks
-                     for station in net for channel in station]
+                    for station in net for channel in station]
         if len(channels) > 1:
             Logger.warning(
                 'Found more than one matching response for %s on %s, comparing'
@@ -987,7 +971,7 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
             ispaq.sort_values(by=['target', 'start'])
         except (ValueError, KeyError):
             Logger.error('No data quality metrics available for years %s - %s',
-                        startyear, endyear)
+                         startyear, endyear)
             return ispaq
 
     if starttime is not None and endtime is not None:
@@ -998,8 +982,8 @@ def read_ispaq_stats(folder, networks=['??'], stations=['*'],
         ispaq['starttime'] = pd.to_datetime(ispaq.start)
         ispaq['endtime'] = pd.to_datetime(ispaq.end)
         # Select only relevant years / times
-        ispaq = ispaq[(ispaq.starttime >= starttime) &
-                        (ispaq.starttime <= endtime)]
+        ispaq = ispaq[(ispaq.starttime >= starttime)
+                      & (ispaq.starttime <= endtime)]
         ispaq.drop(columns=['starttime', 'endtime'])
 
     # Set an extra "startday"-column to use as index

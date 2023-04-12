@@ -1,45 +1,42 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Main wrapper for running a picking setup including seismic arrays and
+optimized picking-templates on a day of data.
+
 Created 2021
 
-@author: felix
+@author: felix halpaap
 """
 
 # %%
 import sys
 sys.settrace
-import os, glob, math, calendar, platform
+import os
 import numpy as np
 import pandas as pd
 from importlib import reload
 import statistics as stats
 import difflib
 
-from obspy.core.event import Catalog, Event, Origin
+from obspy.core.event import Catalog
 from obspy.core.utcdatetime import UTCDateTime
-from obspy import read_inventory, Inventory #, Stream
+from obspy import Inventory
 from obspy.geodetics.base import degrees2kilometers, locations2degrees
-# from obspy.clients.filesystem.sds import Client
 from robustraqn.obspy.clients.filesystem.sds import Client
 
 from eqcorrscan.core.match_filter import (Tribe, Party, Template, Family)
 from eqcorrscan.core.lag_calc import LagCalcError
-from eqcorrscan.utils.pre_processing import dayproc, shortproc
-# from eqcorrscan.core.template_gen import _template_gen
+from eqcorrscan.utils.pre_processing import shortproc
 
 from robustraqn.utils.quality_metrics import (
-    create_bulk_request, get_waveforms_bulk, read_ispaq_stats,
-    get_parallel_waveform_client)
+    create_bulk_request)
 from robustraqn.core.load_events import (
-    prepare_detection_stream, init_processing, init_processing_w_rotation,
-    get_all_relevant_stations, normalize_NSLC_codes, reevaluate_detections,
-    try_apply_agc)
+    prepare_detection_stream, get_all_relevant_stations, normalize_NSLC_codes,
+    reevaluate_detections, try_apply_agc)
 from robustraqn.core.templates_creation import (_shorten_tribe_streams)
 from robustraqn.core.event_detection import (
     prepare_day_overlap, get_multi_obj_hash, append_list_completed_days)
-from robustraqn.utils.spectral_tools import (
-    Noise_model, get_updated_inventory_with_noise_models)
 from robustraqn.core.event_postprocessing import (
     check_duplicate_template_channels, postprocess_picked_events,
     add_origins_to_detected_events)
@@ -51,9 +48,6 @@ from robustraqn.utils.obspy import _quick_copy_stream
 
 import logging
 Logger = logging.getLogger(__name__)
-#logging.basicConfig(
-#    level=logging.INFO,
-#    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
 EQCS_logger = logging.getLogger('EQcorrscan')
 EQCS_logger.setLevel(logging.ERROR)
 
@@ -82,7 +76,7 @@ def prepare_and_update_party(
     # trace_offset is not needed for the original tribe
     re_process = False
     if (len(lowcuts) == 1 and len(highcuts) == 1 and
-        len(filt_orders) == 1 and len(samp_rates) == 1):
+            len(filt_orders) == 1 and len(samp_rates) == 1):
         re_process = True
         lowcut = lowcuts[0]
         highcut = highcuts[0]
@@ -90,6 +84,7 @@ def prepare_and_update_party(
         samp_rate = samp_rates[0]
         process_length = process_lengths[0]
         prepick = prepicks[0]
+
     # Loop through party and check if the templates are available for picking!
     for family in dayparty:
         try:
@@ -164,7 +159,7 @@ def prepare_and_update_party(
         detect_chans = set([(tr.stats.station, tr.stats.channel)
                             for tr in family.template.st])
         pick_chans = set([(tr.stats.station, tr.stats.channel)
-                            for tr in pick_template.st])
+                          for tr in pick_template.st])
         for detection in family:
             new_pick_channels = list(pick_chans.difference(detect_chans))
             detection.chans = detection.chans + new_pick_channels
@@ -179,7 +174,7 @@ def prepare_and_update_party(
                     [p.time for p in detection.event.picks
                         if p.waveform_id.id == pick.waveform_id.id])]
             # Picks need to be adjusted when the user changes the templates
-            # between detection and picking (e.g., add new stations or 
+            # between detection and picking (e.g., add new stations or
             # chagne picks). Here we need to find the time difference
             # between the picks of the new template and the picks of the
             # detection so that we can add corrected picks for the
@@ -209,12 +204,9 @@ def prepare_and_update_party(
                                trace=det_pick.waveform_id.id,
                                phase=det_pick.phase_hint))
                     raise LagCalcError(msg)
-            # for det_tr in family.template.st:
-            #     pick_tr = pick_template.st.select(id=det_tr.id)
-            #     if len(pick_tr) == 1:
-            #         time_diffs.append(det_tr.stats.starttime -
-            #                           pick_tr[0].stats.starttime)
-            # Use mean time diff in case any picks were corrected slightly
+
+            # Use mean time diff in case any picks were corrected by a small
+            # time offset
             time_diff = np.nanmean(time_diffs)
             if np.isnan(time_diff):
                 time_diff = 0
@@ -248,47 +240,62 @@ def prepare_and_update_party(
     return dayparty
 
 
-#@fancy_processify
+# @fancy_processify
 def pick_events_for_day(
+        # Required input objects
         date, det_folder, template_path, ispaq, clients, tribe, dayparty=None,
         short_tribe=Tribe(), short_tribe2=Tribe(), det_tribe=Tribe(),
+        # Station setup
+        relevant_stations=[], sta_translation_file='',
         stations_df=None, only_request_detection_stations=True,
-        apply_array_lag_calc=False,
-        relevant_stations=[], sta_translation_file='', let_days_overlap=True,
         all_chans_for_stations=[],
-        noise_balancing=False, balance_power_coefficient=2,
-        remove_response=False, output='DISP', inv=Inventory(),
-        apply_agc=False, agc_window_sec=5, blacklisted_templates=[],
-        parallel=False, cores=None, io_cores=1, plot=False, multiplot=False,
-        check_array_misdetections=False, xcorr_func='fmf', arch='precise',
-        re_eval_thresh_factor=0.6, use_weights=False, min_pick_stations=5,
-        min_picks_on_detection_stations=4, min_n_station_sites=4,
-        concurrency='concurrent', trig_int=12, minimum_sample_rate=20,
-        time_difference_threshold=1, detect_value_allowed_reduction=2.5,
-        threshold_type='MAD', new_threshold=None, n_templates_per_run=1,
-        archives=[], archive_types=[], request_fdsn=False,
-        pick_xcorr_func=None, min_det_chans=1, shift_len=0.8,
-        min_cc=0.4, min_cc_from_mean_cc_factor=None,
-        min_cc_from_median_cc_factor=0.98, extract_len=240,
-        interpolate=True, use_new_resamp_method=True,
-        write_party=False, ignore_cccsum_comparison=True,
+        # Channel setup
         all_vert=True, all_horiz=True, vertical_chans=['Z', 'H'],
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
-        sfile_path='Sfiles', write_to_year_month_folders=False,
-        operator='EQC', day_hash_file=None, copy_data=True,
+        # Initial processing config
+        remove_response=False, output='DISP', inv=Inventory(),
+        noise_balancing=False, balance_power_coefficient=2, copy_data=True,
+        apply_agc=False, agc_window_sec=5, blacklisted_templates=[],
+        # Data quality / skip setup
+        day_hash_file=None, let_days_overlap=True, minimum_sample_rate=20,
+        # Seismic Array check setup
+        check_array_misdetections=False,
+        time_difference_threshold=1, detect_value_allowed_reduction=2.5,
+        re_eval_thresh_factor=0.6, use_weights=False, threshold_type='MAD',
+        new_threshold=None,
+        # Event station / pick thresholds
+        min_pick_stations=5, min_picks_on_detection_stations=4,
+        min_n_station_sites=4, trig_int=12, min_chans=13,
+        # Multi-core / backend setup
+        parallel=False, cores=None, io_cores=1, n_templates_per_run=1,
+        xcorr_func='fmf', arch='precise', concurrency='concurrent',
+        # Archive defintions
+        archives=[], archive_types=[], request_fdsn=False,
+        # Pick definition config
+        pick_xcorr_func=None, min_det_chans=1, shift_len=0.8,
+        min_cc=0.4, ignore_cccsum_comparison=True, extract_len=240,
+        min_cc_from_mean_cc_factor=None,
+        min_cc_from_median_cc_factor=0.98,
+        interpolate=True, use_new_resamp_method=True,
+        apply_array_lag_calc=False,
+        # Decluster config
         redecluster=False, clust_trig_int=30, decluster_metric='thresh_exc',
-        hypocentral_separation=False, min_chans=13, absolute_values=True,
+        hypocentral_separation=False, absolute_values=True,
+        # Magnitude computation config
         compute_relative_magnitudes=False, mag_min_cc_from_mean_cc_factor=None,
-        mag_min_cc_from_median_cc_factor=1.2, **kwargs):
+        mag_min_cc_from_median_cc_factor=1.2,
+        # Output setup
+        write_party=False,  sfile_path='Sfiles',
+        write_to_year_month_folders=False, operator='EQC',
+        # plot setup
+        plot=False, multiplot=False, **kwargs):
     """
     Day-loop for picker
     """
-
     current_day_str = date.strftime('%Y-%m-%d')
-
+    # Check if this date has already been processed with the same settings
+    # i.e., current date and a settings-based hash exist already in file
     if day_hash_file is not None:
-        # Check if this date has already been processed with the same settings
-        # i.e., current date and a settings-based hash exist already in file
         Logger.info('Checking if a run with the same parameters has been '
                     'performed before...')
         settings_hash = get_multi_obj_hash(
@@ -296,7 +303,7 @@ def pick_events_for_day(
              inv, ispaq, noise_balancing, balance_power_coefficient,
              xcorr_func, arch, trig_int, new_threshold, threshold_type,
              min_det_chans, minimum_sample_rate, archives, request_fdsn,
-             shift_len, min_cc, min_cc_from_mean_cc_factor, 
+             shift_len, min_cc, min_cc_from_mean_cc_factor,
              min_cc_from_median_cc_factor, extract_len,
              all_vert, all_horiz, check_array_misdetections,
              short_tribe.templates, short_tribe2.templates,
@@ -344,23 +351,8 @@ def pick_events_for_day(
                 if family.template.name in blacklisted_templates]
             dayparty = Party([family for family in dayparty
                               if family not in remove_family_list])
-        # replace the old templates in the detection-families with those for
-        # dayparty = Party([f for f in dayparty if f.template.name == '2021_10_07t19_59_36_80_templ'])
-        # dayparty = Party([f for f in dayparty if f.template.name == '2018_02_23t21_15_51_38_templ'])
-        # dayparty[0].detections = [dayparty[0].detections[0]]
-        # dayparty = Party([f for f in dayparty if f.template.name == '2015_02_14t07_19_44_39_templ'])
-        
-        # fam = dayparty.select('2022_04_25t09_31_30_18_templ')
-        # dets = [det for det in fam if det.id ==
-        #         '2022_04_25t09_31_30_18_templ_20220425_003728600000']
-        # dayparty = Party(Family(template=fam.template, detections=dets))
 
-        # 2019_10_15t02_43_11_50_templ_20190802_072130169538
-
-        # picking (these contain more channels)
-        # dayparty = replace_templates_for_picking(dayparty, tribe)
-
-    # Rethreshold if required  # 2021_10_07t19_59_36_80_templ
+    # Rethreshold if required
     if new_threshold is not None:
         dayparty = Party(dayparty).rethreshold(
             new_threshold=new_threshold, new_threshold_type='MAD',
@@ -402,7 +394,6 @@ def pick_events_for_day(
                                 for tr in fam.template.st])
         required_stations = list(
             set(relevant_stations).intersection(required_stations))
-        # required_stations =set.intersection(relevant_stations,required_stations)
         required_stations = get_all_relevant_stations(
             required_stations, sta_translation_file=sta_translation_file)
     # Start reading in data for day
@@ -430,9 +421,6 @@ def pick_events_for_day(
     day_st = Stream()
     for client in clients:
         Logger.info('Requesting waveforms from client %s', client)
-        # client = get_parallel_waveform_client(client)
-        # day_st += client.get_waveforms_bulk_parallel(
-        #     bulk_request, parallel=parallel, cores=io_cores)
         day_st += client.get_waveforms_bulk(
             bulk_request, parallel=parallel, cores=io_cores)
     Logger.info(
@@ -442,17 +430,8 @@ def pick_events_for_day(
     day_st = prepare_detection_stream(
         day_st, tribe, parallel=parallel, cores=cores,
         try_despike=False)
-    # original_stats_stream = day_st.copy()
     original_stats_stream = _quick_copy_stream(day_st)
-    # daily_plot(day_st, year, month, day, data_unit="counts",
-    #            suffix='resp_removed')
-    # day_st = init_processing(
-    #     day_st, starttime=starttime_req, endtime=endtime_req,
-    #     remove_response=remove_response, inv=inv,
-    #     noise_balancing=noise_balancing,
-    #     pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],
-    #     parallel=parallel, cores=cores, **kwargs)
-    
+
     nyquist_f = minimum_sample_rate / 2
     day_st = day_st.init_processing_w_rotation(
         starttime=starttime_req, endtime=endtime_req,
@@ -473,15 +452,11 @@ def pick_events_for_day(
         tribes, day_st = prepare_day_overlap(
             tribes, day_st, starttime, endtime, overlap_length=0)
     tribe, short_tribe, short_tribe2 = tribes
-
-    # WHY NEEDED HERE????
-    # day_st.merge(method=0, fill_value=0, interpolation_samples=0)
     # Normalize NSLC codes
     day_st, trace_id_change_dict = normalize_NSLC_codes(
         day_st, inv, sta_translation_file=sta_translation_file,
         std_network_code="NS", std_location_code="00",
         std_channel_prefix="BH")
-
     # If there is no data for the day, then continue on next day.
     if not day_st.traces:
         Logger.warning('No data for detection on %s, continuing'
@@ -491,7 +466,7 @@ def pick_events_for_day(
                 file=day_hash_file, date=current_day_str, hash=settings_hash)
         return
 
-    # Check if I can do pre-processing just once:
+    # Check if I can do pre-processing in just one pass:
     pre_processed = False
     if ((apply_array_lag_calc or apply_agc or check_array_misdetections or
             compute_relative_magnitudes) and not pre_processed):
@@ -512,7 +487,6 @@ def pick_events_for_day(
                 ignore_length=False, seisan_chan_names=False, fill_gaps=True,
                 ignore_bad_data=False, fft_threads=1)
             pre_processed = True
-
     if apply_agc and agc_window_sec:
         day_st, pre_processed = try_apply_agc(
             day_st, tribe, agc_window_sec=agc_window_sec, starttime=None,
@@ -533,7 +507,7 @@ def pick_events_for_day(
     # Check for erroneous detections of real signals (mostly caused by smaller
     # seismic events near one of the arrays). Solution: check whether templates
     # with shorter length increase detection value - if not; it's not a
-    # desriable detection.
+    # desirable detection.
     if check_array_misdetections:
         for shortt in [short_tribe, short_tribe2]:
             if len(shortt) < len(tribe) and len(shortt) > 0:
@@ -561,7 +535,7 @@ def pick_events_for_day(
                     # Find templates that need to be added to picking-tribe
                     extra_tribe = Tribe(
                         [templ for templ in tribe
-                        if templ.name not in existing_templ_names])
+                         if templ.name not in existing_templ_names])
                     # Check that there are no duplicate channels in template
                     extra_tribe = check_duplicate_template_channels(
                         extra_tribe, all_vert=all_vert, all_horiz=all_horiz,
@@ -574,7 +548,7 @@ def pick_events_for_day(
                              '-reevaluation')
             else:
                 Logger.info('Got short tribe with %s templates. ready for '
-                             'reevaluation.', len(shortt))
+                            'reevaluation.', len(shortt))
         if len(short_tribe) > 0:
             dayparty, short_party = reevaluate_detections(
                 dayparty, short_tribe, stream=day_st,
@@ -587,7 +561,6 @@ def pick_events_for_day(
                 min_chans=min_det_chans, pre_processed=pre_processed,
                 parallel_process=parallel, cores=cores,
                 xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
-                # xcorr_func='time_domain', concurrency='multiprocess',
                 group_size=n_templates_per_run, process_cores=cores,
                 time_difference_threshold=time_difference_threshold,
                 detect_value_allowed_reduction=detect_value_allowed_reduction,
@@ -606,7 +579,6 @@ def pick_events_for_day(
                 min_chans=min_det_chans, pre_processed=pre_processed,
                 parallel_process=parallel, cores=cores,
                 xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
-                # xcorr_func='time_domain', concurrency='multiprocess',
                 group_size=n_templates_per_run, process_cores=cores,
                 time_difference_threshold=time_difference_threshold,
                 detect_value_allowed_reduction=(
@@ -631,10 +603,12 @@ def pick_events_for_day(
             dayparty.write(
                 detection_file_name + '.csv', format='csv', overwrite=True)
 
+    # Start the actual event picking!
     picked_catalog = Catalog()
     picked_catalog = dayparty.copy().lag_calc(
         day_st, pre_processed=pre_processed, shift_len=shift_len,
-        min_cc=min_cc, min_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
+        min_cc=min_cc,
+        min_cc_from_mean_cc_factor=min_cc_from_mean_cc_factor,
         min_cc_from_median_cc_factor=min_cc_from_median_cc_factor,
         all_vert=all_vert, all_horiz=all_horiz,
         horizontal_chans=horizontal_chans, vertical_chans=vertical_chans,
@@ -643,17 +617,12 @@ def pick_events_for_day(
         xcorr_func=pick_xcorr_func, concurrency=concurrency,
         parallel=parallel, cores=cores,
         **kwargs)
-    # try:
-    # except LagCalcError:
-    #    pass
-    #    Logger.error("LagCalc Error on " + str(year) +
-    #           str(month).zfill(2) + str(day).zfill(2))
+    # Output some stats on the distribution of picks for picked events
     picks_per_event = [len([pk for pk in ev.picks]) for ev in picked_catalog]
     min_picks_per_event = min(picks_per_event) or 0
     max_picks_per_event = max(picks_per_event) or 0
     Logger.info('Got %s events with at least %s and at most %s picks',
                 len(picked_catalog), min_picks_per_event, max_picks_per_event)
-
     picked_catalog = add_origins_to_detected_events(
         picked_catalog, dayparty, tribe=tribe)
 
@@ -670,131 +639,31 @@ def pick_events_for_day(
             use_new_resamp_method=use_new_resamp_method,
             ignore_cccsum_comparison=ignore_cccsum_comparison, **kwargs)
 
+    # Postprocessing
     export_catalog = postprocess_picked_events(
         picked_catalog, dayparty, tribe, original_stats_stream,
         det_tribe=det_tribe, day_st=day_st, pre_processed=pre_processed,
-        write_sfiles=True, sfile_path=sfile_path,
-        operator=operator, all_chans_for_stations=all_chans_for_stations,
-        extract_len=extract_len, write_waveforms=True, archives=archives,
-        sta_translation_file=sta_translation_file, archive_types=archive_types,
-        request_fdsn=request_fdsn, template_path=template_path,
-        min_n_station_sites=min_n_station_sites,
-        min_pick_stations=min_pick_stations, 
-        min_picks_on_detection_stations=min_picks_on_detection_stations,
+        write_sfiles=True, sfile_path=sfile_path, template_path=template_path,
         write_to_year_month_folders=write_to_year_month_folders,
+        operator=operator, all_chans_for_stations=all_chans_for_stations,
+        extract_len=extract_len, write_waveforms=True,
+        sta_translation_file=sta_translation_file,
+        archives=archives, archive_types=archive_types,
+        request_fdsn=request_fdsn,
+        min_n_station_sites=min_n_station_sites,
+        min_pick_stations=min_pick_stations,
+        min_picks_on_detection_stations=min_picks_on_detection_stations,
         compute_relative_magnitudes=compute_relative_magnitudes,
-        min_mag_cc=min_cc, remove_response=remove_response, output=output,
+        remove_response=remove_response, output=output,
+        min_mag_cc=min_cc,
         mag_min_cc_from_mean_cc_factor=mag_min_cc_from_mean_cc_factor,
         mag_min_cc_from_median_cc_factor=mag_min_cc_from_median_cc_factor,
         absolute_values=absolute_values,
-        parallel=parallel, cores=io_cores, **kwargs)
+        parallel=parallel, cores=io_cores,
+        **kwargs)
 
     if day_hash_file is not None:
         append_list_completed_days(
             file=day_hash_file, date=current_day_str, hash=settings_hash)
 
     return export_catalog
-
-
-# %% Now run the day-loop    ### TEST ###
-if __name__ == "__main__":
-    # Set the path to the folders with continuous data:
-    archive_path = '/data/seismo-wav/SLARCHIVE'
-    # archive_path2 = '/data/seismo-wav/EIDA/archive'
-    client = Client(archive_path)
-    # client2 = Client(archive_path2)
-
-    sta_translation_file = "station_code_translation.txt"
-    selected_stations = ['ASK','BER','BLS5','DOMB','FOO','HOMB','HYA','KMY',
-                        'ODD1','SKAR','SNART','STAV','SUE','KONO','DOMB',
-                        #'NAO01','NB201','NBO00','NC204','NC303','NC602',
-                        'NAO00','NAO01','NAO02','NAO03','NAO04','NAO05',
-                        'NB200','NB201','NB202','NB203','NB204','NB205',
-                        'NBO00','NBO01','NBO02','NBO03','NBO04','NBO05',
-                        'NC200','NC201','NC202','NC203','NC204','NC205',
-                        'NC300','NC301','NC302','NC303','NC304','NC305',
-                        'NC400','NC401','NC402','NC403','NC404','NC405',
-                        'NC600','NC601','NC602','NC603','NC604','NC605',
-                        'STRU']
-    # selected_stations = ['ASK','BER']
-    # Add some extra stations from Denmark / Germany / Netherlands
-    # add_stations =  ['NAO00','NAO02','NAO03','NAO04','NAO05',
-    #                 'NB200','NB202','NB203','NB204','NB205',
-    #                 'NBO00','NBO01','NBO02','NBO03','NBO04','NBO05',
-    #                 'NC200','NC201','NC202','NC203','NC205',
-    #                 'NC300','NC301','NC302','NC304','NC305',
-    #                 'NC400','NC401','NC402','NC403','NC404','NC405',
-    #                 'NC600','NC601','NC603','NC604','NC605']
-
-    relevant_stations = get_all_relevant_stations(
-        selected_stations, sta_translation_file=sta_translation_file)
-    # add_stations = get_all_relevant_stations(
-    #     add_stations, sta_translation_file=sta_translation_file)
-    # all_stations = relevant_stations + add_stations
-
-    startday = UTCDateTime(2021,4,1,0,0,0)
-    endday = UTCDateTime(2021,4,30,0,0,0)
-
-    inv_file = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.xml'
-    inv_file = os.path.expanduser(inv_file)
-    inv = get_updated_inventory_with_noise_models(
-        os.path.expanduser(inv_file),
-        pdf_dir='~/repos/ispaq/WrapperScripts/PDFs/',
-        outfile='inv.pickle', check_existing=True)
-
-    template_path ='Templates'
-    #template_path='LagCalcTemplates'
-    parallel = True
-    cores = 40
-    # det_folder = 'Detections_onDelta'
-    det_folder = 'ReDetections_MAD9'
-
-    remove_response = False
-    noise_balancing = False
-    check_array_misdetections = False
-    write_party = True
-    # threshold = 11
-    new_threshold = 14
-    n_templates_per_run = 30
-    min_det_chans = 15
-    only_request_detection_stations = True
-
-    # Read templates from file
-    Logger.info('Starting template reading')
-    tribe = Tribe().read('TemplateObjects/Templates_min21tr_27.tgz')
-    Logger.info('Tribe archive readily read in')
-    if check_array_misdetections:
-        short_tribe = Tribe().read(
-            'TemplateObjects/short_Templates_min21tr_27.tgz')
-        Logger.info('Short-tribe archive readily read in')
-    n_templates = len(tribe)
-
-    #Check templates for duplicate channels
-    tribe = check_duplicate_template_channels(tribe)
-
-    # Read in and process the daylong data
-    dates = pd.date_range(startday.datetime, endday.datetime, freq='1D')
-    # For each day, read in data and run detection from templates
-    current_year = None
-    for date in dates:
-            # Load in Mustang-like ISPAQ stats for the whole year
-        if not date.year == current_year:
-            current_year = date.year
-            ispaq = read_ispaq_stats(folder=
-                '/home/felix/repos/ispaq/WrapperScripts/Parquet_database/csv_parquet',
-                stations=relevant_stations, startyear=current_year,
-                endyear=current_year, ispaq_prefixes=['all'],
-                ispaq_suffixes=['simpleMetrics','PSDMetrics'],
-                file_type = 'parquet')
-        pick_events_for_day(
-            date=date, det_folder=det_folder, template_path=template_path,
-            ispaq=ispaq, clients=[client], relevant_stations=relevant_stations,
-            only_request_detection_stations=only_request_detection_stations,
-            noise_balancing=noise_balancing, remove_response=remove_response,
-            inv=inv, parallel=parallel, cores=cores,
-            check_array_misdetections=check_array_misdetections,
-            write_party=write_party, new_threshold=new_threshold,
-            n_templates_per_run=n_templates_per_run,
-            min_det_chans=min_det_chans)
-
-

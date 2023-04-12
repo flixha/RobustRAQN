@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Main wrapper to create templates from events according to a range of criteria
+in parallel. Takes into account:
+  - data quality metrics
+  - event observation setup and event location uncertainties
+  - seismic arrays
+
 @author: Felix Halpaap
 """
 
@@ -11,9 +17,8 @@ import glob
 from multiprocessing import Pool, cpu_count, get_context
 from multiprocessing.pool import ThreadPool
 from re import A
-from joblib import Parallel, delayed, parallel_backend
+from joblib import Parallel, delayed
 import pandas as pd
-from itertools import groupby
 from timeit import default_timer
 import numpy as np
 
@@ -21,7 +26,6 @@ from obspy.core.event import Catalog
 from obspy.core.utcdatetime import UTCDateTime
 from obspy.geodetics.base import gps2dist_azimuth
 from obspy.geodetics import kilometers2degrees, degrees2kilometers
-# from obspy.core.stream import Stream
 from obspy.core.event import Event
 from obspy.io.nordic.core import read_nordic
 from obspy.core.inventory.inventory import Inventory
@@ -40,10 +44,9 @@ from eqcorrscan.utils.correlate import pool_boy
 from robustraqn.obspy.core import Trace, Stream
 from robustraqn.core.load_events import (
     normalize_NSLC_codes, get_all_relevant_stations, load_event_stream,
-    try_remove_responses, check_template, prepare_picks,
-    fix_phasehint_capitalization, mask_consecutive_zeros, taper_trace_segments)
-from robustraqn.utils.spectral_tools import (
-    st_balance_noise, Noise_model, get_updated_inventory_with_noise_models)
+    check_template, prepare_picks, fix_phasehint_capitalization,
+    mask_consecutive_zeros, taper_trace_segments)
+from robustraqn.utils.spectral_tools import st_balance_noise
 from robustraqn.utils.quality_metrics import (
     create_bulk_request, get_parallel_waveform_client)
 from robustraqn.core.seismic_array import (
@@ -56,10 +59,6 @@ from robustraqn.utils.obspy import _quick_copy_stream
 
 import logging
 Logger = logging.getLogger(__name__)
-#logging.basicConfig(
-#    format='%(asctime)s %(levelname)-8s %(message)s',
-#    level=logging.INFO,
-#    datefmt='%Y-%m-%d %H:%M:%S')
 
 
 def listdir_fullpath(d):
@@ -145,9 +144,7 @@ def _shorten_tribe_streams(
     else:
         new_templ_len = max_tribe_len
 
-    # short_tribe = tribe.copy()
     short_tribe = _quick_tribe_copy(tribe)
-
     for templ in short_tribe:
         templ.trace_offset = trace_offset
         for tr in templ.st:
@@ -177,15 +174,17 @@ def _shorten_tribe_streams(
         if not len(stempl_lengths) == 1:
             raise AssertionError("short tribe has traces of unequal length " +
                                  str(stempl_lengths))
+    # Set up the file labeling depending on processing parameters
     label = ''
     if noise_balancing:
         label = label + 'balNoise_'
     if apply_agc:
         label = label + 'agc_'
     if write_out:
-        short_tribe.write('TemplateObjects/' + prefix + 'Templates_min'
-                    + str(min_n_traces) + 'tr_' + label + str(len(short_tribe)))
-                    #max_events_per_file=10)
+        short_tribe.write(
+            'TemplateObjects/' + prefix + 'Templates_min'
+            + str(min_n_traces) + 'tr_' + label + str(len(short_tribe)))
+        # max_events_per_file=10)
     if write_individual_templates:
         for templ in short_tribe:
             templ.write('Templates/' + prefix + templ.name + '.mseed',
@@ -244,7 +243,7 @@ def check_template_event_errors_ok(
     if max_longitude and origin.longitude:
         if origin.longitude > max_longitude:
             return False
-    
+
     # # Check horizontal error
     if max_horizontal_error_km:
         max_hor_error = list()
@@ -252,7 +251,7 @@ def check_template_event_errors_ok(
             max_hor_error.append(
                 origin.origin_uncertainty.max_horizontal_uncertainty / 1000)
         else:
-            if (origin.longitude_errors 
+            if (origin.longitude_errors
                     and origin.longitude_errors.uncertainty):
                 max_hor_error.append(degrees2kilometers(
                     origin.longitude_errors.uncertainty))
@@ -268,7 +267,6 @@ def check_template_event_errors_ok(
                     'too large (%s).', str(origin.time)[0:19], file,
                     str(max_hor_error))
                 return False
-
     # Check depth error
     if max_depth_error_km:
         if (origin.depth_errors and origin.depth_errors.uncertainty):
@@ -279,7 +277,6 @@ def check_template_event_errors_ok(
                     'large (%s).', str(origin.time)[0:19], file,
                     str(max_depth_error))
                 return False
-
     # Check time error
     if max_time_error_s:
         if (origin.time_errors and origin.time_errors.uncertainty):
@@ -290,7 +287,6 @@ def check_template_event_errors_ok(
                     'large (%s).', str(origin.time)[0:19], file,
                     str(max_time_error))
                 return False
-
     return True
 
 
@@ -302,7 +298,7 @@ def _create_template_objects(
         balance_power_coefficient=2, ground_motion_input=[],
         apply_agc=False, agc_window_sec=5,
         min_n_traces=8, min_n_station_sites=4,
-        write_individual_templates=False, templ_path='Templates/' ,
+        write_individual_templates=False, templ_path='Templates/',
         make_pretty_plot=False, prefix='',
         check_template_strict=True, allow_channel_duplication=True,
         normalize_NSLC=True, add_array_picks=False, stations_df=pd.DataFrame(),
@@ -402,12 +398,15 @@ def _create_template_objects(
     :type add_large_aperture_array_picks: bool, optional
     :param large_aperture_array_df: Large aperture array dataframe
     :type large_aperture_array_df: :class:`pandas.DataFrame`, optional
-
     :type kwargs: dict, optional
     :param kwargs:
         Additional keyword arguments to be passed to
         eqcorrscan.utils.preprocessing.shortproc.
-    
+
+    :rtype: tuple
+    :return:
+        Tuple of template names and picks that were rejected due to data
+        quality metrics indicating poor data quality.
     """
     if isinstance(events_files[0], str):
         input_type = 'sfiles'
@@ -424,7 +423,7 @@ def _create_template_objects(
                 len(events_files))
     tribe = Tribe()
     template_names = []
-    catalogForTemplates = Catalog()
+    catalog_for_templates = Catalog()
     catalog = Catalog()
     bulk_rejected = []
 
@@ -440,7 +439,6 @@ def _create_template_objects(
             checktime = UTCDateTime(events_files[-1][-6:] +
                                     os.path.split(events_files[-1])[-1][0:2])
         else:
-            # orig_t = events_files[0].preferred_origin().time
             orig_t = (events_files[0].preferred_origin() or
                       events_files[0].origins[0]).time
             day_starttime = UTCDateTime(orig_t.year, orig_t.month, orig_t.day)
@@ -468,8 +466,6 @@ def _create_template_objects(
                 Logger.info('Requesting waveforms from client %s', client)
                 outtic = default_timer()
                 client = get_parallel_waveform_client(client)
-                # add_st = client.get_waveforms_bulk_parallel(
-                #     bulk_request, parallel=parallel, cores=cores)
                 add_st = client.get_waveforms_bulk(
                     bulk_request, parallel=parallel, cores=cores)
                 outtoc = default_timer()
@@ -480,7 +476,7 @@ def _create_template_objects(
             clients = []  # Set empty so not to request archive data again
             if len(day_st) == 0:
                 Logger.warning('Did not find any waveforms for date %s.',
-                                str(day_starttime))
+                               str(day_starttime))
 
     wavnames = []
     # Loop over all S-files that each contain one event
@@ -505,7 +501,6 @@ def _create_template_objects(
             event.extra.update({'sfile': {
                 'value': os.path.basename(event_file), 'namespace':
                     'https://seis.geus.net/software/seisan/node239.html'}})
-            
         else:
             event_str = event_file.short_str()
             Logger.info('Working on event: ' + event_str)
@@ -525,7 +520,7 @@ def _create_template_objects(
         origin = event.preferred_origin() or event.origins[0]
 
         if not check_template_event_errors_ok(
-            origin, file=event_str, **kwargs):
+                origin, file=event_str, **kwargs):
             continue
 
         # TODO: if there are a lot of different picks at one station, e.g.:
@@ -635,8 +630,8 @@ def _create_template_objects(
             # if not hasattr(wavef, "balance_noise"):
             #     bound_method = st_balance_noise.__get__(wavef)
             #     wavef.balance_noise = bound_method
-            wavef = wavef.filter('highpass', freq=0.1, zerophase=True
-                                 ).detrend()
+            wavef = wavef.filter(
+                'highpass', freq=0.1, zerophase=True).detrend()
             wavef = st_balance_noise(
                 wavef, inv,
                 balance_power_coefficient=balance_power_coefficient,
@@ -659,7 +654,6 @@ def _create_template_objects(
             event=event, stream=wavef, normalize_NSLC=normalize_NSLC, inv=inv,
             sta_translation_file=sta_translation_file,
             vertical_chans=vertical_chans, horizontal_chans=horizontal_chans)
-        
         # Extra checks for sampling rate and length of trace - if a trace is
         # very short, resample will fail.
         st = Stream()
@@ -688,18 +682,18 @@ def _create_template_objects(
         # data_envelope = obspy.signal.filter.envelope(st_filt[0].data)
 
         # Make the templates from picks and waveforms
-        catalogForTemplates += event
-        ### TODO : this is where a lot of calculated picks are thrown out
+        catalog_for_templates += event
+        # TODO : this is where a lot of calculated picks are thrown out
         template_st = template_gen._template_gen(
             picks=event.picks, st=wavef, length=template_length, swin='all',
             prepick=prepick, all_vert=True, all_horiz=True,
             delayed=True, min_snr=min_snr, horizontal_chans=horizontal_chans,
-            vertical_chans=vertical_chans) #, **kwargs)
+            vertical_chans=vertical_chans)  # , **kwargs)
         # quality-control template
         if len(template_st) == 0:
             Logger.info('Rejected template: event %s (sfile %s): no traces '
-                         'with matching picks that fulfill quality criteria.',
-                         event.short_str(), sfile)
+                        'with matching picks that fulfill quality criteria.',
+                        event.short_str(), sfile)
             continue
         # Apply AGC if required
         if apply_agc:
@@ -747,27 +741,12 @@ def _create_template_objects(
             templ_name = (templ_name.lower().replace('-', '_').replace(
                 ':', '_').replace('.', '_').replace('/', ''))
             nt += 1
-            # templ_name = templ_name.lower().replace(':','_')
-            # templ_name = templ_name.lower().replace('.','_')
-            # template.write('TemplateObjects/' + templ_name + '.mseed',
-            # format="MSEED")
         template_names.append(templ_name)
-        # except:
-        #    print("WARNING: There was an issue creating a template for " +
-        # sfile)
-        # t = Template().construct(
-        #     method=None,picks=event.picks, st=template_st,length=7.0,
-        #     swin='all', prepick=0.2, all_horiz=True, plot=False,
-        #     delayed=True, min_snr=1.2, name=templ_name, lowcut=2.5,
-        #     highcut=8.0,samp_rate=20, filt_order=4,event=event,
-        #     process_length=300.0)
         t = Template(name=templ_name, event=event, st=template_st,
                      lowcut=lowcut, highcut=highcut, samp_rate=samp_rate,
                      filt_order=4, process_length=86400.0, prepick=prepick)
-        # highcut=8.0, samp_rate=20, filt_order=4, process_length=86400.0,
-
-        # minimum number of different stations, considering that one array
-        # counts only as one station
+        # Check that minimum number of station sites is fulfilled, considering
+        # that one array counts only as one station site:
         unique_stations = list(set([
             p.waveform_id.station_code for p in t.event.picks]))
         n_station_sites = len(list(set(get_station_sites(unique_stations))))
@@ -775,10 +754,10 @@ def _create_template_objects(
         if (len(t.st) >= min_n_traces and
                 n_station_sites >= min_n_station_sites):
             if write_individual_templates:
-                templ_filename = os.path.join(templ_path, templ_name + '.mseed')
+                templ_filename = os.path.join(templ_path,
+                                              templ_name + '.mseed')
                 t.write(templ_filename, format="MSEED")
             tribe += t
-
             # make a nice plot
             sfile_path, sfile_name = os.path.split(sfile)
             if make_pretty_plot:
@@ -807,6 +786,7 @@ def _create_template_objects(
 
     return (tribe, wavnames)
 
+    # TODO: include clustering of templates here to reduce size of tribe?
     # clusters = cluster(template_list=template_list, show=True,
     #       corr_thresh=0.3, allow_shift=True, shift_len=2, save_corrmat=False,
     #       cores=16)
@@ -830,7 +810,6 @@ def reset_preferred_magnitude(tribe, mag_preference_priority=[('ML', 'BER')]):
         also be None.
     """
     for templ in tribe:
-        #templ.event.preferred_magnitude
         for mag_pref in reversed(mag_preference_priority):
             for mag in templ.event.magnitudes:
                 if ((mag_pref[0] == mag.magnitude_type or None) and
@@ -886,100 +865,118 @@ def create_template_objects(
         *args, **kwargs):
     """Wrapper for create-template-function
 
-    :param sfiles: _description_, defaults to []
-    :type sfiles: list, optional
-    :param catalog: _description_, defaults to None
-    :type catalog: _type_, optional
-    :param selected_stations: _description_, defaults to []
-    :type selected_stations: list, optional
-    :param template_length: _description_, defaults to 60
-    :type template_length: int, optional
-    :param lowcut: _description_, defaults to 2.5
-    :type lowcut: float, optional
-    :param highcut: _description_, defaults to 9.9
-    :type highcut: float, optional
-    :param min_snr: _description_, defaults to 5.0
-    :type min_snr: float, optional
-    :param prepick: _description_, defaults to 0.5
-    :type prepick: float, optional
-    :param samp_rate: _description_, defaults to 20
-    :type samp_rate: int, optional
-    :param seisan_wav_path: _description_, defaults to None
-    :type seisan_wav_path: _type_, optional
-    :param clients: _description_, defaults to []
-    :type clients: list, optional
-    :param inv: _description_, defaults to Inventory()
-    :type inv: _type_, optional
-    :param remove_response: _description_, defaults to False
-    :type remove_response: bool, optional
-    :param output: _description_, defaults to 'DISP'
-    :type output: str, optional
-    :param noise_balancing: _description_, defaults to False
-    :type noise_balancing: bool, optional
-    :param balance_power_coefficient: _description_, defaults to 2
-    :type balance_power_coefficient: int, optional
-    :param ground_motion_input: _description_, defaults to []
-    :type ground_motion_input: list, optional
-    :param apply_agc: _description_, defaults to False
-    :type apply_agc: bool, optional
-    :param agc_window_sec: _description_, defaults to 5
-    :type agc_window_sec: int, optional
-    :param min_n_traces: _description_, defaults to 8
-    :type min_n_traces: int, optional
-    :param write_out: _description_, defaults to False
-    :type write_out: bool, optional
-    :param write_individual_templates: _description_, defaults to False
-    :type write_individual_templates: bool, optional
-    :param check_template_strict: _description_, defaults to True
-    :type check_template_strict: bool, optional
-    :param templ_path: _description_, defaults to 'Templates'
-    :type templ_path: str, optional
-    :param prefix: _description_, defaults to ''
-    :type prefix: str, optional
-    :param make_pretty_plot: _description_, defaults to False
-    :type make_pretty_plot: bool, optional
-    :param allow_channel_duplication: _description_, defaults to True
-    :type allow_channel_duplication: bool, optional
-    :param normalize_NSLC: _description_, defaults to True
-    :type normalize_NSLC: bool, optional
-    :param ispaq: _description_, defaults to None
-    :type ispaq: _type_, optional
-    :param add_array_picks: _description_, defaults to False
-    :type add_array_picks: bool, optional
-    :param add_large_aperture_array_picks: _description_, defaults to False
-    :type add_large_aperture_array_picks: bool, optional
-    :param sta_translation_file: _description_, defaults to "station_code_translation.txt"
-    :type sta_translation_file: str, optional
-    :param std_network_code: _description_, defaults to 'NS'
-    :type std_network_code: str, optional
-    :param std_location_code: _description_, defaults to '00'
-    :type std_location_code: str, optional
-    :param std_channel_prefix: _description_, defaults to 'BH'
-    :type std_channel_prefix: str, optional
-    :param vertical_chans: _description_, defaults to ['Z', 'H']
-    :type vertical_chans: list, optional
-    :param wavetool_path: _description_, defaults to '$SEISAN_TOP/PRO/wavetool'
-    :type wavetool_path: str, optional
-    :param horizontal_chans: _description_, defaults to ['E', 'N', '1', '2', 'X', 'Y']
-    :type horizontal_chans: list, optional
-    :param erase_mags: _description_, defaults to False
-    :type erase_mags: bool, optional
-    :param parallel: _description_, defaults to False
-    :type parallel: bool, optional
-    :param cores: _description_, defaults to 1
-    :type cores: int, optional
-    :param thread_parallel: _description_, defaults to False
-    :type thread_parallel: bool, optional
-    :param n_threads: _description_, defaults to 1
-    :type n_threads: int, optional
-    :param max_events_per_file: _description_, defaults to 200
-    :type max_events_per_file: int, optional
-    :param task_id: _description_, defaults to None
-    :type task_id: _type_, optional
-    :raises NotImplementedError: _description_
-    :raises NotImplementedError: _description_
-    :return: _description_
-    :rtype: _type_
+    :type sfiles: list of str
+    :param sfiles: list of sfiles to use for template creation
+    :type catalog: obspy.core.event.Catalog
+    :param catalog:
+        catalog of events to use for template creation, required if sfiles are
+        not provided
+    :type selected_stations: list of str
+    :param selected_stations: list of stations to use for template creation
+    :type template_length: float
+    :param template_length: length of templates in seconds
+    :type lowcut: float
+    :param lowcut: lowcut for bandpass filter
+    :type highcut: float
+    :param highcut: highcut for bandpass filter
+    :type min_snr: float
+    :param min_snr: minimum signal-to-noise ratio for template creation
+    :type prepick: float
+    :param prepick: time before pick to start template
+    :type samp_rate: float
+    :param samp_rate:
+        target sampling rate for templates (lower sampling rate traces will be
+        excluded)
+    :type seisan_wav_path: str
+    :param seisan_wav_path: path to event-based wav files (e.g., in seisan REA)
+    :type clients: list of obspy.fdsn.client.Client
+    :param clients: list of clients for data retrieval
+    :type inv: obspy.core.inventory.inventory.Inventory
+    :param inv: inventory to use for response removal
+    :type remove_response: bool
+    :param remove_response: whether to remove responses from traces
+    :type output: str
+    :param output: output units for response-corrected traces (VEL, ACC, DISP)
+    :type noise_balancing: bool
+    :param noise_balancing:
+        whether to balance noise levels in templates according to the station
+        noise level.
+    :type balance_power_coefficient: float
+    :param balance_power_coefficient:
+        to-the-power coefficient for noise balancing, defaults to 2
+    :type ground_motion_input: list of str
+    :param ground_motion_input:
+        list of ground motion input types (VEL, ACC, DISP), only needed in case
+        the trace's stats do not contain the information
+    :type apply_agc: bool
+    :param apply_agc: whether to apply automatic gain control to traces
+    :type agc_window_sec: float
+    :param agc_window_sec: length of AGC window in seconds
+    :type min_n_traces: int
+    :param min_n_traces:
+        minimum number of traces required for defining a valid template
+    :type write_out: bool
+    :param write_out: whether to write templates to disk
+    :type write_individual_templates: bool
+    :param write_individual_templates:
+    :type check_template_strict: bool
+    :param check_template_strict:
+    :type templ_path: str
+    :param templ_path: path to write templates to
+    :type prefix: str
+    :param prefix: prefix for template files
+    :type make_pretty_plot: bool
+    :param make_pretty_plot: whether to make a pretty plot of the template
+    :type allow_channel_duplication: bool
+    :param allow_channel_duplication:
+        whether to allow channel duplication in templates (e.g., 2 traces for
+        Z channel at same station, one for Pn and one for Pg phase)
+    :type normalize_NSLC: bool
+    :param normalize_NSLC:
+        whether to normalize NSLC codes to standard codes (this is useful
+        when network, station, or channel names have changed through station
+        life cycle)
+    :type ispaq: pd.DataFrame
+    :param ispaq: dataframe containing ispaq data quality metrics
+    :type add_array_picks: bool
+    :param add_array_picks:
+        whether to try to add picks and waveforms for each station within a
+        seismic array to a template
+    :type add_large_aperture_array_picks: bool
+    :param add_large_aperture_array_picks:
+        whether to handle parts of the network as large aperture arrays,
+        e.g., a combination of subarrays (e.g., NOA array), or any geometry
+        of closely spaced stations
+    :type sta_translation_file: str
+    :param sta_translation_file:
+        path to station translation file that lists equivalent station codes
+    :type std_network_code: str
+    :param std_network_code: standard network code
+    :type std_location_code: str
+    :param std_location_code: standard location code
+    :type std_channel_prefix: str
+    :param std_channel_prefix: standard channel prefix
+    :type vertical_chans: list of str
+    :param vertical_chans: list of vertical channel names
+    :type wavetool_path: str
+    :param wavetool_path: path to wavetool binary
+    :type horizontal_chans: list of str
+    :param horizontal_chans: list of horizontal channel names
+    :type erase_mags: bool
+    :param erase_mags:
+        whether to erase magnitudes from events prior to template creation
+    :type parallel: bool
+    :param parallel: whether to parallelize template creation
+    :type cores: int
+    :param cores: number of cores to use for parallelization
+    :type max_events_per_file: int
+    :param max_events_per_file:
+        maximum number of events per tribe file, can be set to read tribe in
+        parallel later
+
+    :rtype: tuple of `EQcorrscan.core.match_filter.tribe.Tribe` and list of str
+    :return:
+        Tribe of templates and list of waveform paths read in for each template
     """
     # Get only relevant inventory information to make Pool-startup quicker
     new_inv = Inventory()
@@ -991,52 +988,12 @@ def create_template_objects(
         'Provide either sfiles with file paths to events, or provide catalog '
         ' with events.')
 
+    # Split the task into batches to save time on reading from archive just
+    # once for each day.
     if parallel and ((sfiles and len(sfiles) > 1) or
                      (catalog and len(catalog) > 1)):
         if cores is None:
             cores = min(len(sfiles), cpu_count())
-        # Check if I can allow multithreading in each of the parallelized
-        # subprocesses:
-        # thread_parallel = False
-        # n_threads = 1
-        # if cores > 2 * len(sfiles):
-        #     thread_parallel = True
-        #     n_threads = int(cores / len(sfiles))
-
-        # Is this I/O or CPU limited task?
-        # Test on bigger problem (350 templates):
-        # Threadpool: 10 minutes vs Pool: 7 minutes
-
-        # with pool_boy(Pool=get_context("spawn").Pool, traces=len(sfiles),
-        #               n_cores=cores) as pool:
-        #     results = (
-        #         [pool.apply_async(
-        #             _create_template_objects,
-        #             ([sfile], selected_stations, template_length,
-        #                 lowcut, highcut, min_snr, prepick, samp_rate,
-        #                 seisan_wav_path),
-        #             dict(
-        #                 inv=new_inv.select(
-        #                     time=UTCDateTime(sfile[-6:] + sfile[-19:-9])),
-        #                 clients=clients,
-        #                 remove_response=remove_response,
-        #                 noise_balancing=noise_balancing,
-        #                 balance_power_coefficient=balance_power_coefficient,
-        #                 ground_motion_input=ground_motion_input,
-        #                 write_out=False, min_n_traces=min_n_traces,
-        #                 make_pretty_plot=make_pretty_plot, prefix=prefix,
-        #                 check_template_strict=check_template_strict,
-        #                 allow_channel_duplication=allow_channel_duplication,
-        #                 normalize_NSLC=normalize_NSLC,
-        #                 sta_translation_file=sta_translation_file,
-        #                 std_network_code=std_network_code,
-        #                 std_location_code=std_location_code,
-        #                 std_channel_prefix=std_channel_prefix,
-        #                 parallel=thread_parallel, cores=n_threads)
-        #             ) for sfile in sfiles])
-        # # try:
-        # res_out = [res.get() for res in results]
-
         # Run in batches to save time on reading from archive only once per day
         day_stats_list = []
         unique_date_list = []
@@ -1044,7 +1001,7 @@ def create_template_objects(
         if sfiles:
             Logger.info('Preparing file batches from provided filenames')
             if len(sfiles) > cores and clients:
-                sfiles_df = pd.DataFrame(sfiles, columns =['sfiles'])
+                sfiles_df = pd.DataFrame(sfiles, columns=['sfiles'])
                 # Create day-column with efficient pandas functinos
                 sfiles_df['day'] = (
                     sfiles_df.sfiles.str[-6:-2] + '-' +
@@ -1057,19 +1014,6 @@ def create_template_objects(
                 event_file_batches = [
                     list(sfile_groups.get_group(unique_date_utc)['sfiles'])
                     for unique_date_utc in unique_date_list]
-                # unique_dates = sorted(
-                #     set([sfile[-6:] + os.path.split(sfile)[-1][0:2]
-                #         for sfile in sfiles]))
-                # for unique_date in unique_dates:
-                #     sfile_batch = []
-                #     for sfile in sfiles:
-                #         check_date = sfile[-6:] + os.path.split(sfile)[-1][0:2]
-                #         if (check_date == unique_date):
-                #             sfile_batch.append(sfile)
-                #     unique_date_utc = str(UTCDateTime(unique_date))[0:10]
-                #     unique_date_list.append(unique_date_utc)
-                #     if sfile_batch:
-                #         event_file_batches.append(sfile_batch)
             else:
                 event_file_batches = [[sfile] for sfile in sfiles]
                 unique_date_list = [str(UTCDateTime(
@@ -1078,11 +1022,6 @@ def create_template_objects(
         elif catalog:
             Logger.info('Preparing event batches from provided catalog')
             if len(catalog) > cores and clients:
-                # unique_date_list = sorted(list(set([ 
-                #     str(UTCDateTime(event.preferred_origin().time.year,
-                #                     event.preferred_origin().time.month,
-                #                     event.preferred_origin().time.day))[0:10]
-                #     for event in catalog])))
                 unique_date_list = _make_date_list(catalog, unique=True,
                                                    sorted=True)
                 # TODO: speed up event batch creation
@@ -1093,23 +1032,10 @@ def create_template_objects(
                 event_file_batches = [
                     event_groups.get_group(unique_date_utc).events
                     for unique_date_utc in unique_date_list]
-                
-                # event_batches = [[
-                #     event for event in catalog
-                #     if uniq_date == str(UTCDateTime(
-                #         event.preferred_origin().time.year,
-                #         event.preferred_origin().time.month,
-                #         event.preferred_origin().time.day))[0:10]]
-                #                  for uniq_date in unique_date_list]
             else:
                 event_file_batches = [[event] for event in catalog]
                 unique_date_list = _make_date_list(catalog, unique=False,
                                                    sorted=False)
-                # unique_date_list = list([
-                #     str(UTCDateTime(event.preferred_origin().time.year,
-                #                     event.preferred_origin().time.month,
-                #                     event.preferred_origin().time.day))[0:10]
-                #     for event in catalog])
         else:
             raise NotImplementedError(not_cat_or_sfiles_msg)
 
@@ -1217,6 +1143,7 @@ def create_template_objects(
             thread_parallel=thread_parallel, n_threads=n_threads,
             *args, **kwargs)
 
+    # Add labels to the output files to indicate changes in processing
     label = ''
     if noise_balancing:
         label = label + 'balNoise_'
@@ -1231,69 +1158,12 @@ def create_template_objects(
         Logger.info('Created %s templates, writing to tribe %s...',
                     len(tribe), tribe_file_name)
         tribe.write(tribe_file_name, max_events_per_file=max_events_per_file,
-                    cores=cores)
-                    #max_events_per_file=10)
+                    cores=cores)  # max_events_per_file=10)
         if write_individual_templates:
             for templ in tribe:
                 templ.write(os.path.join(templ_path, prefix + templ.name +
                                          '.mseed'), format="MSEED")
-
     return tribe, wavnames
 
 
-# %% ############## MAIN ###################
-
-if __name__ == "__main__":
-    seisan_rea_path = '../SeisanEvents/'
-    seisan_wav_path = '../SeisanEvents/'
-    selected_stations = ['ASK','BER','BLS5','DOMB','EKO1','FOO','HOMB','HYA',
-                        'KMY','MOL','ODD1','SKAR','SNART','STAV','SUE','KONO',
-                        'BIGH','DRUM','EDI','EDMD','ESK','GAL1','GDLE','HPK',
-                        'INVG','KESW','KPL','LMK','LRW','PGB1','MUD',
-                        'EKB','EKB1','EKB2','EKB3','EKB4','EKB5','EKB6','EKB7',
-                        'EKB8','EKB9','EKB10','EKR1','EKR2','EKR3','EKR4',
-                        'EKR5','EKR6','EKR7','EKR8','EKR9','EKR10',
-                        'NAO00','NAO01','NAO02','NAO03','NAO04','NAO05',
-                        'NB200','NB201','NB202','NB203','NB204','NB205',
-                        'NBO00','NBO01','NBO02','NBO03','NBO04','NBO05',
-                        'NC200','NC201','NC202','NC203','NC204','NC205',
-                        'NC300','NC301','NC302','NC303','NC304','NC305',
-                        'NC400','NC401','NC402','NC403','NC404','NC405',
-                        'NC600','NC601','NC602','NC603','NC604','NC605'] 
-    # selected_stations = ['NAO01', 'NAO03', 'NB200']
-    # selected_stations = ['ASK', 'BER', 'NC602']
-    # 'SOFL','OSL',
-    inv_file = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.xml'
-    inv = get_updated_inventory_with_noise_models(
-        os.path.expanduser(inv_file),
-        pdf_dir='~/repos/ispaq/WrapperScripts/PDFs/', check_existing=True,
-        outfile=os.path.expanduser('~/Documents2/ArrayWork/Inventory/inv.pickle'))
-
-    template_length = 40.0
-    parallel = True
-    noise_balancing = False
-    cores = 20
-
-    sfiles = glob.glob(os.path.join(seisan_rea_path, '*L.S??????'))
-    sfiles = glob.glob(os.path.join(seisan_rea_path, '24-1338-14L.S201909'))
-    # sfiles = glob.glob(os.path.join(seisan_rea_path, '04-1734-46L.S200706'))
-    # sfiles = glob.glob(os.path.join(seisan_rea_path, '24-0101-20L.S200707'))
-    # sfiles = glob.glob(os.path.join(seisan_rea_path, '20-1814-05L.S201804'))
-    # sfiles = glob.glob(os.path.join(seisan_rea_path, '01-0545-55L.S201009'))
-    # sfiles = glob.glob(os.path.join(seisan_rea_path, '30-0033-00L.S200806'))
-    sfiles = glob.glob(os.path.join(seisan_rea_path, '05-1741-44L.S202101'))
-    sfiles.sort(key=lambda x: x[-6:])
-
-    highcut = 9.9
-    if noise_balancing:
-        lowcut = 0.5
-    else:
-        lowcut = 2.5
-
-    # create_template_objects(sfiles, selected_stations, inv,
-    tribe, wavenames = create_template_objects(
-        sfiles, selected_stations, template_length, lowcut, highcut,
-        min_snr=4.0, prepick=0.2, samp_rate=20.0, inv=inv,
-        remove_response=True, seisan_wav_path=seisan_wav_path,
-        noise_balancing=noise_balancing, min_n_traces=3,
-        parallel=parallel, cores=cores, write_out=False, make_pretty_plot=True)
+# %%

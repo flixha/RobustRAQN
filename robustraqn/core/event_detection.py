@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Main wrapper to run event detection on one given day of data.
+Integrates - data quality metrics
+           - seismic array processing
+           - first round of detection QC
+
 Created on Sun Jul 16 17:23:45 2017
 
 @author: felix
@@ -8,80 +13,45 @@ Created on Sun Jul 16 17:23:45 2017
 
 # %%
 
-
-def run_from_ipython():
-    try:
-        __IPYTHON__
-        return True
-    except NameError:
-        return False
-
-
-import os, glob, gc, math, calendar, matplotlib, platform, sys
+import os, gc, math, matplotlib
 import warnings
 
-from xml.dom.minidom import Attr
-from numpy.core.numeric import True_
-# sys.path.insert(1, os.path.expanduser(
-#   "~/Documents2/NorthSea/Elgin/Detection"))
-from os import times
 import pandas as pd
-if not run_from_ipython:
-    matplotlib.use('Agg')  # to plot figures directly for print to file
 from importlib import reload
 import numpy as np
 import pickle
 import hashlib
 from collections import Counter
-from joblib import Parallel, delayed, parallel_backend
-
-from timeit import default_timer
+from joblib import Parallel, delayed
 import logging
 
-
-from obspy import read_inventory
-#from obspy.core.event import Event, Origin, Catalog
-# from obspy.core.stream import Stream
 from obspy.core.inventory.inventory import Inventory
 from obspy import UTCDateTime
 from obspy.core.util.attribdict import AttribDict
 from obspy.core.util.deprecation_helpers import ObsPyDeprecationWarning
-from robustraqn.obspy.clients.filesystem.sds import Client
 
-from robustraqn.utils.processify import processify
-from robustraqn.utils.fancy_processify import fancy_processify
-
-from eqcorrscan.utils import pre_processing
-from eqcorrscan.core.match_filter import Template, Tribe, MatchFilterError
+from eqcorrscan.core.match_filter import Template, Tribe
 from eqcorrscan.core.match_filter.party import Party, Family
-# from eqcorrscan.utils.clustering import extract_detections
-from eqcorrscan.utils.plotting import detection_multiplot
-from eqcorrscan.utils.pre_processing import dayproc, shortproc
-from eqcorrscan.core.template_gen import _rms
 
-# import quality_metrics, spectral_tools, load_events
-# reload(quality_metrics)
-# reload(load_events)
 from robustraqn.obspy.core import Stream, Trace
 from robustraqn.utils.quality_metrics import (
     create_bulk_request, get_waveforms_bulk, read_ispaq_stats)
-    #get_parallel_waveform_client)
 from robustraqn.core.load_events import (
-    prepare_detection_stream, init_processing, init_processing_w_rotation,
-    print_error_plots, get_all_relevant_stations, reevaluate_detections,
+    prepare_detection_stream, print_error_plots, reevaluate_detections,
     multiplot_detection, try_apply_agc)
-from robustraqn.utils.spectral_tools import (
-    Noise_model, get_updated_inventory_with_noise_models)
-from robustraqn.core.templates_creation import create_template_objects
 from robustraqn.utils.obspy import _quick_copy_stream
+from robustraqn.utils.processify import processify
+from robustraqn.utils.fancy_processify import fancy_processify
+from robustraqn.obspy.clients.filesystem.sds import Client
 
 Logger = logging.getLogger(__name__)
-# logging.basicConfig(level=logging.INFO)
-# logging.basicConfig(
-#     level=logging.INFO,
-#     format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
-# Set up some warnings-filtering
-warnings.filterwarnings("ignore", category=ObsPyDeprecationWarning)
+
+
+# TODO: option to use C|C| instead of C for correlation stats
+# - in line 476 multi_corr.c         # fftw
+# - in line 51, 85 in time_corr.c    # time domain
+# - in line 134 in matched_filter.cu # fmf-gpu
+# - in line 109 in matched_filter.c  # fmf-cpu
 
 
 def read_bulk_test(client, bulk, parallel=False, cores=None):
@@ -92,6 +62,14 @@ def read_bulk_test(client, bulk, parallel=False, cores=None):
 
 def append_list_completed_days(file, date, hash):
     """
+    Append the date string and a configuration hash to the hash list file.
+
+    :type file: str
+    :param file: Path to the file to append to.
+    :type date: str
+    :param date: Date string to append.
+    :type hash: str
+    :param hash: Hash string to append.
     """
     # setting_hash = hashlib.md5()
     # setting_hash.update(kwargs)
@@ -105,7 +83,21 @@ def prepare_day_overlap(
         tribes, stream, starttime_req, endtime_req, overlap_length=600,
         **kwargs):
     """
-    set processing parameters to take care of 10 minutes overlap between days
+    Set processing parameters to take care of 10 minutes overlap between days.
+
+    :type tribes: list of `EQcorrscan.core.match_filter.tribe.Tribe`
+    :param tribes: List of tribes to be processed.
+    :type stream: `obspy.core.stream.Stream`
+    :param stream: Stream to be processed.
+    :type starttime_req: `obspy.core.utcdatetime.UTCDateTime`
+    :param starttime_req: Starttime of the requested data.
+    :type endtime_req: `obspy.core.utcdatetime.UTCDateTime`
+    :param endtime_req: Endtime of the requested data.
+    :type overlap_length: int
+    :param overlap_length: Length of the overlap in seconds.
+
+    :rtype: tuple
+    :param: Tuple of tribes and stream with updated processing parameters.
     """
     # TODO: implement variable overlap
     starttime_overlap = starttime_req + 5 * 60
@@ -122,6 +114,15 @@ def prepare_day_overlap(
 
 def get_multi_obj_hash(hash_object_list):
     """
+    Function to compute a recreateable hash for a list of objects. This hash
+    should not change if the objects are not changed, but if any relevant
+    content in the objects or parameters changes, then the hash should change.
+
+    :type hash_object_list: list
+    :param hash_object_list: List of objects to be included in the hash.
+
+    :rtype: str
+    :return: Hash string.
     """
     hash_list = []
     for obj in hash_object_list:
@@ -171,8 +172,18 @@ def get_multi_obj_hash(hash_object_list):
 
 def calculate_events_for_party(party, parallel=False, cores=None):
     """
-    Calculate events for each detection in party, allows for parallel
+    Calculate events for each detection in party, allowing for parallel
     execution.
+
+    :type party: `EQcorrscan.core.match_filter.party.Party`
+    :param party: Party of families of detections that each need a new event.
+    :type parallel: bool
+    :param parallel: Whether to run in parallel.
+    :type cores: int
+    :param cores: Number of cores to use for parallel processing.
+
+    :rtype: `EQcorrscan.core.match_filter.party.Party`
+    :return: Party with events for each detection attached
     """
     if parallel:
         Logger.info(
@@ -194,7 +205,7 @@ def calculate_events_for_party(party, parallel=False, cores=None):
             # to workers
             for trace in new_template_st:
                 trace.__dict__['data'] = trace.__dict__['data'][:1]
-
+            # Create simplified template for quicker Pool initialization
             simple_template = Template(
                 name=full_templ.name, st=new_template_st,
                 lowcut=full_templ.lowcut, highcut=full_templ.highcut,
@@ -234,48 +245,54 @@ def calculate_events_for_party(party, parallel=False, cores=None):
 
 # @processify
 def run_day_detection(
-        clients, tribe, date, ispaq, selected_stations,
-        parallel=False, cores=1, io_cores=1, remove_response=False,
-        inv=Inventory(), output='DISP', noise_balancing=False,
-        balance_power_coefficient=2, let_days_overlap=True,
-        apply_agc=False, agc_window_sec=5,
-        n_templates_per_run=20, xcorr_func='fftw',
-        concurrency=None, arch='precise', trig_int=0, threshold=10,
-        threshold_type='MAD', re_eval_thresh_factor=0.6, min_chans=10,
-        decluster_metric='thresh_exc', hypocentral_separation=200,
-        absolute_values=True, minimum_sample_rate=20,
-        time_difference_threshold=3, detect_value_allowed_reduction=2.5,
-        multiplot=False, day_st=Stream(), suppress_arraywide_steps=True,
-        check_array_misdetections=False,
-        min_n_station_sites=4, short_tribe=Tribe(), short_tribe2=Tribe(),
-        write_party=False, detection_path='Detections', redetection_path=None,
-        copy_data=True, return_stream=False, dump_stream_to_disk=False,
-        day_hash_file=None, use_weights=False,
+        # MAIN INPUT OBJECTS
+        clients, tribe, date, ispaq, selected_stations, day_st=Stream(),
         sta_translation_file=os.path.expanduser(
             "~/Documents2/ArrayWork/Inventory/station_code_translation.txt"),
+        inv=Inventory(),
+        # INIT PROCESSING CONFIG
+        output='DISP', noise_balancing=False,
+        balance_power_coefficient=2, let_days_overlap=True,
+        minimum_sample_rate=20, min_chans=10,
+        apply_agc=False, agc_window_sec=5,
+        suppress_arraywide_steps=True,
+        # MULTICORE / BACKEND CONFIG
+        parallel=False, cores=1, io_cores=1, remove_response=False,
+        n_templates_per_run=20, xcorr_func='fftw', use_weights=False,
+        concurrency=None, arch='precise',
+        threshold_type='MAD', threshold=10, trig_int=0, min_n_station_sites=4,
+        # ARRAY DETECTION CONFIG
+        check_array_misdetections=False,
+        short_tribe=Tribe(), short_tribe2=Tribe(),
+        re_eval_thresh_factor=0.6, time_difference_threshold=3,
+        detect_value_allowed_reduction=2.5,
+        # DECLUSTER CONFIG
+        decluster_metric='thresh_exc', hypocentral_separation=200,
+        absolute_values=True, 
+        # OUTPUT SETUP
+        write_party=False, detection_path='Detections', redetection_path=None,
+        copy_data=True,
+        return_stream=False, dump_stream_to_disk=False, day_hash_file=None,
+        multiplot=False,
         **kwargs):
     """
-    Function to run reading, initial processing, detection etc. on one day.
+    Main wrapper function to run reading, initial processing, detection etc. on
+    one day of data.
     """
     Logger.info('Starting detection run for day %s', str(date)[0:10])
-    # Keep user's data safe
-    #  - - - - Probably not needed if it is also done in EQcorrscan, else COPY!
-    #  - - - - It looks like it's quicker to copy each batch itself within
-    #          EQcorrscan rather than copy the full tribe
     if (arch == 'precise' or arch == 'CPU' and
             concurrency not in ['multiprocess', 'multithread']):
         concurrency = 'multiprocess'
 
     # When copy_data=False selected for EQcorrscan, then we have to copy the 
-    # data here. TODO: use quicker tribe copy function.
+    # data here.
+    # TODO: use quicker tribe copy function.
     if not copy_data:
         tribe = tribe.copy()
         short_tribe = short_tribe.copy()
         short_tribe2 = short_tribe2.copy()
-    # Set the path to the folders with continuous data:
-    # archive_path2 = '/data/seismo-wav/EIDA/archive'
-    # client2 = Client(archive_path2)
 
+    # Split tribe into chunks to save memory in computing-intense parts.
     n_templates = len(tribe)
     if n_templates == 0:
         msg = 'Cannot detect events with an empty tribe!'
@@ -295,11 +312,11 @@ def run_day_detection(
     if not os.path.exists(redetection_path):
         os.mkdir(redetection_path)
 
-    # keep input safe:
-    # day_st = day_st.copy()
+    # Keep input safe:
     day_st = _quick_copy_stream(day_st)
     if len(day_st) == 0:
-        # # Differentiate between Echo and Delta (deadlocks here otherwise)
+        # Differentiate between different servers, e.g., Echo and Delta (
+        # deadlocks here otherwise)
         # req_parallel = False
         # if int(platform.release()[0]) >= 4 and parallel:
         #     req_parallel = parallel
@@ -319,9 +336,9 @@ def run_day_detection(
             else:
                 return [Party(), Stream()]
 
+    # Check if this date has already been processed with the same settings
+    # i.e., current date and a settings-based hash exist already in file
     if day_hash_file is not None:
-        # Check if this date has already been processed with the same settings
-        # i.e., current date and a settings-based hash exist already in file
         Logger.info('Checking if a run with the same parameters has been '
                     'performed before...')
         settings_hash = get_multi_obj_hash(
@@ -351,13 +368,7 @@ def run_day_detection(
         # Read in continuous data and prepare for processing
         day_st = Stream()
         for client in clients:
-            # day_st += get_waveforms_bulk(client, bulk_request, parallel=parallel,
-            #                              cores=io_cores)
             Logger.info('Requesting waveforms from client %s', client)
-            # client = get_parallel_waveform_client(client)
-            # day_st += client.get_waveforms_bulk_parallel(
-            #     bulk_request, parallel=parallel, cores=io_cores)
-            # Or with joblib:
             day_st += client.get_waveforms_bulk(
                 bulk_request, parallel=parallel, cores=io_cores)
 
@@ -368,7 +379,6 @@ def run_day_detection(
         day_st = prepare_detection_stream(
             day_st, tribe, parallel=parallel, cores=cores, try_despike=False,
             ispaq=day_stats)
-        # daily_plot(day_st, year, month, day, data_unit="counts", suffix='')
         # Do initial processing (rotation, stats normalization, merging)
         # by parallelization across three-component seismogram sets.
         nyquist_f = minimum_sample_rate / 2
@@ -393,16 +403,13 @@ def run_day_detection(
         #    skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
         #    taper_fraction=0.005, downsampled_max_rate=None,
         #    noise_balancing=noise_balancing)
-
-        # # # #Normalize NSLC codes
+        # # Normalize NSLC codes
         # day_st, trace_id_change_dict = normalize_NSLC_codes(
         #     day_st, inv, parallel=False, cores=cores,
         #     std_network_code="NS", std_location_code="00",
         #     std_channel_prefix="BH",
         #     sta_translation_file="station_code_translation.txt")
 
-    # daily_plot(day_st, year, month, day, data_unit="counts",
-    #           suffix='resp_removed')
     # If there is no data for the day, then continue on next day.
     if not day_st.traces:
         Logger.warning('No data for detection on %s, continuing' +
@@ -446,7 +453,7 @@ def run_day_detection(
                             # Extra weight factor, e.g. for array stations
                             station_weight_factor)
 
-    # tmp adjust process_lenght parameters
+    # temporarily adjust process_length parameters
     daylong = True
     if let_days_overlap:
         daylong = False
@@ -472,21 +479,13 @@ def run_day_detection(
             threshold_type=threshold_type, overlap='calculate', plot=False,
             plotDir='DetectionPlots', daylong=daylong,
             fill_gaps=True, ignore_bad_data=False, ignore_length=True, 
-            #apply_agc=apply_agc, agc_window_sec=agc_window_sec,
             pre_processed=pre_processed,
             parallel_process=parallel, cores=cores,
-            # concurrency='multiprocess', xcorr_func='time_domain',
             xcorr_func=xcorr_func, concurrency=concurrency, arch=arch,
-            # xcorr_func='fftw', concurrency='multithread',
-            # parallel_process=False, #concurrency=None,
             group_size=n_templates_per_run, full_peaks=False,
             extract_detections=False, estimate_origin=True, output_event=False,
             save_progress=False, process_cores=cores, spike_test=False,
             use_weights=use_weights, copy_data=copy_data, **kwargs)
-        # xcorr_func='fftw', concurrency=None, cores=1,
-        # xcorr_func=None, concurrency=None, cores=1,
-        # xcorr_func=None, concurrency='multiprocess', cores=cores,
-        # party = Party().read()
     except Exception as e:
         Logger.error('Exception on %s', current_day_str)
         Logger.error(e, exc_info=True)
@@ -517,12 +516,12 @@ def run_day_detection(
     Logger.info('Got a party of %s families with %s detections on %s.',
                  n_families, len(party), str(starttime)[0:10])
 
+    # Check if there were no detections and we need to return an empty party.
     if not party:
         Logger.warning('Party of families of detections is empty')
         return_st = Stream()
         append_list_completed_days(
             file=day_hash_file, date=current_day_str, hash=settings_hash)
-
         if return_stream:
             return_st = day_st
             Logger.debug(
@@ -551,8 +550,6 @@ def run_day_detection(
                 pre_processed=pre_processed,
                 ignore_length=True, parallel_process=parallel, cores=cores,
                 xcorr_func=xcorr_func, concurrency=concurrency, arch=arch,
-                #xcorr_func='time_domain', concurrency='multiprocess', 
-                # min_chans=min_chans,
                 group_size=n_templates_per_run, process_cores=cores,
                 time_difference_threshold=time_difference_threshold,
                 detect_value_allowed_reduction=detect_value_allowed_reduction,
@@ -572,7 +569,6 @@ def run_day_detection(
                     pre_processed=pre_processed,
                     parallel_process=parallel, cores=cores,
                     xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
-                    # xcorr_func='time_domain', concurrency='multiprocess',
                     group_size=n_templates_per_run, process_cores=cores,
                     time_difference_threshold=time_difference_threshold,
                     detect_value_allowed_reduction=(
@@ -583,7 +579,6 @@ def run_day_detection(
 
             append_list_completed_days(
                 file=day_hash_file, date=current_day_str, hash=settings_hash)
-
             if not party:
                 Logger.warning('Party of families of detections is empty')
                 return_st = Stream()
@@ -596,7 +591,6 @@ def run_day_detection(
 
             short_party = calculate_events_for_party(
                 short_party, parallel=parallel, cores=cores)
-
             short_party = short_party.decluster(
                 trig_int=trig_int, timing='detect', metric=decluster_metric,
                 hypocentral_separation=hypocentral_separation,
@@ -611,7 +605,7 @@ def run_day_detection(
             Logger.info('Short party: After two-stage declustering, %s '
                         '(%s on 1st round) detections are left',  n_det2, n_det1)
             # TODO: maybe the order should be:
-            # check array-misdet - decluster party - compare short-party vs. party
+            # check array-misdet -decluster party -compare short-party vs party
             if write_party:
                 detection_file_name = os.path.join(
                     redetection_path, 'UniqueDet_short_' + current_day_str)
@@ -621,16 +615,9 @@ def run_day_detection(
                 short_party.write(
                     detection_file_name + '.csv', format='csv', overwrite=True)
 
-    # Add origins to detections  ## THIS happens already in .detect() ??
+    # Add origins to detections (avoid it in .detect() for speed reasons))
     party = calculate_events_for_party(party, parallel=parallel, cores=cores)
-    # for family in party:
-    #     for detection in family:
-    #         _ = detection._calculate_event(
-    #             template=family.template, template_st=None,
-    #                 estimate_origin=True, correct_prepick=True,
-    #                 use_simplified_origin=True)
-
-    # Decluster detection and save them to filesf
+    # Decluster detection and save them to files
     # metric='avg_cor' isn't optimal when one detection may only be good on
     # very few channels - i.e., allowing higher CC than any detection made on
     # many channels
@@ -663,10 +650,6 @@ def run_day_detection(
         pickle.dump(day_st, open('tmp_st.pickle', "wb"), protocol=-1)
         pickle.dump(party, open('tmp_party.pickle', "wb"), protocol=-1)
     gc.collect()
-    # n = gc.collect()
-    # Logger.info("Number of unreachable objects collected by GC: ", n)
-    # Logger.info("Uncollectable garbage: ", gc.garbage)
-    
     return_st = Stream()
     if return_stream:
         return_st = day_st
@@ -677,184 +660,3 @@ def run_day_detection(
     else:
         return [party, return_st]
 
-
-# %% 
-
-if __name__ == "__main__":
-    # add bulk_request method to SDS-client
-    # client = get_waveform_client(client)
-
-    #client = get_parallel_waveform_client(client)
-    # contPath = '/data/seismo-wav/EIDA'
-
-    #selected_stations=['BER','ASK','KMY','HYA','FOO','BLS5','STAV','SNART',
-    #                  'MOL','LRW','BIGH','ESK']
-    selected_stations = ['ASK','BER','BLS5','DOMB','EKO1','FOO','HOMB','HYA','KMY',
-                        'MOL','ODD1','SKAR','SNART','STAV','SUE','KONO',
-                        'BIGH','DRUM','EDI','EDMD','ESK','GAL1','GDLE','HPK',
-                        'INVG','KESW','KPL','LMK','LRW','PGB1',
-                        'EKB','EKB1','EKB2','EKB3','EKB4','EKB5','EKB6','EKB7',
-                        'EKB8','EKB9','EKB10','EKR1','EKR2','EKR3','EKR4','EKR5',
-                        'EKR6','EKR7','EKR8','EKR9','EKR10',
-                        'NAO00','NAO01','NAO02','NAO03','NAO04','NAO05',
-                        'NB200','NB201','NB202','NB203','NB204','NB205',
-                        'NBO00','NBO01','NBO02','NBO03','NBO04','NBO05',
-                        'NC200','NC201','NC202','NC203','NC204','NC205',
-                        'NC300','NC301','NC302','NC303','NC304','NC305',
-                        'NC400','NC401','NC402','NC403','NC404','NC405',
-                        'NC600','NC601','NC602','NC603','NC604','NC605',
-                'EKO2','EKO3','EKO4','EKO5','EKO6','EKO7','EKO8','EKO9'
-                'EKO10','EKO11','EKO12','EKO13','EKO14','EKO15','EKO16',
-                'EKO17','EKO18','EKO19','EKO20','EKO21','EKO22','EKO23',
-                'EKO24','EKO25','EKO26','EKO27','EKO28',
-                'GRA01','GRA02','GRA03','GRA04','GRA05','GRA06','GRA07',
-                'GRA08','GRA09','GRA10', 'OSE01','OSE02','OSE03','OSE04',
-                'OSE05','OSE06','OSE07','OSE08','OSE09','OSE10']
-    # selected_stations  = ['ASK', 'BLS5', 'KMY', 'ODD1', 'NAO01', 'ESK', 'EDI', 'KPL']
-    # selected_stations  = ['ASK', 'BER', 'BLS5', 'STAV', 'NAO001', 'ESK', 'EKB2']
-    selected_stations  = ['EKB10', 'EKR1', 'EKB']
-                        # need   need    need   need   need
-    # without-KESW, 2018-event will not detect itself
-                        # 'EKB1','EKB2','EKB3','EKB4','EKB5','EKB6','EKB7',
-                        # 'EKB8','EKB9','EKB10','EKR1','EKR2','EKR3','EKR4','EKR5',
-                        # 'EKR6','EKR7','EKR8','EKR9','EKR10',]
-    # 'SOFL','OSL', 'MUD',
-    relevant_stations = get_all_relevant_stations(
-        selected_stations, sta_translation_file="station_code_translation.txt")
-    
-    seisan_rea_path = '../SeisanEvents/'
-    seisan_wav_path = '../SeisanEvents/'
-    
-    sfiles = glob.glob(os.path.join(seisan_rea_path, '*L.S??????'))
-    sfiles.sort(key = lambda x: x[-6:])
-    # sfiles = [sfiles[8]]
-    # sfiles = sfiles[5:7]
-    # sfiles = sfiles[0:5] + sfiles[6:8]
-    
-
-    startday = UTCDateTime(2017,1,1,0,0,0)
-    endday = UTCDateTime(2019,12,31,0,0,0)
-
-    # startday = UTCDateTime(2007,6,4,0,0,0)
-    # startday = UTCDateTime(2007,7,24,0,0,0)
-    # startday = UTCDateTime(2008,6,30,0,0,0)
-    # startday = UTCDateTime(2011,7,20,0,0,0)
-    # startday = UTCDateTime(2013,10,28,0,0,0)
-    # startday = UTCDateTime(2015,9,4,0,0,0)    
-    # startday = UTCDateTime(2018,10,25,0,0,0)
-    # startday = UTCDateTime(2019,7,10,0,0,0)
-    startday = UTCDateTime(2019,9,24,0,0,0)
-    #endday = UTCDateTime(2019,9,30,0,0,0)
-    # startday = UTCDateTime(2010,9,1,0,0,0)
-
-    # startday = UTCDateTime(2011,7,20,0,0,0) 
-    # endday = UTCDateTime(2011,7,20,0,0,0)
-    #endday = UTCDateTime(2013,3,16,0,0,0)
-    #startday = UTCDateTime(2015,9,7,0,0,0)
-    #endday = UTCDateTime(2016,1,1,0,0,0)
-
-    startday = UTCDateTime(2021,1,1,0,0,0) 
-    endday = UTCDateTime(2021,1,1,0,0,0)
-    
-    
-    # TODO: debug segmentation fault on 2018-03-30 # this may be fixed through
-    #       correct error-handling of mseed-read-errors
-    # TODO: debug segmentation fault on 2012-09-25 # this may be fixed through
-    #       correct error-handling of mseed-read-errors
-    # TODO: dEBUG MASK ERROR on 2009-07-01
-    # TODO: BrokenPipeError on 2015-11-30
-    # startday = UTCDateTime(2018,3,30,0,0,0)
-    # endday = UTCDateTime(2018,3,31,0,0,0)
-
-    inv_file = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.xml'
-    # inv_file = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.dataless_seed'
-    # inv = read_inventory(os.path.expanduser(inv_file))
-    inv = get_updated_inventory_with_noise_models(
-        os.path.expanduser(inv_file),
-        pdf_dir='~/repos/ispaq/WrapperScripts/PDFs/',
-        outfile='inv.pickle', check_existing=True)
-
-    templateFolder='Templates'
-    parallel = True
-    noise_balancing = True
-    make_templates = False
-    check_array_misdetections = True
-    cores = 52
-    balance_power_coefficient = 2
-
-    # Read templates from file
-    if make_templates:
-        Logger.info('Creating new templates')
-        tribe = create_template_objects(
-            sfiles, relevant_stations, template_length=120,
-            lowcut=0.2, highcut=9.9, min_snr=3, prepick=0.5, samp_rate=20,
-            min_n_traces=8, seisan_wav_path=seisan_wav_path, inv=inv,
-            remove_response=True, noise_balancing=noise_balancing, 
-            balance_power_coefficient=balance_power_coefficient,
-            parallel=parallel, cores=cores, write_out=True,
-            make_pretty_plot=False)
-        Logger.info('Created new set of templates.')
-        
-        short_tribe = Tribe()
-        if check_array_misdetections:
-            short_tribe = create_template_objects(
-                sfiles, relevant_stations, template_length=10,
-                lowcut=0.2, highcut=9.9, min_snr=3, prepick=0.5, samp_rate=20,
-                min_n_traces=8, seisan_wav_path=seisan_wav_path, inv=inv,
-                remove_response=True, noise_balancing=noise_balancing,
-                balance_power_coefficient=balance_power_coefficient,
-                parallel=parallel, cores=cores, make_pretty_plot=False,
-                write_out=True, prefix='short_')
-            Logger.info('Created new set of short templates.')
-    else:    
-        Logger.info('Starting template reading')
-        # tribe = Tribe().read('TemplateObjects/Templates_min8tr_8.tgz')
-        tribe = Tribe().read('TemplateObjects/Templates_min8tr_balNoise_9.tgz')
-        # tribe = Tribe().read('TemplateObjects/Templates_min3tr_noNoiseBal_1.tgz')
-        # tribe = Tribe().read('TemplateObjects/Templates_min3tr_balNoise_1.tgz')
-        # tribe = Tribe().read('TemplateObjects/Templates_7tr_noNoiseBal_3.tgz')
-        # tribe = Tribe().read('TemplateObjects/Templates_7tr_wiNoiseBal_3.tgz')
-        Logger.info('Tribe archive readily read in')
-        if check_array_misdetections:
-            short_tribe = Tribe().read(
-                'TemplateObjects/short_Templates_min8tr_balNoise_9.tgz')
-            Logger.info('Short-tribe archive readily read in')
-
-    # Load Mustang-metrics from ISPAQ for the whole time period
-    # ispaq = read_ispaq_stats(folder='/home/felix/repos/ispaq/WrapperScripts/csv',
-    #                          stations=relevant_stations, startyear=startday.year,
-    #                          endyear=endday.year, ispaq_prefixes=['all'],
-    #                          ispaq_suffixes=['simpleMetrics','PSDMetrics'])
-    #availability = stats[stats['metricName'].str.contains("percent_availability")]
-
-    # %% ### LOOP OVER DAYS ########
-    day_st = Stream()
-    dates = pd.date_range(startday.datetime, endday.datetime, freq='1D')
-    # For each day, read in data and run detection from templates
-    current_year = None
-    for date in dates:
-        # Load in Mustang-like ISPAQ stats for the whole year
-        if not date.year == current_year:
-            current_year = date.year
-            ispaq = read_ispaq_stats(folder=
-                '/home/felix/repos/ispaq/WrapperScripts/Parquet_database/csv_parquet',
-                stations=relevant_stations, startyear=current_year,
-                endyear=current_year, ispaq_prefixes=['all'],
-                ispaq_suffixes=['simpleMetrics','PSDMetrics'],
-                file_type = 'parquet')
-
-        [party, day_st] = run_day_detection(
-            tribe=tribe, date=date, ispaq=ispaq,
-            selected_stations=relevant_stations, remove_response=True, inv=inv,
-            parallel=parallel, cores=cores, noise_balancing=noise_balancing,
-            balance_power_coefficient=balance_power_coefficient,
-            threshold=12, check_array_misdetections=check_array_misdetections,
-            trig_int=40, short_tribe=short_tribe, multiplot=True,
-            write_party=True, min_chans=1)
-
-
-# TODO: option to use C|C| instead of C for correlation stats
-# - in line 476 multi_corr.c         # fftw
-# - in line 51, 85 in time_corr.c    # time domain
-# - in line 134 in matched_filter.cu # fmf-gpu
-# - in line 109 in matched_filter.c  # fmf-cpu

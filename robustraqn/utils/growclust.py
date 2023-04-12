@@ -11,10 +11,6 @@ from eqcorrscan.utils.catalog_to_dd import _generate_event_id_mapper
 
 import logging
 Logger = logging.getLogger(__name__)
-#logging.basicConfig(
-#    level=logging.INFO,
-#    format="%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
-
 
 GC_HEADER_LIST = [
         'year', 'month', 'day', 'hour', 'minute', 'second', 'evid', 'latR',
@@ -230,7 +226,7 @@ def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
                         uncertainty=tmp_cat_df.et.iloc[0]),
                     origin_uncertainty=origin_uncertainty,
                     creation_info=CreationInfo(agency_id='BER', author='GC'))
-                    # arrivals=cat_orig.arrivals)
+                # arrivals=cat_orig.arrivals)
                 Logger.info(
                     'Added origin solution from Growclust for event %s',
                     event.short_str())
@@ -239,5 +235,3 @@ def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
                 event.origins.append(gc_orig)
                 event.preferred_origin_id = gc_orig.resource_id
     return cat
-
-

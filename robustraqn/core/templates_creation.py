@@ -16,7 +16,6 @@ import glob
 # from importlib import reload
 from multiprocessing import Pool, cpu_count, get_context
 from multiprocessing.pool import ThreadPool
-from re import A
 from joblib import Parallel, delayed
 import pandas as pd
 from timeit import default_timer
@@ -41,21 +40,20 @@ from eqcorrscan.core.match_filter import Template, Tribe
 from eqcorrscan.utils.plotting import pretty_template_plot
 from eqcorrscan.utils.correlate import pool_boy
 
-from robustraqn.obspy.core import Trace, Stream
 from robustraqn.core.load_events import (
-    normalize_NSLC_codes, get_all_relevant_stations, load_event_stream,
-    check_template, prepare_picks, fix_phasehint_capitalization,
-    mask_consecutive_zeros, taper_trace_segments)
-from robustraqn.utils.spectral_tools import st_balance_noise
-from robustraqn.utils.quality_metrics import (
-    create_bulk_request, get_parallel_waveform_client)
+    get_all_relevant_stations, load_event_stream, check_template,
+    prepare_picks, fix_phasehint_capitalization, taper_trace_segments)
 from robustraqn.core.seismic_array import (
     extract_array_picks, add_array_station_picks, get_station_sites,
     LARGE_APERTURE_SEISARRAY_PREFIXES, get_updated_stations_df,
     mask_array_trace_offsets)
 from robustraqn.utils.bayesloc import update_cat_from_bayesloc
-from robustraqn.obspy.clients.filesystem.sds import Client
+from robustraqn.utils.spectral_tools import st_balance_noise
+from robustraqn.utils.quality_metrics import (
+    create_bulk_request, get_parallel_waveform_client)
 from robustraqn.utils.obspy import _quick_copy_stream
+from robustraqn.obspy.clients.filesystem.sds import Client
+from robustraqn.obspy.core import Trace, Stream
 
 import logging
 Logger = logging.getLogger(__name__)
@@ -577,7 +575,7 @@ def _create_template_objects(
         if suppress_arraywide_steps:
             wavef = mask_array_trace_offsets(
                 wavef, split_taper_stream=False, **kwargs)
-        wavef = mask_consecutive_zeros(wavef, min_run_length=None)
+        wavef = wavef.mask_consecutive_zeros(min_run_length=None)
         # Taper all the segments
         wavef = taper_trace_segments(wavef)
 
@@ -619,8 +617,8 @@ def _create_template_objects(
 
         # standardize all codes for network, station, location, channel
         if normalize_NSLC:
-            wavef, trace_id_change_dict = normalize_NSLC_codes(
-                wavef, inv, sta_translation_file=sta_translation_file,
+            wavef, trace_id_change_dict = wavef.normalize_nslc_codes(
+                inv, sta_translation_file=sta_translation_file,
                 std_network_code=std_network_code,
                 std_location_code=std_location_code,
                 std_channel_prefix=std_channel_prefix)

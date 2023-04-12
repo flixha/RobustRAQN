@@ -32,7 +32,7 @@ from eqcorrscan.utils.pre_processing import shortproc
 from robustraqn.utils.quality_metrics import (
     create_bulk_request)
 from robustraqn.core.load_events import (
-    prepare_detection_stream, get_all_relevant_stations, normalize_NSLC_codes,
+    prepare_detection_stream, get_all_relevant_stations,
     reevaluate_detections, try_apply_agc)
 from robustraqn.core.templates_creation import (_shorten_tribe_streams)
 from robustraqn.core.event_detection import (
@@ -453,8 +453,8 @@ def pick_events_for_day(
             tribes, day_st, starttime, endtime, overlap_length=0)
     tribe, short_tribe, short_tribe2 = tribes
     # Normalize NSLC codes
-    day_st, trace_id_change_dict = normalize_NSLC_codes(
-        day_st, inv, sta_translation_file=sta_translation_file,
+    day_st, trace_id_change_dict = day_st.normalize_nslc_codes(
+        inv, sta_translation_file=sta_translation_file,
         std_network_code="NS", std_location_code="00",
         std_channel_prefix="BH")
     # If there is no data for the day, then continue on next day.

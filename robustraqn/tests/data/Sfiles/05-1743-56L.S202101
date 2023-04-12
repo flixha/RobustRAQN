@@ -1,0 +1,87 @@
+ 2021  1 5 1743 55.3 L  59.822   7.898  0.0      40 0.0                        1
+ Action:ARG 22-04-26 13:55 OP:feha STATUS:               ID:20210105174355     I
+ 2021-01-05-1742-35M.EQCS__092                                                 6
+ detect_val=5.560264813627299                                                  3
+ Detected using template: 2021_01_05t17_42_43_30_templ                         3
+ EQC_detection_id: 2021_01_05t17_42_43_30_templ_20210105_174355225000          3
+ STAT COM NTLO IPHASE   W HHMM SS.SSS   PAR1  PAR2 AGA OPE  AIN  RES W  DIS CAZ7
+ ASK  HHE NS00  S        A1744 30.225              eqc                          
+ ASK  HHN NS00  S        A1744 30.025              eqc                          
+ ASK  HHZ NS00  P        A1744 10.400              eqc                          
+ BLS5 HHE NS00  S        A1744 10.500              eqc                          
+ BLS5 HHN NS00  S        A1744 10.525              eqc                          
+ BLS5 HHZ NS00  P        A1743 58.950              eqc                          
+ HOMB HHE NS00  S        A1744 32.650              eqc                          
+ HOMB HHN NS00  S        A1744 32.525              eqc                          
+ HYA  HHE NS00  S        A1744 33.250              eqc                          
+ HYA  HHN NS00  S        A1744 34.075              eqc                          
+ KMY  HHE NS00  S        A1744 30.400              eqc                          
+ KMY  HHN NS00  S        A1744 30.450              eqc                          
+ KMY  HHZ NS00  P        A1744 10.450              eqc                          
+ NAO01BHE NO00  S        A1744 39.025              eqc                          
+ NAO01BHN NO00  S        A1744 38.775              eqc                          
+ NAO01BHZ NO00  P        A1744 16.450              eqc                          
+ NAO02BHZ NO00  P        A1744 15.525              eqc                          
+ NAO03BHZ NO00  P        A1744 15.750              eqc                          
+ NAO04BHZ NO00  P        A1744 14.200              eqc                          
+ NAO05BHZ NO00  P        A1744 16.025              eqc                          
+ NBO00BHE NO00  S        A1744 39.925              eqc                          
+ NBO00BHN NO00  S        A1744 40.700              eqc                          
+ NBO00BHZ NO00  P        A1744 16.950              eqc                          
+ NBO01BHZ NO00  P        A1744 16.994              eqc                          
+ NBO02BHZ NO00  P        A1744 17.675              eqc                          
+ NBO03BHZ NO00  P        A1744 17.127              eqc                          
+ NBO04BHZ NO00  P        A1744 16.550              eqc                          
+ NBO05BHZ NO00  P        A1744 16.525              eqc                          
+ NC200BHZ NO00  P        A1744 19.125              eqc                          
+ NC201BHZ NO00  P        A1744 19.600              eqc                          
+ NC202BHZ NO00  P        A1744 19.100              eqc                          
+ NC203BHZ NO00  P        A1744 18.550              eqc                          
+ NC204BHE NO00  Sg       A1744 46.775              eqc                          
+ NC204BHN NO00  Sg       A1744 46.950              eqc                          
+ NC204BHZ NO00  P        A1744 18.975              eqc                          
+ NC300BHZ NO00  P        A1744 22.500              eqc                          
+ NC303BHE NO00  Sg       A1744 51.700              eqc                          
+ NC303BHN NO00  Sg       A1744 52.425              eqc                          
+ NC303BHZ NO00  P        A1744 21.900              eqc                          
+ NC304BHZ NO00  P        A1744 22.350              eqc                          
+ NC400BHZ NO00  P        A1744 23.525              eqc                          
+ NC403BHZ NO00  P        A1744 22.500              eqc                          
+ NC602BHE NO00  Sg       A1744 46.600              eqc                          
+ NC602BHN NO00  Sg       A1744 47.100              eqc                          
+ NC602BHZ NO00  P        A1744 18.725              eqc                          
+ NC603BHZ NO00  P        A1744 17.927              eqc                          
+ NC604BHZ NO00  P        A1744 17.825              eqc                          
+ NC605BHZ NO00  P        A1744 18.800              eqc                          
+ ODD1 HHE NS00  S        A1744  3.925              eqc                          
+ ODD1 HHN NS00  S        A1744  4.450              eqc                          
+ ODD1 HHZ NS00  P        A1743 55.325              eqc                          
+ SKAR HHE NS00  S        A1744 11.550              eqc                          
+ SKAR HHN NS00  S        A1744 12.625              eqc                          
+ SKAR HHZ NS00  P        A1744  0.100              eqc                          
+ SNARTEHE NS00  S        A1744 30.350              eqc                          
+ SNARTEHN NS00  S        A1744 30.041              eqc                          
+ SUE  HHE NS00  S        A1744 43.825              eqc                          
+ SUE  HHN NS00  S        A1744 43.150              eqc                          
+ NC2  BHZ NS00  P       2A1744 19.261               RR                          
+ NC2  BHZ NS00  BAZ-P   2A1744 19.261  234.2  8.11  RR                          
+ NC2  BHE NS00  S       2A1744 47.746               RR                          
+ NC2  BHE NS00  BAZ-S   2A1744 47.746  234.2  8.11  RR                          
+ NC3  BHZ NS00  P       2A1744 22.606               RR                          
+ NC3  BHZ NS00  BAZ-P   2A1744 22.606  234.2  8.11  RR                          
+ NC3  BHE NS00  S       2A1744 53.082               RR                          
+ NC3  BHE NS00  BAZ-S   2A1744 53.082  234.2  8.11  RR                          
+ NC4  BHZ NS00  P       2A1744 23.104               RR                          
+ NC4  BHZ NS00  BAZ-P   2A1744 23.104  234.2  8.11  RR                          
+ NC6  BHZ NS00  P       2A1744 18.771               RR                          
+ NC6  BHZ NS00  BAZ-P   2A1744 18.771  242.0  4.09  RR                          
+ NC6  BHE NS00  S       2A1744 46.096               RR                          
+ NC6  BHE NS00  BAZ-S   2A1744 46.096  242.0  4.09  RR                          
+ NAO  BHZ NS00  P       2A1744 15.574               RR                          
+ NAO  BHZ NS00  BAZ-P   2A1744 15.574  234.2  8.11  RR                          
+ NAO  BHE NS00  S       2A1744 38.472               RR                          
+ NAO  BHE NS00  BAZ-S   2A1744 38.472  234.2  8.11  RR                          
+ NBO  BHZ NS00  P       2A1744 16.950               RR                          
+ NBO  BHE NS00  S       2A1744 39.925               RR                          
+ NBO  BHN NS00  S       2A1744 40.700               RR                          
+                                                                                

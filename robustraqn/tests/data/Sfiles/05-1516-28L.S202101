@@ -1,0 +1,78 @@
+ 2021  1 5 1516 27.3 L  59.822   7.898  0.0      38 0.0                        1
+ Action:ARG 22-04-26 13:55 OP:feha STATUS:               ID:20210105151627     I
+ 2021-01-05-1515-07M.EQCS__092                                                 6
+ detect_val=10.904146122779302                                                 3
+ Detected using template: 2021_01_05t17_42_43_30_templ                         3
+ EQC_detection_id: 2021_01_05t17_42_43_30_templ_20210105_151627025000          3
+ STAT COM NTLO IPHASE   W HHMM SS.SSS   PAR1  PAR2 AGA OPE  AIN  RES W  DIS CAZ7
+ ASK  HHE NS00  S        A1517  2.350              eqc                          
+ ASK  HHN NS00  S        A1517  2.350              eqc                          
+ ASK  HHZ NS00  P        A1516 42.700              eqc                          
+ BLS5 HHE NS00  S        A1516 42.325              eqc                          
+ BLS5 HHN NS00  S        A1516 42.325              eqc                          
+ HYA  HHE NS00  S        A1517  5.500              eqc                          
+ HYA  HHN NS00  S        A1517  5.500              eqc                          
+ KMY  HHE NS00  S        A1517  1.525              eqc                          
+ KMY  HHN NS00  S        A1517  1.525              eqc                          
+ KMY  HHZ NS00  P        A1516 42.775              eqc                          
+ NAO01BHE NO00  S        A1517 10.550              eqc                          
+ NAO01BHN NO00  S        A1517 10.550              eqc                          
+ NAO01BHZ NO00  P        A1516 48.025              eqc                          
+ NAO02BHZ NO00  P        A1516 47.325              eqc                          
+ NAO03BHZ NO00  P        A1516 46.625              eqc                          
+ NAO05BHZ NO00  P        A1516 47.350              eqc                          
+ NBO00BHE NO00  S        A1517 11.025              eqc                          
+ NBO00BHN NO00  S        A1517 11.725              eqc                          
+ NBO01BHZ NO00  P        A1516 49.000              eqc                          
+ NBO02BHZ NO00  P        A1516 49.475              eqc                          
+ NBO03BHZ NO00  P        A1516 48.926              eqc                          
+ NBO04BHZ NO00  P        A1516 48.350              eqc                          
+ NBO05BHZ NO00  P        A1516 48.325              eqc                          
+ NC200BHZ NO00  P        A1516 50.925              eqc                          
+ NC201BHZ NO00  P        A1516 51.400              eqc                          
+ NC202BHZ NO00  P        A1516 50.900              eqc                          
+ NC203BHZ NO00  P        A1516 50.350              eqc                          
+ NC204BHE NO00  Sg       A1517 19.100              eqc                          
+ NC204BHN NO00  Sg       A1517 19.100              eqc                          
+ NC204BHZ NO00  P        A1516 50.775              eqc                          
+ NC300BHZ NO00  P        A1516 54.300              eqc                          
+ NC303BHN NO00  Sg       A1517 24.175              eqc                          
+ NC303BHZ NO00  P        A1516 53.700              eqc                          
+ NC304BHZ NO00  P        A1516 54.151              eqc                          
+ NC400BHZ NO00  P        A1516 55.325              eqc                          
+ NC403BHZ NO00  P        A1516 54.300              eqc                          
+ NC602BHE NO00  Sg       A1517 17.976              eqc                          
+ NC602BHN NO00  Sg       A1517 18.275              eqc                          
+ NC602BHZ NO00  P        A1516 50.651              eqc                          
+ NC603BHZ NO00  P        A1516 49.700              eqc                          
+ NC604BHZ NO00  P        A1516 49.625              eqc                          
+ NC605BHZ NO00  P        A1516 49.775              eqc                          
+ ODD1 HHE NS00  S        A1516 35.750              eqc                          
+ ODD1 HHN NS00  S        A1516 35.750              eqc                          
+ ODD1 HHZ NS00  P        A1516 27.350              eqc                          
+ SKAR HHE NS00  S        A1516 43.600              eqc                          
+ SKAR HHN NS00  S        A1516 43.600              eqc                          
+ SKAR HHZ NS00  P        A1516 31.875              eqc                          
+ SNARTEHE NS00  S        A1517  2.500              eqc                          
+ SNARTEHN NS00  S        A1517  2.500              eqc                          
+ SUE  HHE NS00  S        A1517 15.475              eqc                          
+ SUE  HHN NS00  S        A1517 15.475              eqc                          
+ NC2  BHZ NS00  P       2A1516 51.060               RR                          
+ NC2  BHZ NS00  BAZ-P   2A1516 51.060  234.2  8.11  RR                          
+ NC2  BHE NS00  S       2A1517 19.558               RR                          
+ NC2  BHE NS00  BAZ-S   2A1517 19.558  234.2  8.11  RR                          
+ NC6  BHZ NS00  P       2A1516 50.675               RR                          
+ NC6  BHZ NS00  BAZ-P   2A1516 50.675  242.0  4.09  RR                          
+ NC6  BHE NS00  S       2A1517 17.871               RR                          
+ NC6  BHE NS00  BAZ-S   2A1517 17.871  242.0  4.09  RR                          
+ NAO  BHZ NS00  P       2A1516 47.400               RR                          
+ NAO  BHZ NS00  BAZ-P   2A1516 47.400  234.2  8.11  RR                          
+ NAO  BHE NS00  S       2A1517 10.272               RR                          
+ NAO  BHE NS00  BAZ-S   2A1517 10.272  234.2  8.11  RR                          
+ NBO  BHZ NS00  P       2A1516 48.870               RR                          
+ NBO  BHZ NS00  BAZ-P   2A1516 48.870  234.2  8.11  RR                          
+ NC3  BHZ NS00  P       2A1516 54.300               RR                          
+ NC4  BHZ NS00  P       2A1516 55.325               RR                          
+ NBO  BHE NS00  S       2A1517 11.025               RR                          
+ NBO  BHN NS00  S       2A1517 11.725               RR                          
+                                                                                

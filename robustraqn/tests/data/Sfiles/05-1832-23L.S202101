@@ -1,0 +1,53 @@
+ 2021  1 5 1832 23.6 L  59.822   7.898  0.0      37 0.0                        1
+ Action:ARG 22-03-18 17:07 OP:feha STATUS:               ID:20210105183223     I
+ 2021-01-05-1831-03M.EQCS__092                                                 6
+ detect_val=21.646264165639877                                                 3
+ Detected using template: 2021_01_05t17_42_43_30_templ                         3
+ EQC_detection_id: 2021_01_05t17_42_43_30_templ_20210105_183223350000          3
+ STAT COM NTLO IPHASE   W HHMM SS.SSS   PAR1  PAR2 AGA OPE  AIN  RES W  DIS CAZ7
+ ASK  HHN NS00  S        A1832 58.695              eqc                          
+ ASK  HHZ NS00  P        A1832 39.020              eqc                          
+ BLS5 HHE NS00  S        A1832 38.615              eqc                          
+ BLS5 HHZ NS00  P        A1832 27.065              eqc                          
+ HOMB HHE NS00  S        A1833  0.070              eqc                          
+ HYA  HHN NS00  S        A1833  1.825              eqc                          
+ KMY  HHN NS00  S        A1832 57.840              eqc                          
+ NAO01BHN NO00  S        A1833  6.930              eqc                          
+ NAO01BHZ NO00  P        A1832 44.380              eqc                          
+ NAO02BHZ NO00  P        A1832 43.680              eqc                          
+ NAO03BHZ NO00  P        A1832 42.980              eqc                          
+ NAO04BHZ NO00  P        A1832 42.905              eqc                          
+ NAO05BHZ NO00  P        A1832 43.703              eqc                          
+ NBO00BHE NO00  S        A1833  8.082              eqc                          
+ NBO00BHZ NO00  P        A1832 44.955              eqc                          
+ NBO01BHZ NO00  P        A1832 45.355              eqc                          
+ NBO02BHZ NO00  P        A1832 45.830              eqc                          
+ NBO03BHZ NO00  P        A1832 45.280              eqc                          
+ NBO04BHZ NO00  Pg       A1832 45.730              eqc                          
+ NBO05BHZ NO00  P        A1832 44.680              eqc                          
+ NC200BHZ NO00  P        A1832 47.280              eqc                          
+ NC201BHZ NO00  P        A1832 47.755              eqc                          
+ NC202BHZ NO00  P        A1832 47.255              eqc                          
+ NC203BHZ NO00  P        A1832 46.705              eqc                          
+ NC204BHZ NO00  P        A1832 47.130              eqc                          
+ NC300BHZ NO00  Pg       A1832 51.932              eqc                          
+ NC303BHZ NO00  P        A1832 50.053              eqc                          
+ NC304BHZ NO00  Pg       A1832 51.555              eqc                          
+ NC400BHZ NO00  P        A1832 51.678              eqc                          
+ NC403BHZ NO00  P        A1832 50.655              eqc                          
+ NC602BHE NO00  Sg       A1833 14.330              eqc                          
+ NC602BHZ NO00  P        A1832 47.005              eqc                          
+ NC603BHZ NO00  P        A1832 46.055              eqc                          
+ NC604BHZ NO00  P        A1832 45.980              eqc                          
+ NC605BHZ NO00  P        A1832 46.130              eqc                          
+ ODD1 HHN NS00  S        A1832 32.065              eqc                          
+ ODD1 HHZ NS00  P        A1832 23.640              eqc                          
+ SKAR HHN NS00  S        A1832 39.953              eqc                          
+ SKAR HHZ NS00  P        A1832 28.223              eqc                          
+ SNARTEHE NS00  S        A1832 58.840              eqc                          
+ NBO  BHZ NS00  P        A1832 44.955               RR                          
+ NC2  BHZ NS00  P        A1832 47.280               RR                          
+ NC3  BHZ NS00  P        A1832 51.932               RR                          
+ NC4  BHZ NS00  P        A1832 51.678               RR                          
+ NBO  BHE NS00  S        A1833  8.082               RR                          
+                                                                                

@@ -1,0 +1,59 @@
+ 2021  1 5 2130 29.7 L  59.822   7.898  0.0      40 0.0                        1
+ Action:ARG 22-03-18 17:07 OP:feha STATUS:               ID:20210105213029     I
+ 2021-01-05-2129-09M.EQCS__092                                                 6
+ detect_val=4.360803682357073                                                  3
+ Detected using template: 2021_01_05t17_42_43_30_templ                         3
+ EQC_detection_id: 2021_01_05t17_42_43_30_templ_20210105_213029475000          3
+ STAT COM NTLO IPHASE   W HHMM SS.SSS   PAR1  PAR2 AGA OPE  AIN  RES W  DIS CAZ7
+ ASK  HHN NS00  S        A2131  4.635              eqc                          
+ ASK  HHZ NS00  P        A2130 45.930              eqc                          
+ BLS5 HHE NS00  S        A2130 44.758              eqc                          
+ BLS5 HHZ NS00  P        A2130 34.095              eqc                          
+ HOMB HHE NS00  S        A2131  6.630              eqc                          
+ HYA  HHN NS00  S        A2131  7.965              eqc                          
+ KMY  HHN NS00  S        A2131  4.080              eqc                          
+ KMY  HHZ NS00  P        A2130 45.230              eqc                          
+ NAO01BHN NO00  S        A2131 13.057              eqc                          
+ NAO01BHZ NO00  P        A2130 50.500              eqc                          
+ NAO02BHZ NO00  P        A2130 49.998              eqc                          
+ NAO03BHZ NO00  P        A2130 48.748              eqc                          
+ NAO04BHZ NO00  P        A2130 49.035              eqc                          
+ NAO05BHZ NO00  P        A2130 50.635              eqc                          
+ NBO00BHE NO00  S        A2131 14.207              eqc                          
+ NBO00BHZ NO00  P        A2130 51.080              eqc                          
+ NBO01BHZ NO00  P        A2130 51.483              eqc                          
+ NBO02BHZ NO00  P        A2130 51.958              eqc                          
+ NBO03BHZ NO00  P        A2130 52.013              eqc                          
+ NBO04BHZ NO00  Pg       A2130 51.855              eqc                          
+ NBO05BHZ NO00  P        A2130 51.510              eqc                          
+ NC200BHZ NO00  P        A2130 53.417              eqc                          
+ NC201BHZ NO00  P        A2130 53.875              eqc                          
+ NC202BHZ NO00  P        A2130 53.380              eqc                          
+ NC203BHZ NO00  P        A2130 52.830              eqc                          
+ NC204BHZ NO00  P        A2130 53.263              eqc                          
+ NC300BHZ NO00  Pg       A2130 58.057              eqc                          
+ NC303BHZ NO00  P        A2130 57.278              eqc                          
+ NC304BHZ NO00  Pg       A2130 58.758              eqc                          
+ NC400BHZ NO00  P        A2130 57.705              eqc                          
+ NC403BHZ NO00  P        A2130 57.820              eqc                          
+ NC602BHE NO00  Sg       A2131 21.335              eqc                          
+ NC602BHZ NO00  P        A2130 53.892              eqc                          
+ NC603BHZ NO00  P        A2130 53.295              eqc                          
+ NC604BHZ NO00  P        A2130 53.240              eqc                          
+ NC605BHZ NO00  P        A2130 52.383              eqc                          
+ ODD1 HHN NS00  S        A2130 38.212              eqc                          
+ ODD1 HHZ NS00  P        A2130 29.788              eqc                          
+ SKAR HHN NS00  S        A2130 46.078              eqc                          
+ SKAR HHZ NS00  P        A2130 34.352              eqc                          
+ SNARTEHE NS00  S        A2131  6.018              eqc                          
+ SUE  HHN NS00  S        A2131 17.953              eqc                          
+ NBO  BHZ NS00  P        A2130 51.524               RR                          
+ NC3  BHZ NS00  P        A2130 57.736               RR                          
+ NAO  BHZ NS00  P        A2130 49.998               RR                          
+ NC2  BHZ NS00  P        A2130 53.417               RR                          
+ NC4  BHZ NS00  P        A2130 57.705               RR                          
+ NC6  BHZ NS00  P        A2130 53.133               RR                          
+ NAO  BHZ NS00  P        A2130 49.885               RR                          
+ NBO  BHE NS00  S        A2131 14.207               RR                          
+ NC6  BHZ NS00  P        A2130 53.348               RR                          
+                                                                                

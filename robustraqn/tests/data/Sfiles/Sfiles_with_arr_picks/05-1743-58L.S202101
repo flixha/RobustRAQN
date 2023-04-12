@@ -1,0 +1,50 @@
+ 2021  1 5 1743 58.7 L  59.822   7.898  0.0      34 0.0                        1
+ Action:ARG 22-03-18 09:34 OP:feha STATUS:               ID:20210105174358     I
+ 2021-01-05-1742-35M.EQCS__092                                                 6
+ detect_val=3.413092102855444                                                  3
+ Detected using template: 2021_01_05t17_42_43_30_templ                         3
+ EQC_detection_id: 2021_01_05t17_42_43_30_templ_20210105_174355225000          3
+ STAT COM NTLO IPHASE   W HHMM SS.SSS   PAR1  PAR2 AGA OPE  AIN  RES W  DIS CAZ7
+ ASK  HHN NS00  S        A1744 35.325              eqc                          
+ ASK  HHZ NS00  P        A1744 15.600              eqc                          
+ BLS5 HHE NS00  S        A1744 14.425              eqc                          
+ BLS5 HHZ NS00  P        A1744  2.550              eqc                          
+ HOMB HHE NS00  S        A1744 36.450              eqc                          
+ HYA  HHN NS00  S        A1744 38.000              eqc                          
+ KMY  HHN NS00  S        A1744 33.300              eqc                          
+ KMY  HHZ NS00  P        A1744 14.875              eqc                          
+ NAO01BHN NO00  S        A1744 43.425              eqc                          
+ NAO01BHZ NO00  P        A1744 19.450              eqc                          
+ NAO02BHZ NO00  P        A1744 19.875              eqc                          
+ NAO03BHZ NO00  P        A1744 19.400              eqc                          
+ NAO04BHZ NO00  P        A1744 19.550              eqc                          
+ NAO05BHZ NO00  P        A1744 18.950              eqc                          
+ NBO00BHE NO00  S        A1744 43.125              eqc                          
+ NBO00BHZ NO00  P        A1744 21.250              eqc                          
+ NBO01BHZ NO00  P        A1744 20.425              eqc                          
+ NBO02BHZ NO00  P        A1744 21.275              eqc                          
+ NBO03BHZ NO00  P        A1744 20.925              eqc                          
+ NBO04BHZ NO00  Pg       A1744 21.200              eqc                          
+ NBO05BHZ NO00  P        A1744 20.950              eqc                          
+ NC200BHZ NO00  P        A1744 22.350              eqc                          
+ NC201BHZ NO00  P        A1744 24.400              eqc                          
+ NC202BHZ NO00  P        A1744 22.650              eqc                          
+ NC203BHZ NO00  P        A1744 23.400              eqc                          
+ NC204BHZ NO00  P        A1744 23.375              eqc                          
+ NC300BHZ NO00  Pg       A1744 27.575              eqc                          
+ NC303BHZ NO00  P        A1744 25.600              eqc                          
+ NC304BHZ NO00  Pg       A1744 26.725              eqc                          
+ NC400BHZ NO00  P        A1744 27.600              eqc                          
+ NC403BHZ NO00  P        A1744 26.475              eqc                          
+ NC602BHE NO00  Sg       A1744 50.450              eqc                          
+ NC602BHZ NO00  P        A1744 23.150              eqc                          
+ NC603BHZ NO00  P        A1744 22.175              eqc                          
+ NC604BHZ NO00  P        A1744 21.475              eqc                          
+ NC605BHZ NO00  P        A1744 22.450              eqc                          
+ ODD1 HHN NS00  S        A1744  7.925              eqc                          
+ ODD1 HHZ NS00  P        A1743 58.775              eqc                          
+ SKAR HHN NS00  S        A1744 16.300              eqc                          
+ SKAR HHZ NS00  P        A1744  4.175              eqc                          
+ SNARTEHE NS00  S        A1744 33.950              eqc                          
+ SUE  HHN NS00  S        A1744 47.250              eqc                          
+                                                                                

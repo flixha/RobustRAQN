@@ -1,0 +1,81 @@
+ 2021  1 5  7 3 50.7 L  59.822   7.898  0.0      40 0.0                        1
+ Action:ARG 22-04-26 13:55 OP:feha STATUS:               ID:20210105070350     I
+ 2021-01-05-0702-30M.EQCS__092                                                 6
+ detect_val=5.666084760782681                                                  3
+ Detected using template: 2021_01_05t17_42_43_30_templ                         3
+ EQC_detection_id: 2021_01_05t17_42_43_30_templ_20210105_070350450000          3
+ STAT COM NTLO IPHASE   W HHMM SS.SSS   PAR1  PAR2 AGA OPE  AIN  RES W  DIS CAZ7
+ ASK  HHE NS00  S        A 7 4 25.850              eqc                          
+ ASK  HHN NS00  S        A 7 4 25.600              eqc                          
+ ASK  HHZ NS00  P        A 7 4  6.900              eqc                          
+ BLS5 HHE NS00  S        A 7 4  5.750              eqc                          
+ BLS5 HHN NS00  S        A 7 4  5.750              eqc                          
+ BLS5 HHZ NS00  P        A 7 3 54.175              eqc                          
+ HOMB HHE NS00  S        A 7 4 27.300              eqc                          
+ HOMB HHN NS00  S        A 7 4 27.900              eqc                          
+ HYA  HHE NS00  S        A 7 4 28.925              eqc                          
+ HYA  HHN NS00  S        A 7 4 29.275              eqc                          
+ KMY  HHE NS00  S        A 7 4 24.950              eqc                          
+ KMY  HHN NS00  S        A 7 4 24.950              eqc                          
+ KMY  HHZ NS00  P        A 7 4  6.200              eqc                          
+ NAO01BHE NO00  S        A 7 4 33.775              eqc                          
+ NAO01BHN NO00  S        A 7 4 33.850              eqc                          
+ NAO01BHZ NO00  P        A 7 4 12.075              eqc                          
+ NAO02BHZ NO00  P        A 7 4 10.725              eqc                          
+ NAO03BHZ NO00  P        A 7 4  9.500              eqc                          
+ NAO04BHZ NO00  P        A 7 4 10.725              eqc                          
+ NAO05BHZ NO00  P        A 7 4 11.575              eqc                          
+ NBO00BHE NO00  S        A 7 4 35.150              eqc                          
+ NBO00BHN NO00  S        A 7 4 35.150              eqc                          
+ NBO00BHZ NO00  P        A 7 4 12.875              eqc                          
+ NBO01BHZ NO00  P        A 7 4 12.425              eqc                          
+ NBO02BHZ NO00  P        A 7 4 12.975              eqc                          
+ NBO03BHZ NO00  P        A 7 4 13.150              eqc                          
+ NBO04BHZ NO00  P        A 7 4 11.450              eqc                          
+ NBO05BHZ NO00  P        A 7 4 12.600              eqc                          
+ NC200BHZ NO00  P        A 7 4 14.350              eqc                          
+ NC201BHZ NO00  P        A 7 4 14.825              eqc                          
+ NC202BHZ NO00  P        A 7 4 14.825              eqc                          
+ NC203BHZ NO00  P        A 7 4 13.775              eqc                          
+ NC204BHE NO00  Sg       A 7 4 42.375              eqc                          
+ NC204BHN NO00  Sg       A 7 4 42.525              eqc                          
+ NC204BHZ NO00  P        A 7 4 14.200              eqc                          
+ NC300BHZ NO00  P        A 7 4 17.576              eqc                          
+ NC303BHE NO00  Sg       A 7 4 48.200              eqc                          
+ NC303BHN NO00  Sg       A 7 4 47.850              eqc                          
+ NC303BHZ NO00  P        A 7 4 18.050              eqc                          
+ NC304BHZ NO00  P        A 7 4 17.575              eqc                          
+ NC400BHZ NO00  P        A 7 4 19.651              eqc                          
+ NC403BHZ NO00  P        A 7 4 17.725              eqc                          
+ NC602BHE NO00  Sg       A 7 4 42.075              eqc                          
+ NC602BHN NO00  Sg       A 7 4 41.402              eqc                          
+ NC602BHZ NO00  P        A 7 4 14.244              eqc                          
+ NC603BHZ NO00  P        A 7 4 12.853              eqc                          
+ NC604BHZ NO00  P        A 7 4 13.500              eqc                          
+ NC605BHZ NO00  P        A 7 4 13.895              eqc                          
+ ODD1 HHE NS00  S        A 7 3 59.175              eqc                          
+ ODD1 HHN NS00  S        A 7 3 59.175              eqc                          
+ ODD1 HHZ NS00  P        A 7 3 50.775              eqc                          
+ SKAR HHE NS00  S        A 7 4  7.050              eqc                          
+ SKAR HHN NS00  S        A 7 4  7.050              eqc                          
+ SKAR HHZ NS00  P        A 7 3 55.425              eqc                          
+ SNARTEHE NS00  S        A 7 4 25.925              eqc                          
+ SNARTEHN NS00  S        A 7 4 25.925              eqc                          
+ SUE  HHE NS00  S        A 7 4 38.900              eqc                          
+ SUE  HHN NS00  S        A 7 4 38.350              eqc                          
+ NC2  BHZ NS00  P       2A 7 4 14.425               RR                          
+ NC2  BHZ NS00  BAZ-P   2A 7 4 14.425  234.2  8.11  RR                          
+ NC6  BHZ NS00  P       2A 7 4 13.783               RR                          
+ NC6  BHZ NS00  BAZ-P   2A 7 4 13.783  242.0  4.09  RR                          
+ NC6  BHE NS00  S       2A 7 4 41.321               RR                          
+ NC6  BHE NS00  BAZ-S   2A 7 4 41.321  242.0  4.09  RR                          
+ NAO  BHZ NS00  P       2A 7 4 10.807               RR                          
+ NAO  BHZ NS00  BAZ-P   2A 7 4 10.807  234.2  8.11  RR                          
+ NBO  BHZ NS00  P       2A 7 4 12.875               RR                          
+ NC3  BHZ NS00  P       2A 7 4 17.576               RR                          
+ NC4  BHZ NS00  P       2A 7 4 19.651               RR                          
+ NAO  BHZ NS00  P       2A 7 4 10.748               RR                          
+ NAO  BHZ NS00  BAZ-P   2A 7 4 10.748  234.0  4.67  RR                          
+ NBO  BHE NS00  S       2A 7 4 35.150               RR                          
+ NBO  BHN NS00  S       2A 7 4 35.150               RR                          
+                                                                                

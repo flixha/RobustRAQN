@@ -1,0 +1,35 @@
+ 2021  1 5 1048 37.6 L  59.822   7.898  0.0      24 0.0                        1
+ Action:ARG 22-03-18 09:35 OP:feha STATUS:               ID:20210105104837     I
+ 2021-01-05-1047-10M.EQCS__092                                                 6
+ detect_val=2.159157544374466                                                  3
+ Detected using template: 2021_01_05t17_42_43_30_templ                         3
+ EQC_detection_id: 2021_01_05t17_42_43_30_templ_20210105_104830075000          3
+ STAT COM NTLO IPHASE   W HHMM SS.SSS   PAR1  PAR2 AGA OPE  AIN  RES W  DIS CAZ7
+ ASK  HHZ NS00  P        A1048 49.325              eqc                          
+ BLS5 HHE NS00  S        A1048 48.550              eqc                          
+ BLS5 HHZ NS00  P        A1048 37.650              eqc                          
+ HOMB HHE NS00  S        A1049 11.300              eqc                          
+ KMY  HHN NS00  S        A1049  7.750              eqc                          
+ NAO01BHN NO00  S        A1049 17.850              eqc                          
+ NAO03BHZ NO00  P        A1048 53.875              eqc                          
+ NBO00BHE NO00  S        A1049 18.250              eqc                          
+ NBO00BHZ NO00  P        A1048 56.175              eqc                          
+ NBO01BHZ NO00  P        A1048 55.700              eqc                          
+ NBO04BHZ NO00  Pg       A1048 55.750              eqc                          
+ NBO05BHZ NO00  P        A1048 56.175              eqc                          
+ NC200BHZ NO00  P        A1048 58.775              eqc                          
+ NC201BHZ NO00  P        A1048 58.200              eqc                          
+ NC202BHZ NO00  P        A1048 58.725              eqc                          
+ NC204BHZ NO00  P        A1048 58.000              eqc                          
+ NC300BHZ NO00  Pg       A1049  2.300              eqc                          
+ NC303BHZ NO00  P        A1049  1.000              eqc                          
+ NC304BHZ NO00  Pg       A1049  2.350              eqc                          
+ NC400BHZ NO00  P        A1049  1.900              eqc                          
+ NC403BHZ NO00  P        A1049  0.850              eqc                          
+ NC602BHE NO00  Sg       A1049 25.600              eqc                          
+ NC603BHZ NO00  P        A1048 56.175              eqc                          
+ NC604BHZ NO00  P        A1048 56.475              eqc                          
+ ODD1 HHN NS00  S        A1048 42.525              eqc                          
+ SKAR HHN NS00  S        A1048 50.175              eqc                          
+ SKAR HHZ NS00  P        A1048 38.875              eqc                          
+                                                                                

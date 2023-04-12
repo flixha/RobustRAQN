@@ -1,0 +1,76 @@
+ 2021  1 5 1832 23.6 L  59.822   7.898  0.0      39 0.0                        1
+ Action:ARG 22-04-26 13:55 OP:feha STATUS:               ID:20210105183223     I
+ 2021-01-05-1831-03M.EQCS__092                                                 6
+ detect_val=25.503282696008682                                                 3
+ Detected using template: 2021_01_05t17_42_43_30_templ                         3
+ EQC_detection_id: 2021_01_05t17_42_43_30_templ_20210105_183223350000          3
+ STAT COM NTLO IPHASE   W HHMM SS.SSS   PAR1  PAR2 AGA OPE  AIN  RES W  DIS CAZ7
+ ASK  HHE NS00  S        A1832 58.675              eqc                          
+ ASK  HHN NS00  S        A1832 58.675              eqc                          
+ ASK  HHZ NS00  P        A1832 39.025              eqc                          
+ BLS5 HHE NS00  S        A1832 38.625              eqc                          
+ BLS5 HHN NS00  S        A1832 38.625              eqc                          
+ HOMB HHE NS00  S        A1833  0.075              eqc                          
+ HYA  HHE NS00  S        A1833  1.825              eqc                          
+ HYA  HHN NS00  S        A1833  1.825              eqc                          
+ KMY  HHN NS00  S        A1832 57.800              eqc                          
+ NAO01BHE NO00  S        A1833  6.900              eqc                          
+ NAO01BHN NO00  S        A1833  6.900              eqc                          
+ NAO01BHZ NO00  P        A1832 44.350              eqc                          
+ NAO02BHZ NO00  P        A1832 43.650              eqc                          
+ NAO03BHZ NO00  P        A1832 42.950              eqc                          
+ NAO04BHZ NO00  P        A1832 42.875              eqc                          
+ NAO05BHZ NO00  P        A1832 43.675              eqc                          
+ NBO00BHE NO00  S        A1833  8.050              eqc                          
+ NBO00BHN NO00  S        A1833  8.050              eqc                          
+ NBO00BHZ NO00  P        A1832 44.925              eqc                          
+ NBO01BHZ NO00  P        A1832 45.325              eqc                          
+ NBO02BHZ NO00  P        A1832 45.800              eqc                          
+ NBO03BHZ NO00  P        A1832 45.250              eqc                          
+ NBO04BHZ NO00  P        A1832 44.675              eqc                          
+ NBO05BHZ NO00  P        A1832 44.650              eqc                          
+ NC200BHZ NO00  P        A1832 47.250              eqc                          
+ NC201BHZ NO00  P        A1832 47.725              eqc                          
+ NC202BHZ NO00  P        A1832 47.225              eqc                          
+ NC203BHZ NO00  P        A1832 46.675              eqc                          
+ NC204BHE NO00  Sg       A1833 15.425              eqc                          
+ NC204BHN NO00  Sg       A1833 15.425              eqc                          
+ NC204BHZ NO00  P        A1832 47.100              eqc                          
+ NC300BHZ NO00  P        A1832 50.625              eqc                          
+ NC303BHE NO00  Sg       A1833 20.500              eqc                          
+ NC303BHZ NO00  P        A1832 50.025              eqc                          
+ NC304BHZ NO00  P        A1832 50.475              eqc                          
+ NC400BHZ NO00  P        A1832 51.650              eqc                          
+ NC403BHZ NO00  P        A1832 50.625              eqc                          
+ NC602BHE NO00  Sg       A1833 14.300              eqc                          
+ NC602BHN NO00  Sg       A1833 14.300              eqc                          
+ NC602BHZ NO00  P        A1832 46.975              eqc                          
+ NC603BHZ NO00  P        A1832 46.025              eqc                          
+ NC604BHZ NO00  P        A1832 45.950              eqc                          
+ NC605BHZ NO00  P        A1832 46.100              eqc                          
+ ODD1 HHE NS00  S        A1832 32.050              eqc                          
+ ODD1 HHN NS00  S        A1832 32.050              eqc                          
+ ODD1 HHZ NS00  P        A1832 23.650              eqc                          
+ SKAR HHE NS00  S        A1832 39.950              eqc                          
+ SKAR HHN NS00  S        A1832 39.950              eqc                          
+ SKAR HHZ NS00  P        A1832 28.225              eqc                          
+ SNARTEHE NS00  S        A1832 58.800              eqc                          
+ SNARTEHN NS00  S        A1832 58.800              eqc                          
+ NC2  BHZ NS00  P       2A1832 47.370               RR                          
+ NC2  BHZ NS00  BAZ-P   2A1832 47.370  234.2  8.11  RR                          
+ NC2  BHE NS00  S       2A1833 15.883               RR                          
+ NC2  BHE NS00  BAZ-S   2A1833 15.883  234.2  8.11  RR                          
+ NC6  BHZ NS00  P       2A1832 46.972               RR                          
+ NC6  BHZ NS00  BAZ-P   2A1832 46.972  242.0  4.09  RR                          
+ NC6  BHE NS00  S       2A1833 14.221               RR                          
+ NC6  BHE NS00  BAZ-S   2A1833 14.221  242.0  4.09  RR                          
+ NAO  BHZ NS00  P       2A1832 43.734               RR                          
+ NAO  BHZ NS00  BAZ-P   2A1832 43.734  234.2  8.11  RR                          
+ NBO  BHZ NS00  P       2A1832 44.925               RR                          
+ NC3  BHZ NS00  P       2A1832 50.625               RR                          
+ NC4  BHZ NS00  P       2A1832 51.650               RR                          
+ NAO  BHZ NS00  P       2A1832 43.685               RR                          
+ NAO  BHZ NS00  BAZ-P   2A1832 43.685  234.0  4.67  RR                          
+ NBO  BHE NS00  S       2A1833  8.050               RR                          
+ NBO  BHN NS00  S       2A1833  8.050               RR                          
+                                                                                

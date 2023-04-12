@@ -1,3 +1,8 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+@author: Felix Halpaap
+"""
 
 # %%
 def run_from_ipython():

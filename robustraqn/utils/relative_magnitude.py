@@ -1,7 +1,8 @@
 
 
 # %%
-import os, glob, matplotlib, sys, difflib, pickle
+import os
+import difflib
 from os import times
 import pandas as pd
 from importlib import reload
@@ -10,7 +11,6 @@ from joblib import Parallel, delayed, parallel_backend
 
 from timeit import default_timer
 import logging
-Logger = logging.getLogger(__name__)
 
 from obspy import UTCDateTime, Stream
 from obspy.core.event import (Catalog, Magnitude, StationMagnitude, Amplitude,
@@ -18,15 +18,11 @@ from obspy.core.event import (Catalog, Magnitude, StationMagnitude, Amplitude,
                               QuantityError)
 from obspy.core.inventory.inventory import Inventory
 from obspy.core.event import ResourceIdentifier, CreationInfo, Event, Comment
-from obspy.core.event.header import (
-    AmplitudeCategory, AmplitudeUnit, EvaluationMode, EvaluationStatus,
-    ATTRIBUTE_HAS_ERRORS)
+from obspy.core.event.header import EvaluationMode
 from obspy.io.nordic.core import read_nordic, write_select, _write_nordic
 
 from obsplus.events.validate import attach_all_resource_ids
 
-from multiprocessing import Pool, cpu_count, current_process, get_context
-from eqcorrscan.utils.correlate import pool_boy
 from eqcorrscan.core.match_filter import Tribe, Template, read_detections
 from eqcorrscan.core.match_filter.party import Party
 from eqcorrscan.utils.mag_calc import relative_magnitude
@@ -34,6 +30,7 @@ from eqcorrscan.utils.pre_processing import shortproc
 
 from robustraqn.utils.obspy import _quick_copy_stream
 
+Logger = logging.getLogger(__name__)
 
 
 def _remove_uncorrected_traces(stream=Stream()):
@@ -87,8 +84,8 @@ def compute_relative_event_magnitude(
         pre_processed=False, remove_response=False, output='DISP',
         parallel=False, cores=1, n_threads=1, **kwargs):
     """
-    Compute relative magnitudes with specific criteria on SNR, minimum number
-    of amplitude measurements etc.
+    Wrapper to compute relative magnitudes with specific criteria on SNR,
+    minimum number of amplitude measurements etc.
     """
     if detection is None and detected_event is None:
         msg = ("Detection and detected event cannot both be unknown when " +
@@ -127,7 +124,7 @@ def compute_relative_event_magnitude(
             return detected_event, pre_processed
         template_name2 = template_name2a
 
-        # Find the name for the template that gives the cloest match 
+        # Find the name for the template that gives the cloest match
         # between detection time and the earliest pick in the event
         day_detection_times = np.array(
             [d.detect_time for f in party for d in f])
@@ -136,10 +133,10 @@ def compute_relative_event_magnitude(
         if len(time_diffs) == 0:
             time_diffs = (
                 abs(day_detection_times - (detected_event.preferred_origin() or
-                                        detected_event.origins[0]).time))
+                                           detected_event.origins[0]).time))
         if len(time_diffs) == 0:
             Logger.error('Event  %s: no time information for event origin and '
-                        'picks, cannot find matching detection.')
+                         'picks, cannot find matching detection.')
             return detected_event, pre_processed
 
         index = np.argmin(time_diffs)
@@ -207,7 +204,6 @@ def compute_relative_event_magnitude(
         'Measure relative magnitude from streams with %s and %s traces',
         len(templ1.st), len(detection_st))
 
-
     delta_mag, correlations = relative_magnitude(
         templ1_st, detection_st,
         templ1.event, detected_event,
@@ -220,8 +216,8 @@ def compute_relative_event_magnitude(
         return_correlations=return_correlations,
         correct_mag_bias=correct_mag_bias,
         check_rel_amp_deviations=check_rel_amp_deviations, **kwargs)
-        #  correct_mag_bias=True)
-        # magnitude_method="UnnormalizedCC"
+    #  correct_mag_bias=True)
+    # magnitude_method="UnnormalizedCC"
 
     mag_ccs = list()
     delta_mag_corr = dict()
@@ -247,21 +243,22 @@ def compute_relative_event_magnitude(
     try:
         prev_mag = None
         prev_mags = []
-        # Check if there are magnitudes for preferred agency + type combinations
+        # Check if there are magnitudes for preferred agency +type combinations
         prev_mag_agency_type_tuple = [
             ((m.creation_info.agency_id, m.magnitude_type), m)
             for m in templ1.event.magnitudes if m.creation_info]
         previous_magnitudes = [
             prev_mag[1] for prev_mag in prev_mag_agency_type_tuple
             if prev_mag[0] in magnitude_agency_type_pref]
-        # If there are no magnitudes for accepted agencies / types, allow others.
+        # If there are no magnitudes for accepted agencies/types, allow others.
         if len(previous_magnitudes) == 0:
             if len(prev_mags) == 0:
                 previous_magnitudes = [
                     m for m in templ1.event.magnitudes
                     if m.magnitude_type in accepted_magnitude_types
-                    and (m.creation_info.agency_id in accepted_magnitude_agencies
-                        if m.creation_info else True)]
+                    and (m.creation_info.agency_id
+                         in accepted_magnitude_agencies
+                         if m.creation_info else True)]
         prev_mags = [m.mag for m in previous_magnitudes]
     except Exception as e:
         Logger.warning(e)
@@ -349,7 +346,7 @@ def compute_relative_event_magnitude(
             Magnitude(
                 mag=av_mag, magnitude_type='ML',
                 origin_id=(detected_event.preferred_origin() or
-                        detected_event.origins[0]).resource_id,
+                           detected_event.origins[0]).resource_id,
                 method_id=ResourceIdentifier("relative"),
                 station_count=len(delta_mag),
                 evaluation_mode=EvaluationMode('automatic'),
@@ -383,7 +380,7 @@ def compute_relative_event_magnitude(
         mag_comment = Comment(
             text=('Template magnitude: {prev_mag: 5.2f}{mag_str:4s},' +
                   ' magnitude-delta: {delta_mag: 6.2f}, std: {mag_std: 5.2f}' +
-                   ', n: {n: 4d}').format(
+                  ', n: {n: 4d}').format(
                       prev_mag=prev_mag, mag_str=mag_str, delta_mag=delta_mag,
                       mag_std=mag_std, n=len(delta_mags)),
                   creation_info=CreationInfo(agency_id='RR', author='RR'))
@@ -405,4 +402,5 @@ def compute_relative_event_magnitude(
     else:
         pre_processed = False
     return detected_event, pre_processed
+
 # %%

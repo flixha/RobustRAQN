@@ -2,12 +2,17 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sun Jul 16 17:23:45 2017
+Main detection program to detect events with template matching in a large
+dataset. Loops across available days. Takes data quality metrics, seismic
+arrays, and station noise models into account. Supports three main correlation
+backend packages: EQcorrscan (best: fftw-based), fast_matched_filter (best:
+time-domain with CUDA on Nvidia GPUs), and fmf2 (best: time-domain on CPUs with
+AVX2/AVX512 optimizations, td on Nvidia / AMD GPUs with hipSYCL compiler.)
 
 @author: felix
 """
 
 # %%
-
 def run_from_ipython():
     try:
         __IPYTHON__
@@ -24,7 +29,7 @@ logging.basicConfig(
 Logger.info('Start module import')
 import faulthandler; faulthandler.enable()
 
-import os, glob, gc, math, calendar, matplotlib, platform, sys
+import os, glob, matplotlib
 try:
     SLURM_CPUS = (int(os.environ['SLURM_CPUS_PER_TASK']) *
                 int(os.environ['SLURM_JOB_NUM_NODES']))
@@ -60,22 +65,19 @@ import warnings
 warnings.filterwarnings("ignore", category=InternalMSEEDWarning)
 
 from eqcorrscan.core.match_filter import Template, Tribe, MatchFilterError
-from eqcorrscan.core.match_filter.party import Party
-from eqcorrscan.utils.plotting import detection_multiplot
 
-from robustraqn.quality_metrics import (
-    create_bulk_request, get_waveforms_bulk, read_ispaq_stats,
-    get_parallel_waveform_client)
-from robustraqn.load_events_for_detection import (
-    prepare_detection_stream, init_processing, init_processing_wRotation,
-    print_error_plots, get_all_relevant_stations, reevaluate_detections,
-    multiplot_detection, read_seisan_database)
-from robustraqn.spectral_tools import (Noise_model, attach_noise_models,
-                                       get_updated_inventory_with_noise_models)
-from robustraqn.templates_creation import (
+# import quality_metrics, spectral_tools, load_events_for_detection
+# reload(quality_metrics)
+# reload(load_events_for_detection)
+from robustraqn.core.templates_creation import (
     create_template_objects, _shorten_tribe_streams)
-from robustraqn.event_detection import run_day_detection
-from robustraqn.bayesloc_utils import update_cat_from_bayesloc
+from robustraqn.core.event_detection import run_day_detection
+from robustraqn.utils.quality_metrics import read_ispaq_stats
+from robustraqn.core.load_events import (
+    get_all_relevant_stations, read_seisan_database)
+from robustraqn.utils.spectral_tools import (
+    Noise_model, get_updated_inventory_with_noise_models)
+from robustraqn.utils.bayesloc import update_cat_from_bayesloc
 Logger.info('Module import done')
 
 
@@ -105,24 +107,12 @@ if __name__ == "__main__":
     apply_agc = True
     use_weights = True
     weight_current_noise_level = False
+    bayesloc_event_solutions = None
     bayesloc_path = [
-        '../Relocation/Bayesloc/Ridge_INTEU_06e_wRegionalEvents_min12stations',
         '../Relocation/Bayesloc/Ridge_INTEU_09b_continental',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_01b',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_02',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_03',
         '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_04',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_05',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_06',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_07',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_08b',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_09',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_10b',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_11',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_12d',
         ]
-
+    custom_epoch = UTCDateTime(1960, 1, 1, 0, 0, 0)
 
     sta_translation_file = os.path.expanduser(
         "~/Documents2/ArrayWork/Inventory/station_code_translation.txt")
@@ -136,10 +126,13 @@ if __name__ == "__main__":
         outfile=os.path.expanduser(
             '~/Documents2/ArrayWork/Inventory/inv.pickle'))
 
+    # Path definitions for servers and clusters
     working_on_cluster = True
-    xcorr_func = 'fmf'
+    xcorr_func = 'fmf2'
+    arch = 'precise'
     if GPUtil.getAvailable():
         xcorr_func = 'fmf'
+        arch = 'GPU'
     seisan_rea_path = '../Seisan/INTEU'
     archive_path = '/cluster/shared/NNSN/SLARCHIVE'
     if not os.path.exists(archive_path):
@@ -185,30 +178,25 @@ if __name__ == "__main__":
             )
         Logger.info('Updating catalog from bayesloc solutions')
         catalog = update_cat_from_bayesloc(
-            catalog, bayesloc_event_solutions,
-            custom_epoch=UTCDateTime(1960, 1, 1, 0, 0, 0))
+            catalog, bayesloc_event_solutions, custom_epoch=custom_epoch)
 
     # Define time range based on parallel execution in Slurm array job
     try:
         SLURM_ARRAY_TASK_ID = int(os.environ['SLURM_ARRAY_TASK_ID'])
-        SLURM_ARRAY_TASK_COUNT = int(os.environ['SLURM_ARRAY_TASK_COUNT'])
-        # set starttime depending on ID of slurm array task
-        # first task is 1
-        month = startday.month + 1 * SLURM_ARRAY_TASK_ID
-        # increment year if required
-        year = startday.year + month // 12
-        # change month if required
-        month = month % 12 + (month // 12) * 1
-        startday = UTCDateTime(year, month, 1, 0, 0, 0)
-        last_day_of_month = calendar.monthrange(year, month)[1]
-        new_endday = UTCDateTime(year, month, last_day_of_month, 23, 59, 59.99)
-        if SLURM_ARRAY_TASK_ID == SLURM_ARRAY_TASK_COUNT:
-            if endday > new_endday:
-                Logger.warning('Not enough SLURM tasks to complete time range')
-        endday = new_endday
+        SLURM_ARRAY_TASK_COUNT = max([
+            int(os.environ['SLURM_ARRAY_TASK_COUNT']),
+            int(os.environ['SLURM_ARRAY_TASK_MAX'])])
+        # split into equal batches
+        date_ranges = pd.date_range(startday.datetime, endday.datetime,
+                                    periods=SLURM_ARRAY_TASK_COUNT+1)
+        start_dstamp = date_ranges[SLURM_ARRAY_TASK_ID]
+        startday = UTCDateTime(
+            start_dstamp.year, start_dstamp.month, start_dstamp.day)
+        end_dstamp = date_ranges[SLURM_ARRAY_TASK_ID+1]
+        endday = UTCDateTime(end_dstamp.year, end_dstamp.month, end_dstamp.day)
         Logger.info('This is SLURM array task %s (task count: %s) for the time'
-                    + 'period %s - %s', str(SLURM_ARRAY_TASK_ID),
-                    str(SLURM_ARRAY_TASK_COUNT), str(startday), str(endday))
+                    ' period %s - %s', SLURM_ARRAY_TASK_ID,
+                    SLURM_ARRAY_TASK_COUNT, str(startday), str(endday))
     except Exception as e:
         Logger.info('This is not a SLURM array task.')
         pass
@@ -245,8 +233,9 @@ if __name__ == "__main__":
             apply_agc=apply_agc, make_pretty_plot=False, normalize_NSLC=True,
             parallel=parallel, cores=cores, write_out=True,
             max_events_per_file=200, forbidden_phase_hints=['pmax'],
-            add_array_picks=add_array_picks, min_array_distance_factor=10,
+            add_array_picks=add_array_picks,
             add_large_aperture_array_picks=add_large_aperture_array_picks,
+            min_array_distance_factor=min_array_distance_factor,
             sta_translation_file=sta_translation_file,
             max_horizontal_error_km=700, max_depth_error_km=200,
             max_time_error_s=20, nordic_format='NEW', unused_kwargs=True,
@@ -254,22 +243,21 @@ if __name__ == "__main__":
             max_pct_above_nhnm=70, location_priority=['00', '10', ''],
             band_priority=['B', 'H', 'S', 'E', 'N'], instrument_priority=['H'],
             components=['Z', 'N', 'E', '1', '2'], require_clock_lock=False,
-            bayesloc_event_solutions=bayesloc_path,
+            bayesloc_event_solutions=bayesloc_path, custom_epoch=custom_epoch,
             wavetool_path=wavetool_path)
         Logger.info('Created new set of templates.')
     else:
         Logger.info('Starting template reading')
         tribe = Tribe().read(
-            'TemplateObjects/Templates_min13tr_balNoise_agc_14472.tgz',
+            # 'TemplateObjects/Templates_min13tr_balNoise_agc_14472.tgz',
+			'mohns_cluster_tribe_17_displacement_balanced.tgz',
             cores=cores)
-        # May need to fix all resource IDs when read in in parallel
-        # assert rid.get_referred_object() is rid_to_object[rid.id]
-        # for template in tribe:
-        #    attach_all_resource_ids(template.event)
         Logger.info('Tribe archive readily read in')
 
     short_tribe = Tribe()
+    short_tribe2 = Tribe()
     if check_array_misdetections:
+        Logger.info('Creating tribe of %s shortened templates', len(tribe))
         short_tribe = _shorten_tribe_streams(
             tribe, tribe_len_pct=0.2, max_tribe_len=None,
             min_n_traces=min_n_traces, write_out=False,
@@ -299,23 +287,29 @@ if __name__ == "__main__":
 
         # n_templates_per_run = 1000: 6 /16 GB GPU RAm used
         [party, day_st] = run_day_detection(
-            clients=clients, tribe=tribe, date=date, ispaq=ispaq, 
+            clients=clients, tribe=tribe, date=date, ispaq=ispaq,
+            short_tribe=short_tribe, short_tribe2=short_tribe2,
             selected_stations=relevant_stations,
-            remove_response=remove_response,
+            remove_response=remove_response, output=output,
             inv=inv, parallel=parallel, cores=cores, io_cores=cores,
-            xcorr_func=xcorr_func, concurrency='concurrent', arch='GPU',
-            n_templates_per_run=2500, noise_balancing=noise_balancing,
+            # xcorr_func='fftw', concurrency='concurrent',
+            # xcorr_func='time_domain', concurrency='multiprocess',
+            xcorr_func=xcorr_func, concurrency='concurrent', arch=arch,
+            # fftw: "fmf2: 1570
+            n_templates_per_run=1570, noise_balancing=noise_balancing,
             balance_power_coefficient=balance_power_coefficient,
-            apply_agc=apply_agc,
+            apply_agc=apply_agc, suppress_arraywide_steps=True,
             check_array_misdetections=check_array_misdetections,
-            threshold=10, re_eval_thresh_factor=0.65, min_chans=3,
-            decluster_metric='thresh_exc', hypocentral_separation=200,
-            absolute_values=True, trig_int=30, short_tribe=short_tribe,
+            detect_value_allowed_reduction=4, time_difference_threshold=4,
+            threshold=11, re_eval_thresh_factor=0.6, min_chans=3, # 11
+            decluster_metric='thresh_exc', hypocentral_separation=250,
+            absolute_values=True, trig_int=30,
             write_party=True, detection_path='Detections_MAD11_01',
             redetection_path='ReDetections_MAD11_01', multiplot=False,
             day_hash_file='dates_hash_list.csv', use_weights=use_weights,
             weight_current_noise_level=weight_current_noise_level,
-            copy_data=False, sta_translation_file=sta_translation_file,
+            copy_data=True, sta_translation_file=sta_translation_file,
             location_priority=['*'])
+    Logger.info('Job completed successfully.')
 
 

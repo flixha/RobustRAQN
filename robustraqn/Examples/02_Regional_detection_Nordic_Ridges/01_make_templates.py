@@ -18,6 +18,7 @@ Logger.info('Start module import')
 import faulthandler; faulthandler.enable()
 
 import os, glob, matplotlib
+SLURM_MEM = 1
 try:
     SLURM_CPUS = (int(os.environ['SLURM_CPUS_PER_TASK']) *
                 int(os.environ['SLURM_JOB_NUM_NODES']))
@@ -26,36 +27,27 @@ except KeyError as e:
     Logger.error('Could not retrieve number of SLURM CPUS per task, %s', e)
     SLURM_CPUS = None
 
-from numpy.core.numeric import True_
-
 if not run_from_ipython:
     matplotlib.use('Agg') # to plot figures directly for print to file
 from importlib import reload
 import numpy as np
 from joblib import parallel_backend
-import GPUtil
 
-#from obspy.core.event import Event, Origin, Catalog
 from obspy import UTCDateTime
 from obspy.io.mseed import InternalMSEEDWarning
 from robustraqn.obspy.clients.filesystem.sds import Client
 
-from obsplus.events.validate import attach_all_resource_ids
-
 import warnings
 warnings.filterwarnings("ignore", category=InternalMSEEDWarning)
 
-from robustraqn.quality_metrics import (
-    create_bulk_request, get_waveforms_bulk, read_ispaq_stats)
-from robustraqn.load_events_for_detection import (
-    prepare_detection_stream, init_processing, init_processing_wRotation,
-    print_error_plots, get_all_relevant_stations, reevaluate_detections,
-    multiplot_detection, read_seisan_database)
-from robustraqn.spectral_tools import (Noise_model, attach_noise_models,
-                                       get_updated_inventory_with_noise_models)
-from robustraqn.templates_creation import (
+from robustraqn.core.load_events import (
+    get_all_relevant_stations, read_seisan_database)
+from robustraqn.core.templates_creation import (
     create_template_objects, _shorten_tribe_streams)
-from robustraqn.bayesloc_utils import update_cat_from_bayesloc
+from robustraqn.utils.quality_metrics import read_ispaq_stats
+from robustraqn.utils.spectral_tools import (
+    Noise_model, attach_noise_models, get_updated_inventory_with_noise_models)
+from robustraqn.utils.bayesloc import update_cat_from_bayesloc
 Logger.info('Module import done')
 
 
@@ -72,36 +64,24 @@ if __name__ == "__main__":
     remove_response = True
     noise_balancing = True
     make_templates = True
-    add_array_picks = False
+    add_array_picks = True
     add_large_aperture_array_picks = False
-    check_array_misdetections = True
     balance_power_coefficient = 2
     samp_rate = 20
     lowcut = 1.0
     highcut = 9.9
     prepick = 1.0
     template_length_long = 90.0
-    template_length_short = 10.0
     min_n_traces = 13
     min_snr = 3
     apply_agc = True
     use_weights = True
     weight_current_noise_level = True
     # List of bayesloc output folders from which to read corrected hypocetners and picks
+    bayesloc_event_solutions = None
     bayesloc_path = [
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_01b',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_02',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_03',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_04',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_05',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_06',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_07',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_08b',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_09',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_10b',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_11',
-        '../Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_12d',
-        '../Relocation/Bayesloc/Ridge_INTEU_09b_continental',
+        '~/Documents2/Ridge/Relocation/Bayesloc/Ridge_INTEU_09a_oceanic_04',
+        '~/Documents2/Ridge/Relocation/Bayesloc/Ridge_INTEU_09b_continental',
         ]
 
 
@@ -128,9 +108,7 @@ if __name__ == "__main__":
 
     working_on_cluster = True
     xcorr_func = 'fmf'
-    if GPUtil.getAvailable():
-        xcorr_func = 'fmf'
-    seisan_rea_path = '../Seisan/INTEU'
+    seisan_rea_path = 'Seisan/INTEU'
     archive_path = '/cluster/shared/NNSN/SLARCHIVE'
     if not os.path.exists(archive_path):
         archive_path = '/data/seismo-wav/SLARCHIVE'
@@ -175,8 +153,7 @@ if __name__ == "__main__":
             )
         Logger.info('Updating catalog from bayesloc solutions')
         catalog = update_cat_from_bayesloc(
-            catalog, bayesloc_event_solutions,
-            custom_epoch=custom_epoch)
+            catalog, bayesloc_event_solutions, custom_epoch=custom_epoch)
 
     # Define time range based on parallel execution in Slurm array job
     task_id = None
@@ -197,15 +174,20 @@ if __name__ == "__main__":
             sfile_chunk += [sfile for sfile in sfiles
                             if sfile[-6:] + sfile[-19:-17] == uniq_day]
         sfiles = sfile_chunk
-        Logger.info('This is SLURM array task %s (task count: %s) for a chunk '
-                    'of %s events / files.', str(SLURM_ARRAY_TASK_ID),
-                    str(SLURM_ARRAY_TASK_COUNT), len(sfiles))
+        Logger.info(
+            'This is SLURM array task %s (task count: %s) for a chunk of %s '
+            'events / files.', str(SLURM_ARRAY_TASK_ID),
+            str(SLURM_ARRAY_TASK_COUNT), len(sfiles))
         if len(sfiles) == 0:
             Logger.info('No sfiles in chunk, quitting template creation job')
             quit()
     except Exception as e:
         Logger.info('This is not a SLURM array task.')
         pass
+    Logger.info(
+        'This task will run with %s parallel workers, with up to %s '
+        'threads each, on %s cores in total', cores, n_threads,
+        total_cores)
 
 
     # %% make templates
@@ -232,7 +214,8 @@ if __name__ == "__main__":
         lowcut=lowcut, highcut=highcut, min_snr=min_snr, prepick=prepick,
         samp_rate=samp_rate, min_n_traces=min_n_traces,
         seisan_wav_path=seisan_wav_path, inv=inv, clients=clients,
-        remove_response=remove_response, noise_balancing=noise_balancing,
+        remove_response=remove_response, output='DISP',
+        noise_balancing=noise_balancing, ignore_bad_data=True,
         balance_power_coefficient=balance_power_coefficient,
         apply_agc=apply_agc, make_pretty_plot=False, normalize_NSLC=True,
         parallel=parallel, cores=cores, thread_parallel=thread_parallel,

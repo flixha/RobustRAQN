@@ -42,7 +42,7 @@ In a conda environment:
 Some functionality may require EQcorrscan's `master ` branch, and some considerable speedups (e.g., for response correction) are not yet merged into obspy's master branch.
 
 If you want to process large datasets, consider the following packages for accelerated cross-correlation calculation:
-- [fast_matched_filter(]https://github.com/beridel/fast_matched_filter) for GPU-accelerated correlations on Nvidia / CUDA-supported hardware
+- [fast_matched_filter](https://github.com/beridel/fast_matched_filter) for GPU-accelerated correlations on Nvidia / CUDA-supported hardware
 - [fmf2](https://github.com/nordmoen/fmf2) for CPU-accelarated correlations on CPUs with AVX2/AVX512 support, and for GPU-accelerated correlations on systems with a [hipSYCL compiler](https://github.com/illuhad/hipSYCL) (e.g., Nvidia, AMD, or Intel GPUs)
 
 

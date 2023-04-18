@@ -30,7 +30,7 @@ from obspy.core import Stream
 from obspy.core.inventory import Inventory
 
 # import robustraqn
-from robustraqn.obspy.core.trace import Trace
+from robustraqn.obspy.core.trace import (Trace, try_remove_response)
 # from robustraqn.obspy.core.threecomp_stream import Stream
 import robustraqn.core.seismic_array as seismic_array
 import robustraqn.core.load_events as load_events
@@ -1257,8 +1257,8 @@ def try_remove_responses(
             cores = min(len(self), cpu_count())
         with threadpool_limits(limits=n_threads, user_api='blas'):
             streams = Parallel(n_jobs=cores)(
-                delayed(tr.try_remove_response)
-                (inventory.select(station=tr.stats.station),
+                delayed(try_remove_response)
+                (tr, inventory.select(station=tr.stats.station),
                  taper_fraction, pre_filt, output, gain_traces=gain_traces,
                  water_level=water_level)
                 for tr in self)

@@ -59,10 +59,6 @@ from robustraqn.obspy.clients.filesystem.sds import Client
 from timeit import default_timer
 import logging
 Logger = logging.getLogger(__name__)
-logging.basicConfig(
-   level=logging.INFO,
-   format="%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s")
-
 
 MY_ENV = os.environ.copy()
 MY_ENV["SEISAN_TOP"] = '/home/felix/Software/SEISANrick'
@@ -86,6 +82,13 @@ def _read_nordic(sfile, unused_kwargs=True, **kwargs):
     """
     Logger.info('Reading sfile %s', sfile)
     select = read_nordic(sfile, unused_kwargs=unused_kwargs, **kwargs)
+    event = select[0]
+    sfile_name = os.path.normpath(sfile).split(os.path.sep)[-1]
+    event.comments.append(Comment(text='Sfile-name: ' + sfile_name))
+    if not hasattr(event, 'extra'):
+        event.extra = AttribDict()
+    event.extra.update(
+        {'sfile_name': {'value': sfile_name, 'namespace': 'Seisan'}})
     return select
 
 
@@ -140,11 +143,11 @@ def read_seisan_database(database_path, cores=1, nordic_format='UKN',
         sfile, nordic_format=nordic_format) for sfile in sfiles)
     cat = Catalog([cat[0] for cat in cats if cat])
     for event, sfile in zip(cat, sfiles):
-        event.comments.append(Comment(text='Sfile-name: ' + sfile))
-        if not hasattr(event, 'extra'):
-            event.extra = AttribDict()
-        event.extra.update(
-            {'sfile_name': {'value': sfile, 'namespace': 'Seisan'}})
+        # event.comments.append(Comment(text='Sfile-name: ' + sfile))
+        # if not hasattr(event, 'extra'):
+        #     event.extra = AttribDict()
+        # event.extra.update(
+        #     {'sfile_name': {'value': sfile, 'namespace': 'Seisan'}})
 
         if check_resource_ids:
             attach_all_resource_ids(event)
@@ -173,10 +176,13 @@ def load_event_stream(
     :type sfile: str
     :param sfile:
         Path to Nordic event file from which to load event / waveform path.
-    :type seisan_wav_path
-    
-    :type selected_stations
-    
+    :type seisan_wav_path: str
+    :param seisan_wav_path:
+        Path to Seisan WAV ROOT folder, or the folder containing the waveform
+        files.
+    :type selected_stations: list of str
+    :param selected_stations:
+        list of selected stations for which traces should be retained
     :type clients: list of :class:`obspy.clients`
     :param clients:
     :type st: :class:`obspy.core.stream.Stream`

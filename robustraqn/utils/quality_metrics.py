@@ -27,7 +27,6 @@ from timeit import default_timer
 
 from obspy.core.stream import Stream
 from obspy import UTCDateTime
-from obspy.io.mseed import InternalMSEEDError
 
 from eqcorrscan.utils.correlate import pool_boy
 

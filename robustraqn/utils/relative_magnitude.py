@@ -54,9 +54,9 @@ def _remove_uncorrected_traces(stream=Stream()):
                 remove_traces.append(trace)
         # TODO: remove this temporary solution once proper read/write of trace
         #       processing has been implemented
-        if (hasattr(tr.stats, 'extra')
-                and 'response_removed' in tr.stats.extra.keys()
-                and tr.stats.extra['response_removed'] is True):
+        if (hasattr(trace.stats, 'extra')
+                and 'response_removed' in trace.stats.extra.keys()
+                and trace.stats.extra['response_removed'] is True):
             remove_traces.append(trace)
     for rm_trace in remove_traces:
         Logger.debug(
@@ -82,11 +82,19 @@ def compute_relative_event_magnitude(
         use_s_picks=True, correlations=None, absolute_values=False, shift=0.35,
         return_correlations=True, correct_mag_bias=False,
         pre_processed=False, remove_response=False, output='DISP',
+        agency_id='EQC', author='RR',
         parallel=False, cores=1, n_threads=1, **kwargs):
     """
     Wrapper to compute relative magnitudes with specific criteria on SNR,
     minimum number of amplitude measurements etc.
     """
+    if output != 'DISP':
+        # Warn user in case the traces are not in displacement
+        Logger.warning(
+            'Output is not DISP, but %s. Local amplitude-based magnitudes are'
+            ' usually computed from displacement traces. Are you sure you want'
+            ' to use %s-traces?', output, output)
+
     if detection is None and detected_event is None:
         msg = ("Detection and detected event cannot both be unknown when " +
                " computig relative magnitude.")
@@ -170,7 +178,7 @@ def compute_relative_event_magnitude(
 
     # templ2 = tribe_detected.select(template_name2)
     Logger.debug('Event %s: found matching template', j_ev)
-    if len(day_st) > 0:
+    if day_st is not None and len(day_st) > 0:
         detection_st = day_st
     elif hasattr(detection, "st"):
         detection_st = detection.st
@@ -291,6 +299,8 @@ def compute_relative_event_magnitude(
     # Add station magnitudes
     sta_contrib = []
     amp_contrib = []
+    creation_info = CreationInfo(
+        agency_id=agency_id, author=author, creation_time=UTCDateTime())
     for seed_id, _delta_mag in delta_mag_corr.items():
         if np.isnan(prev_mag) or np.isnan(_delta_mag):
             continue
@@ -302,11 +312,13 @@ def compute_relative_event_magnitude(
         for pick_id in pick_ids:
             amp = Amplitude(pick_id=pick_id, type='Arel',
                             generic_amplitude=rel_amp, unit='dimensionless',
+                            period=None,
                             waveform_id=WaveformStreamID(seed_string=seed_id),
                             magnitude_hint='MR')
             amp_contrib.append(amp)
         if len(pick_ids) == 0:
             amp = Amplitude(generic_amplitude=rel_amp, unit='dimensionless',
+                            period=None,
                             waveform_id=WaveformStreamID(seed_string=seed_id),
                             type='Arel', magnitude_hint='MR')
             amp_contrib.append(amp)
@@ -319,11 +331,7 @@ def compute_relative_event_magnitude(
             mag_errors=QuantityError(uncertainty=station_mag_residual),
             method_id=ResourceIdentifier("relative"),
             waveform_id=WaveformStreamID(seed_string=seed_id),
-            creation_info=CreationInfo(
-                # agency_id='BER',
-                agency_id='eqcorrscan.core.lag_calc',
-                author="EQcorrscan",
-                creation_time=UTCDateTime()))
+            creation_info=creation_info)
         detected_event.station_magnitudes.append(sta_mag)
         sta_contrib.append(StationMagnitudeContribution(
             station_magnitude_id=sta_mag.resource_id,
@@ -351,9 +359,7 @@ def compute_relative_event_magnitude(
                 station_count=len(delta_mag),
                 evaluation_mode=EvaluationMode('automatic'),
                 station_magnitude_contributions=sta_contrib,
-                creation_info=CreationInfo(
-                    agency_id='EQC', author="EQcorrscan",
-                    creation_time=UTCDateTime())))
+                creation_info=creation_info))
         Logger.info(
             'Event no. %s, %s: added median magnitude %.3f for %s station '
             'magnitudes.', j_ev, detected_event.short_str(),
@@ -383,7 +389,7 @@ def compute_relative_event_magnitude(
                   ', n: {n: 4d}').format(
                       prev_mag=prev_mag, mag_str=mag_str, delta_mag=delta_mag,
                       mag_std=mag_std, n=len(delta_mags)),
-                  creation_info=CreationInfo(agency_id='RR', author='RR'))
+                  creation_info=creation_info)
         detected_event.comments.append(mag_comment)
 
     # Write out Nordic files:
@@ -397,7 +403,7 @@ def compute_relative_event_magnitude(
         Logger.debug('Event %s: wrote Nordic file', j_ev)
 
     # Avoid reprocessing full day-stream on next call to relative mag util
-    if len(day_st) > 0:
+    if day_st is not None and len(day_st) > 0:
         pre_processed = True
     else:
         pre_processed = False

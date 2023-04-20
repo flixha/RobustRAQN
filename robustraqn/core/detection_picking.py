@@ -258,6 +258,7 @@ def pick_events_for_day(
         apply_agc=False, agc_window_sec=5, blacklisted_templates=[],
         # Data quality / skip setup
         day_hash_file=None, let_days_overlap=True, minimum_sample_rate=20,
+        skip_days_with_existing_events=False,
         # Seismic Array check setup
         check_array_misdetections=False,
         time_difference_threshold=1, detect_value_allowed_reduction=2.5,
@@ -293,6 +294,24 @@ def pick_events_for_day(
     Day-loop for picker
     """
     current_day_str = date.strftime('%Y-%m-%d')
+
+    # Check if we should just skip this day right away if any events have
+    # already been picked in the same output folder.
+    if skip_days_with_existing_events:
+        if write_to_year_month_folders:
+            sfile_match_path = os.path.join(sfile_path,
+                                            '{:04}'.format(date.year),
+                                            '{:02}'.format(date.month))
+        else:
+            sfile_match_path = sfile_path
+        sfile_match = "{:02}-*.S{:04}{:02}".format(
+            date.day, date.year, date.month)
+        sfiles_match = os.path.join(sfile_match_path, sfile_match)
+        sfiles = glob.glob(sfiles_match)
+        if len(sfiles) > 0:
+            Logger.info('Skipping day %s as %s sfiles already exist in %s',
+                        current_day_str, len(sfiles), sfile_match_path)
+            return None
     # Check if this date has already been processed with the same settings
     # i.e., current date and a settings-based hash exist already in file
     if day_hash_file is not None:

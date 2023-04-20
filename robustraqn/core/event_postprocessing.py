@@ -39,6 +39,34 @@ def add_origins_to_detected_events(
         origin_latitude=None, origin_longitude=None, origin_depth=None):
     """
     Add preliminary origins to all detected events based on the template events
+    This function is designed to add only as little information as needed to
+    the events so that large event / origin objects do not slow down the
+    processing (these objects are particularly expenseive to transmit to and
+    from worker processes).
+
+    :type catalog: :class:`obspy.core.event.Catalog`
+    :param catalog: Catalog of events to add origins to
+    :type party: :class:`eqcorrscan.core.match_filter.party.Party`
+    :param party: Party of detections to use for adding origins
+    :type tribe: :class:`eqcorrscan.core.match_filter.tribe.Tribe`
+    :param tribe: Tribe of templates to use for adding origins to detections
+    :type overwrite_origins: bool
+    :param overwrite_origins: If True, overwrite existing origins
+    :type origin_latitude: float
+    :param origin_latitude:
+        Latitude of origin to use for all events. If None, will use the
+        value from the template event origin.
+    :type origin_longitude: float
+    :param origin_longitude:
+        Longitude of origin to use for all events. If None, will use the
+        value from the template event origin.
+    :type origin_depth: float
+    :param origin_depth:
+        Depth of origin to use for all events. If None, will use the value
+        from the template event origin.
+
+    :return: Catalog of events with origins added
+    :rtype: :class:`obspy.core.event.Catalog`
     """
     catalog = catalog.copy()  # keep input safe
     for event in catalog:
@@ -414,7 +442,8 @@ def postprocess_picked_events(
     wavefiles = None
     if write_waveforms or compute_relative_magnitudes:
         wavefiles, detection_list = extract_stream_for_picked_events(
-            export_catalog, party, template_path, archives, archive_types,
+            export_catalog, party, archives, archive_types,
+            #template_path=template_path
             original_stats_stream=original_stats_stream,
             request_fdsn=request_fdsn, wav_out_dir=sfile_path,
             extract_len=extract_len, det_tribe=det_tribe,
@@ -519,15 +548,70 @@ def postprocess_picked_events(
 
 
 def extract_stream_for_picked_events(
-        catalog, party, template_path, archives, archive_types,
+        catalog, party, archives, archive_types, # template_path='',
         original_stats_stream=Stream(), det_tribe=Tribe(),
         request_fdsn=False, wav_out_dir='.', write_waveforms=False,
         write_to_year_month_folders=False, extract_len=300,
         all_chans_for_stations=[], sta_translation_file=None,
         only_relevant_stations=True, parallel=False, cores=1, **kwargs):
     """
-    Extracts a stream object with all channels from the SDS-archive.
-    Allows the input of multiple archives as a list
+    Extracts a stream object with all channels for each detection from multiple
+    archives. The stream is then written to a file in the specified directory.
+    Function offers several options for the choice of relevant traces /stations
+    and requesting extra data from FDSN webservice.
+
+    :type catalog: :class:`~obspy.core.event.Catalog`
+    :param catalog:
+        Catalog containing the events to extract the waveforms for.
+    :type party: :class:`~eqcorrscan.core.match_filter.party.Party`
+    :param party:
+        Party that contains the detections associated with the output events
+        to extract waveforms for. Can contain other families / detections as
+        well, these will be ignored.
+    :type archives: list
+    :param archives: List of archive paths to extract data from.
+    :type archive_types: list
+    :param archive_types:
+        List of archive types, must be the same length as archives. Options are
+        'SDS' (other can be extended easily in code, please submit development
+        request).
+    :type original_stats_stream: :class:`~obspy.core.stream.Stream`
+    :param original_stats_stream:
+        Stream containing the traces with the original trace stats (i.e., no
+        networks / stations / channels renamed). This can be supplied to make
+        sure that the output picks correspond with the archived data.
+    :type det_tribe: :class:`~eqcorrscan.core.tribe.Tribe`
+    :param det_tribe: Tribe containing the detection templates.
+    :type request_fdsn: bool
+    :param request_fdsn: If True, will request data from FDSN webservices.
+    :type wav_out_dir: str
+    :param wav_out_dir: Directory to write the waveform files to.
+    :type write_waveforms: bool
+    :param write_waveforms: If True, will write the waveforms to disk.
+    :type write_to_year_month_folders: bool
+    :param write_to_year_month_folders:
+        If True, will write the waveforms to a Seisan-style year/month folder
+        structure.
+    :type extract_len: float
+    :param extract_len:
+        Length of data to extract around the detection time in seconds.
+    :type all_chans_for_stations: list
+    :param all_chans_for_stations:
+        List of stations to extract all channels for.  If this is not supplied,
+        only the channels that were used in the detection will be extracted.
+    :type sta_translation_file: str
+    :param sta_translation_file: Path to a station translation file.
+    :type only_relevant_stations: bool
+    :param only_relevant_stations:
+        If True, will only extract data for stations that are relevant to the
+        event (e.g., stations that have picks for template or detection).
+    :type parallel: bool
+    :param parallel: If True, will request data in parallel.
+    :type cores: int
+    :param cores: Number of cores to use for parallel requests.
+
+    :returns: :class:`~obspy.core.stream.Stream`
+    :return: Stream containing all traces for each detection.
     """
     detection_list = list()
     templ_list = []
@@ -545,12 +629,13 @@ def extract_stream_for_picked_events(
         # Find stream of detection template - can be loaded from tribe or files
         if len(det_tribe) > 0:
             try:
-                templ_tuple = [
-                    (family.template, det_tribe.select(family.template.name).st)]
+                templ_tuple = [(family.template,
+                                det_tribe.select(family.template.name).st)]
                 templ_list += templ_tuple
             except (AttributeError, IndexError):
-                Logger.error('Could not find template %s for related detection',
-                            family.template.name)
+                Logger.error(
+                    'Could not find template %s for related detection',
+                    family.template.name)
                 template_names = [templ.name for templ in det_tribe]
                 template_name_match = difflib.get_close_matches(
                     family.template.name, template_names)
@@ -559,8 +644,8 @@ def extract_stream_for_picked_events(
                 Logger.warning(
                     'Found template with name %s, using instead of %s',
                     template_name_match, family.template.name)
-                templ_tuple = [
-                    (family.template, det_tribe.select(template_name_match).st)]
+                templ_tuple = [(family.template,
+                                det_tribe.select(template_name_match).st)]
                 templ_list += templ_tuple
         else:
             try:
@@ -570,8 +655,8 @@ def extract_stream_for_picked_events(
                 templ_list += templ_tuple
             except FileNotFoundError:
                 Logger.error(
-                    'Cannot access stream for detection template with name %s, ' +
-                    'during picking', family.template.name)
+                    'Cannot access stream for detection template with name '
+                    '%s, during picking', family.template.name)
                 return
 
     additional_stachans = list()
@@ -670,17 +755,17 @@ def replace_templates_for_picking(party, tribe, set_sample_rate=100.0):
     replace the old templates in the detection-families with those for
     picking (these contain more channels)
 
-    :param party: _description_
-    :type party: _type_
-    :param tribe: _description_
-    :type tribe: _type_
-    :param set_sample_rate: _description_, defaults to 100.0
-    :type set_sample_rate: float, optional
-    :return: _description_
-    :rtype: _type_
+    :type party: :class:`eqcorrscan.core.match_filter.Party`
+    :param party: The detection party to replace the templates in
+    :type tribe: :class:`eqcorrscan.core.tribe.Tribe`
+    :param tribe:
+        The tribe containing the templates for picking (will be used to replace
+        detection-templates with).
+    :type set_sample_rate: float
+    :param set_sample_rate:
+        The sample rate to set the picking-templates to. (Can be used to 
+        obtain higher-resolution picks without extra resampling)
     """
-    
-
     for family in party.families:
         family.template.samp_rate = set_sample_rate
         for newtemplate in tribe:
@@ -703,6 +788,22 @@ def _check_duplicate_template_channels(
     Check template for duplicate channels (happens when there are P- and
         S-picks on the same channel, or Pn/Pg and Sn/Sg). Then throw away the
         later one for now.
+
+    :type template: :class:`eqcorrscan.core.template.Template`
+    :param template: Template to check for duplicate channels
+    :type all_vert: bool
+    :param all_vert: If True, all vertical channels will be kept
+    :type all_horiz: bool
+    :param all_horiz: If True, all horizontal channels will be kept
+    :type vertical_chans: list
+    :param vertical_chans:
+        List of channels to be considered vertical (user may want to add
+        special channels other than Z, e.g. pressure channel from OBS)
+    :type horizontal_chans: list
+    :param horizontal_chans: List of channels to be considered horizontal
+
+    :return: :class:`eqcorrscan.core.template.Template`
+    :return: Template with duplicate channels removed
     """
     # Keep only the earliest trace for traces with same ID
     temp_st_new = Stream()
@@ -777,6 +878,22 @@ def check_duplicate_template_channels(
     Check templates for duplicate channels (happens when there are P- and
         S-picks on the same channel, or Pn/Pg and Sn/Sg). Then throw away the
         later one for now.
+    
+    :type tribe: :class:`eqcorrscan.core.match_filter.tribe.Tribe`
+    :param tribe: Tribe to check for duplicate channels
+    :type all_vert: bool
+    :param all_vert: If True, all vertical channels will be kept
+    :type all_horiz: bool
+    :param all_horiz: If True, all horizontal channels will be kept
+    :type vertical_chans: list
+    :param vertical_chans:
+        List of channels to be considered vertical (user may want to add
+        special channels other than Z, e.g. pressure channel from OBS)
+    :type horizontal_chans: list
+    :param horizontal_chans: List of channels to be considered horizontal
+
+    :return: :class:`eqcorrscan.core.match_filter.tribe.Tribe`
+    :rtype: Tribe with templates that have been checked for duplicate channels
     """
     Logger.info('Checking templates in %s for duplicate channels', tribe)
     if not parallel:

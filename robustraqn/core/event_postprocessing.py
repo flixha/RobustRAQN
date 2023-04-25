@@ -118,13 +118,20 @@ def add_origins_to_detected_events(
                 continue
         orig = Origin()
         approx_time = None
-        if event.picks:
+        # Do not accept picks for the reference station at seismic
+        # arrays here, as there may be no matching trace / template
+        # pick for that reference station.
+        single_station_picks = [
+            pick for pick in event.picks
+            if pick.creation_info and pick.creation_info.agency_id
+            and pick.creation_info.agency_id != 'RR']
+        if single_station_picks:
             # If possible, origin time should be set based on template origin:
             if template_event.picks:
-                pick_times = [pick.time for pick in event.picks]
+                pick_times = [pick.time for pick in single_station_picks]
                 earliest_pick_time = min(pick_times)
                 earliest_pick_index = np.argmin(pick_times)
-                earliest_pick = event.picks[earliest_pick_index]
+                earliest_pick = single_station_picks[earliest_pick_index]
                 ep_sta = earliest_pick.waveform_id.station_code
                 ep_component = earliest_pick.waveform_id.channel_code[-1]
                 matching_template_pick = None
@@ -150,6 +157,8 @@ def add_origins_to_detected_events(
                     else:
                         matching_template_pick = None
                 else:  # Select only match in list
+                    # Sort picks, use earliest if somehow there are multiple
+                    matching_template_pick_list.sort(key = lambda x: x.time)
                     matching_template_pick = matching_template_pick_list[0]
                 if matching_template_pick:
                     shortest_traveltime = (
@@ -164,7 +173,6 @@ def add_origins_to_detected_events(
         orig.longitude = template_orig.longitude or origin_longitude
         orig.latitude = template_orig.latitude or origin_latitude
         orig.depth = template_orig.depth or origin_depth
-        # day_st.slice(dt, dt + 5)
         if overwrite_origins:
             event.origins = [orig]
         else:

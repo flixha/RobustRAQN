@@ -92,9 +92,9 @@ def _read_nordic(sfile, unused_kwargs=True, **kwargs):
     return select
 
 
-def read_seisan_database(database_path, cores=1, nordic_format='UKN',
-                         starttime=None, endtime=None,
-                         check_resource_ids=True):
+def read_seisan_database(database_path, nordic_format='UKN',
+                         starttime=None, endtime=None, check_resource_ids=True,
+                         cores=1):
     """
     Reads all S-files in Seisan database, which can be either a folder
     containing all Sfiles or a YYYY/MM/Sfiles-structure.
@@ -139,6 +139,7 @@ def read_seisan_database(database_path, cores=1, nordic_format='UKN',
     else:
         sfiles = gsfiles
 
+    Logger.info('Reading %i S-files from database', len(sfiles))
     cats = Parallel(n_jobs=cores)(delayed(_read_nordic)(
         sfile, nordic_format=nordic_format) for sfile in sfiles)
     cat = Catalog([cat[0] for cat in cats if cat])

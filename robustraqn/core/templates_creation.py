@@ -720,7 +720,11 @@ def _create_template_objects(
                         # Try a reduction factor of 1 / sqrt(n_sites)
                         sfact = 1 / np.sqrt(n_station_sites)
                         tr.stats.extra.station_weight_factor = sfact
-                        tr.stats.extra.weight = (tr.stats.extra.weight * sfact)
+                        if not hasattr(tr.stats, 'extra'):
+                            tr.stats.extra = AttribDict()
+                        if hasattr(tr.stats.extra, 'weight'):
+                            tr_cut.stats.extra.update(
+                                {'weight': tr.stats.extra.weight * sfact})
 
         # templ_name = str(event.origins[0].time) + '_' + 'templ'
         orig = event.preferred_origin() or event.origins[0]

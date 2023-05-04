@@ -259,7 +259,7 @@ def pick_events_for_day(
         apply_agc=False, agc_window_sec=5, blacklisted_templates=[],
         # Data quality / skip setup
         day_hash_file=None, let_days_overlap=True, minimum_sample_rate=20,
-        skip_days_with_existing_events=False,
+        skip_days_with_existing_events=False, ignore_bad_data=True,
         # Seismic Array check setup
         check_array_misdetections=False,
         time_difference_threshold=1, detect_value_allowed_reduction=2.5,
@@ -577,7 +577,8 @@ def pick_events_for_day(
                 re_eval_thresh_factor=re_eval_thresh_factor,
                 overlap='calculate', plotDir='ReDetectionPlots',
                 plot=plot, multiplot=multiplot, fill_gaps=True,
-                ignore_bad_data=True, daylong=daylong, ignore_length=True,
+                ignore_bad_data=ignore_bad_data, daylong=daylong,
+                ignore_length=True,
                 min_chans=min_det_chans, pre_processed=pre_processed,
                 parallel_process=parallel, cores=cores,
                 xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,
@@ -595,7 +596,8 @@ def pick_events_for_day(
                 re_eval_thresh_factor=re_eval_thresh_factor*0.9,
                 overlap='calculate', plotDir='ReDetectionPlots',
                 plot=plot, multiplot=multiplot, fill_gaps=True,
-                ignore_bad_data=True, daylong=daylong, ignore_length=True,
+                ignore_bad_data=ignore_bad_data, daylong=daylong,
+                ignore_length=True,
                 min_chans=min_det_chans, pre_processed=pre_processed,
                 parallel_process=parallel, cores=cores,
                 xcorr_func=xcorr_func, arch=arch, concurrency=concurrency,

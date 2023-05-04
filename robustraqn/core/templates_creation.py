@@ -21,7 +21,7 @@ import pandas as pd
 from timeit import default_timer
 import numpy as np
 
-from obspy.core.event import Catalog
+from obspy.core.event import Catalog, read_events
 from obspy.core.utcdatetime import UTCDateTime
 from obspy.geodetics.base import gps2dist_azimuth
 from obspy.geodetics import kilometers2degrees, degrees2kilometers
@@ -842,14 +842,15 @@ def _make_date_list(catalog, unique=True, sorted=True):
 
 
 def create_template_objects(
-        sfiles=[], catalog=None, selected_stations=[], template_length=60,
+        sfiles=[], catalog=None, selected_stations=[],
+        event_stations_filter=[], template_length=60,
         lowcut=2.5, highcut=9.9, min_snr=5.0, prepick=0.5, samp_rate=20,
         seisan_wav_path=None, clients=[], inv=Inventory(),
         remove_response=False, output='VEL', noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
         apply_agc=False, agc_window_sec=5,
         min_n_traces=8, write_out=False, write_individual_templates=False,
-        check_template_strict=True,
+        out_folder='TemplateObjects', check_template_strict=True,
         templ_path='Templates', prefix='', make_pretty_plot=False,
         allow_channel_duplication=True, normalize_NSLC=True, ispaq=None,
         add_array_picks=False, add_large_aperture_array_picks=False,
@@ -1061,6 +1062,30 @@ def create_template_objects(
         if not day_stats_list:
             for unique_date_utc in unique_date_list:
                 day_stats_list.append(ispaq)
+        # Check if we can get the selected stations to shorten the inventory
+        # sent to the workers
+        station_match_strs = []
+        Logger.info(
+            'Preparing station match strings for %s events to limit the size '
+            'of the transmitted inventory.', len(event_file_batches))
+        for event_file_batch in event_file_batches:
+            ev_station_fnmatch_str = '*'
+            # If there's only 1 file in batch, retrieve stations; otherwise
+            # it's okay to send the full inventory onwards to the workers.
+            # TODO: create the station match string from the station-list for
+            #       each event, or dataframe to avoid reading each event.
+            # if event_stations_filter:
+            #    event_stations_filter.iloc[1]
+            if len(event_file_batch) == 1:
+                event_file = event_file_batch[0]
+                if isinstance(event_file, str):
+                    event = read_nordic(event_file, **kwargs)[0]
+                elif isinstance(event_file, Event):
+                    event = event_file
+                ev_stations = list(set([pick.waveform_id.station_code
+                                        for pick in event.picks]))
+                ev_station_fnmatch_str = '@(' + '|'.join(ev_stations) + ')'
+            station_match_strs.append(ev_station_fnmatch_str)
 
         Logger.info('Start parallel template creation.')
         # With multiprocessing as backend, this parallel loop seems to be more
@@ -1075,7 +1100,8 @@ def create_template_objects(
                 lowcut=lowcut, highcut=highcut, min_snr=min_snr,
                 prepick=prepick, samp_rate=samp_rate,
                 seisan_wav_path=seisan_wav_path, clients=clients,
-                inv=new_inv.select(time=UTCDateTime(unique_date_list[nbatch])),
+                inv=new_inv.select(time=UTCDateTime(unique_date_list[nbatch]),
+                                   station=station_match_strs[nbatch]),
                 remove_response=remove_response, output=output,
                 noise_balancing=noise_balancing,
                 balance_power_coefficient=balance_power_coefficient,
@@ -1141,6 +1167,7 @@ def create_template_objects(
             thread_parallel=thread_parallel, n_threads=n_threads,
             *args, **kwargs)
 
+    tribe = tribe.sort()
     # Add labels to the output files to indicate changes in processing
     label = ''
     if noise_balancing:
@@ -1150,8 +1177,8 @@ def create_template_objects(
     if task_id is not None:
         label = label + 'chunk_' + "{:02d}".format(task_id) + '_'
     if write_out:
-        tribe_file_name = (
-            'TemplateObjects/' + prefix + 'Templates_min' + str(min_n_traces) +
+        tribe_file_name = os.path.join(
+            out_folder, prefix + 'Templates_min' + str(min_n_traces) +
             'tr_' + label + str(len(tribe)))
         Logger.info('Created %s templates, writing to tribe %s...',
                     len(tribe), tribe_file_name)

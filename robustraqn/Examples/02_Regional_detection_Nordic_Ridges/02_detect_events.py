@@ -90,6 +90,7 @@ if __name__ == "__main__":
     parallel = True
     cores = SLURM_CPUS or 40
     remove_response = True
+    output = 'VEL'
     noise_balancing = True
     make_templates = False
     add_array_picks = True
@@ -250,7 +251,8 @@ if __name__ == "__main__":
         Logger.info('Starting template reading')
         tribe = Tribe().read(
             # 'TemplateObjects/Templates_min13tr_balNoise_agc_14472.tgz',
-			'mohns_cluster_tribe_17_displacement_balanced.tgz',
+            # 'mohns_cluster_tribe_17_displacement_balanced.tgz',
+            'mohns_cluster_tribe.tgz',
             cores=cores)
         Logger.info('Tribe archive readily read in')
 

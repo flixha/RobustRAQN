@@ -214,7 +214,7 @@ if __name__ == "__main__":
         lowcut=lowcut, highcut=highcut, min_snr=min_snr, prepick=prepick,
         samp_rate=samp_rate, min_n_traces=min_n_traces,
         seisan_wav_path=seisan_wav_path, inv=inv, clients=clients,
-        remove_response=remove_response, output='DISP',
+        remove_response=remove_response, output='VEL',
         noise_balancing=noise_balancing, ignore_bad_data=True,
         balance_power_coefficient=balance_power_coefficient,
         apply_agc=apply_agc, make_pretty_plot=False, normalize_NSLC=True,

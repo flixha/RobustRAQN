@@ -585,12 +585,22 @@ def _init_processing_per_channel_w_rotation(
         #     v: k for k, v in trace_id_change_dict.items()}
         # old_tr_id = inv_trace_id_change_dict[tr.id]
 
-        old_tr_id = tr.stats.extra['original_trace_id']
+        try:
+            old_tr_id = tr.stats.extra['original_trace_id']
+        except (AttributeError, KeyError):
+            # If some process removed the extra stat, try to find the masked 
+            # trace with the current trace id
+            old_tr_id = tr.id
+            Logger.warning(
+                'Could not find original trace id for trace %s.', tr)
         # This sometimes causes a KeyError on Saga, but not on Echo:
-        masked_st_tr = masked_st_tr_dict[old_tr_id]
-        if isinstance(masked_st_tr.data, np.ma.MaskedArray):
-            tr.data = np.ma.masked_array(tr.data,
-                                         mask=masked_st_tr.data.mask)
+        try:
+            masked_st_tr = masked_st_tr_dict[old_tr_id]
+            if isinstance(masked_st_tr.data, np.ma.MaskedArray):
+                tr.data = np.ma.masked_array(tr.data,
+                                            mask=masked_st_tr.data.mask)
+        except KeyError:
+            Logger.warning('Could not find a masked trace for trace %s.', tr)
 
     # Downsample if necessary
     if downsampled_max_rate is not None:
@@ -1430,7 +1440,7 @@ def normalize_nslc_codes(self, inv, std_network_code="NS",
 
     # TODO: there is a potential bug here: if a trace with ID NS.BER.00.HHZ
     #       exists, and a 2nd trace is normalized to that same trace id, then
-    #       it is not possible to invert the dictionary because keys would be 
+    #       it is not possible to invert the dictionary because keys would be
     #       duplicated.
     # inv_trace_id_change_dict_1 = {
     #     v: k for k, v in trace_id_change_dict_1.items()}

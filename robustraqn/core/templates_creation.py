@@ -723,7 +723,7 @@ def _create_template_objects(
                         if not hasattr(tr.stats, 'extra'):
                             tr.stats.extra = AttribDict()
                         if hasattr(tr.stats.extra, 'weight'):
-                            tr_cut.stats.extra.update(
+                            tr.stats.extra.update(
                                 {'weight': tr.stats.extra.weight * sfact})
 
         # templ_name = str(event.origins[0].time) + '_' + 'templ'
@@ -1043,7 +1043,7 @@ def create_template_objects(
             raise NotImplementedError(not_cat_or_sfiles_msg)
 
         # Split ispaq-stats into batches if they exist
-        if ispaq is not None:
+        if ispaq is not None and len(ispaq) > 0:
             Logger.info('Preparing quality metrics batches.')
             if ispaq.index.name != 'startday':
                 ispaq['startday'] = ispaq['start'].str[0:10]

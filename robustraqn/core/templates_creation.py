@@ -876,6 +876,13 @@ def create_template_objects(
         not provided
     :type selected_stations: list of str
     :param selected_stations: list of stations to use for template creation
+    :type event_stations_filter: list of str
+    :param event_stations_filter: TBD TODO
+    :type catalog_df: pandas.DataFrame
+    :param catalog_df:
+        Dataframe of catalog with events to use for template creation. If this
+        dataframe is supplied, then starting up the parallel workers can be
+        accellerated considerably.
     :type template_length: float
     :param template_length: length of templates in seconds
     :type lowcut: float

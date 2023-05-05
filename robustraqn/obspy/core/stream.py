@@ -28,6 +28,7 @@ from threadpoolctl import threadpool_limits
 
 from obspy.core import Stream
 from obspy.core.inventory import Inventory
+from obspy.core.util import AttribDict
 
 # import robustraqn
 from robustraqn.obspy.core.trace import (Trace, try_remove_response)
@@ -579,9 +580,13 @@ def _init_processing_per_channel_w_rotation(
     # Put masked array into response-corrected stream st:
     for tr in self:
         # Find the mask that fits to the trace (which may have changed id)
-        inv_trace_id_change_dict = {
-            v: k for k, v in trace_id_change_dict.items()}
-        old_tr_id = inv_trace_id_change_dict[tr.id]
+        # PROBLEM: This dict is not invertable due to possible duplicate keys!
+        # inv_trace_id_change_dict = {
+        #     v: k for k, v in trace_id_change_dict.items()}
+        # old_tr_id = inv_trace_id_change_dict[tr.id]
+
+        old_tr_id = tr.stats.extra['original_trace_id']
+        # This sometimes causes a KeyError on Saga, but not on Echo:
         masked_st_tr = masked_st_tr_dict[old_tr_id]
         if isinstance(masked_st_tr.data, np.ma.MaskedArray):
             tr.data = np.ma.masked_array(tr.data,
@@ -1366,7 +1371,11 @@ def normalize_nslc_codes(self, inv, std_network_code="NS",
                     'Cannot rename channel of trace %s to %s because there is '
                     'already a trace with id %s', tr.id, target_channel,
                     existing_sta_chans[0])
+        # Use the number of sampled in the trace as an extra identifier
         trace_id_change_dict_1[old_tr_id] = tr.id
+        if not hasattr(tr.stats, 'extra'):
+            tr.stats.extra = AttribDict()
+        tr.stats.extra.update({'original_trace_id': old_tr_id})
     if rotate:
         if not inv:
             Logger.error(
@@ -1418,18 +1427,30 @@ def normalize_nslc_codes(self, inv, std_network_code="NS",
     # original_trace_ids <--> intermed_trace_ids: not in same order
     # intermed_trace_ids <--> updated_trace_ids: are in same order
     # Reverse dictionary of changes from the first round of id-changes
-    inv_trace_id_change_dict_1 = {
-        v: k for k, v in trace_id_change_dict_1.items()}
-    original_trace_ids_new_order = []
-    for tr_id in intermed_trace_ids:
-        old_tr_id = inv_trace_id_change_dict_1[tr_id]
-        original_trace_ids_new_order.append(old_tr_id)
-    # Create the dict that contains the original IDs and the corresponding
-    # updated IDs.
+
+    # TODO: there is a potential bug here: if a trace with ID NS.BER.00.HHZ
+    #       exists, and a 2nd trace is normalized to that same trace id, then
+    #       it is not possible to invert the dictionary because keys would be 
+    #       duplicated.
+    # inv_trace_id_change_dict_1 = {
+    #     v: k for k, v in trace_id_change_dict_1.items()}
+
+    # original_trace_ids_new_order = []
+    # for tr_id in intermed_trace_ids:
+    #     old_tr_id = inv_trace_id_change_dict_1[tr_id]
+    #     original_trace_ids_new_order.append(old_tr_id)
+    # # Create the dict that contains the original IDs and the corresponding
+    # # updated IDs.
+    # trace_id_change_dict = dict()
+    # for tr_id_old, tr_id_new in zip(original_trace_ids_new_order,
+    #                                 updated_trace_ids):
+    #     trace_id_change_dict[tr_id_old] = tr_id_new
+
+    # Create a dictionary that contains the original trace IDs and the updated
+    # trace IDS from the metadata stored in trace.stats.extra
     trace_id_change_dict = dict()
-    for tr_id_old, tr_id_new in zip(original_trace_ids_new_order,
-                                    updated_trace_ids):
-        trace_id_change_dict[tr_id_old] = tr_id_new
+    for tr in self:
+        trace_id_change_dict[tr.stats.extra.original_trace_id] = tr.id
 
     return self, trace_id_change_dict
 

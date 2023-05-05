@@ -847,7 +847,7 @@ def _make_date_list(catalog, unique=True, sorted=True):
 
 def create_template_objects(
         sfiles=[], catalog=None, selected_stations=[],
-        event_stations_filter=[], template_length=60,
+        event_stations_filter=[], catalog_df=None, template_length=60,
         lowcut=2.5, highcut=9.9, min_snr=5.0, prepick=0.5, samp_rate=20,
         seisan_wav_path=None, clients=[], inv=Inventory(),
         remove_response=False, output='VEL', noise_balancing=False,
@@ -1072,6 +1072,9 @@ def create_template_objects(
         Logger.info(
             'Preparing station match strings for %s events to limit the size '
             'of the transmitted inventory.', len(event_file_batches))
+        # Make 'sfile' the index of the catalog_df for faster lookups
+        if catalog_df is not None and len(catalog_df) > 0:
+            catalog_df.set_index(['sfile'], inplace=True)
         for event_file_batch in event_file_batches:
             ev_station_fnmatch_str = '*'
             # If there's only 1 file in batch, retrieve stations; otherwise
@@ -1080,14 +1083,28 @@ def create_template_objects(
             #       each event, or dataframe to avoid reading each event.
             # if event_stations_filter:
             #    event_stations_filter.iloc[1]
+            ev_stations = []
             if len(event_file_batch) == 1:
                 event_file = event_file_batch[0]
                 if isinstance(event_file, str):
-                    event = read_nordic(event_file, **kwargs)[0]
+                    # Quickest way to get stations is from catalog dataframe
+                    if catalog_df is not None:
+                        # Get only the filename without the path
+                        event_file_name = os.path.split(event_file)[-1]
+                        # 'sfile' is the index, gives quick lookup
+                        event_df = catalog_df.loc[event_file_name]
+                        ev_stations = list(event_df.stations)
+                    else:
+                        # If no catalog dataframe is available, check whether
+                        # to read the event from a file
+                        event = read_nordic(event_file, **kwargs)[0]
+                        ev_stations = list(set([pick.waveform_id.station_code
+                                                for pick in event.picks]))
                 elif isinstance(event_file, Event):
+                    # 3rd alt: event is already an obspy Event object
                     event = event_file
-                ev_stations = list(set([pick.waveform_id.station_code
-                                        for pick in event.picks]))
+                    ev_stations = list(set([pick.waveform_id.station_code
+                                            for pick in event.picks]))
                 ev_station_fnmatch_str = '@(' + '|'.join(ev_stations) + ')'
             station_match_strs.append(ev_station_fnmatch_str)
 

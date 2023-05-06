@@ -89,7 +89,8 @@ def _shorten_tribe_streams(
         tribe, trace_offset=0, tribe_len_pct=0.2, max_tribe_len=None,
         min_n_traces=0, write_out=False, make_pretty_plot=False,
         prefix='short', noise_balancing=False, apply_agc=False,
-        write_individual_templates=False, check_len_strict=True):
+        write_individual_templates=False, check_len_strict=True,
+        inplace=False):
     """Create shorter templates from a tribe of longer templates
 
     :param tribe: Tribe with long templates
@@ -142,7 +143,10 @@ def _shorten_tribe_streams(
     else:
         new_templ_len = max_tribe_len
 
-    short_tribe = _quick_tribe_copy(tribe)
+    if inplace:  # Overwrite instead of copy
+        short_tribe = tribe
+    else:  # Make a copy
+        short_tribe = _quick_tribe_copy(tribe)
     for templ in short_tribe:
         templ.trace_offset = trace_offset
         for tr in templ.st:

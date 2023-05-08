@@ -1,6 +1,50 @@
 
+import logging
+from collections import defaultdict, namedtuple
 
 from eqcorrscan.core.match_filter.template import Template
+
+Logger = logging.getLogger(__name__)
+
+
+def remove_multiple_phase_picks(self, full_phase_hint=False):
+    """
+    Remove multiple phase picks (e.g., 2 P picks on the same channel) from
+    the template's event.
+    """
+    SeedPickID = namedtuple("SeedPickID", ["seed_id", "phase_hint"])
+    event = self.event
+    new_picks = []
+    seed_pick_ids = {
+        SeedPickID(pick.waveform_id.get_seed_string(), (
+            pick.phase_hint if full_phase_hint else pick.phase_hint[0]))
+        for pick in event.picks if pick.phase_hint.startswith(("P", "S"))}
+    seed_pick_id_dict = defaultdict(list)
+    for seed_pick_id in seed_pick_ids:
+        for pick in event.picks:
+            if pick.waveform_id.get_seed_string() == seed_pick_id.seed_id:
+                seed_pick_id_dict[seed_pick_id.seed_id].append(pick)
+    for seed_pick_id in seed_pick_ids:
+        # Retrive relevant picks from dict
+        pick = [pick for pick in seed_pick_id_dict[seed_pick_id.seed_id]
+                if (pick.phase_hint if full_phase_hint
+                    else pick.phase_hint[0]) == seed_pick_id.phase_hint]
+        if len(pick) > 1 and Logger.level == "DEBUG":
+            Logger.warning(
+                "Multiple picks for {seed_id}, phase-hint {phase_hint}, using "
+                "the earliest".format(
+                    seed_id=seed_pick_id.seed_id,
+                    phase_hint=seed_pick_id.phase_hint))
+            pick = sorted(pick, key=lambda p: p.time)
+        if len(pick) > 0:
+            new_picks.append(pick[0])
+    if len(new_picks) < len(event.picks):
+        Logger.info(
+            'Removed %s duplicate picks (full_phase_hint=%s) from event %s',
+            len(event.picks) - len(new_picks), full_phase_hint,
+            event.short_str())
+    self.event.picks = new_picks
+    return self
 
 
 def check_template(self, template_length, remove_nan_strict=True,
@@ -85,3 +129,4 @@ def check_template(self, template_length, remove_nan_strict=True,
 
 
 Template.check_template = check_template
+Template.remove_multiple_phase_picks = remove_multiple_phase_picks

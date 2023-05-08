@@ -273,12 +273,22 @@ def run_day_detection(
         write_party=False, detection_path='Detections', redetection_path=None,
         copy_data=True,
         return_stream=False, dump_stream_to_disk=False, day_hash_file=None,
+        skip_days_with_existing_events=True,
         multiplot=False,
         **kwargs):
     """
     Main wrapper function to run reading, initial processing, detection etc. on
     one day of data.
     """
+    # Check if party file for current day already exists
+    if skip_days_with_existing_events:
+        detection_file_name = os.path.join(detection_path,
+                                           'UniqueDet' + current_day_str)
+        day_party_files = glob.glob(detection_file_name + '.tgz')
+        if len(day_party_files) > 0:
+            Logger.info('Skipping day %s as detection file %s already exists.',
+                        current_day_str, day_party_files[0])
+
     Logger.info('Starting detection run for day %s', str(date)[0:10])
     if (arch == 'precise' or arch == 'CPU' and
             concurrency not in ['multiprocess', 'multithread']):

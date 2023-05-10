@@ -623,6 +623,12 @@ def _init_processing_per_channel_w_rotation(
             '{0:.4f}s'.format(outtoc - outtic), str(len(self)), self[0].id)
     except Exception as e:
         Logger.warning(e)
+    # Remove original_trace_id from extra stats before returning
+    for tr in self:
+        try:
+            tr.stats.extra.pop('original_trace_id')
+        except (AttributeError, KeyError):
+            pass
 
     return self
 

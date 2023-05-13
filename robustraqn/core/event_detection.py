@@ -15,6 +15,7 @@ Created on Sun Jul 16 17:23:45 2017
 
 import os, gc, math, matplotlib
 import warnings
+import glob
 
 import pandas as pd
 from importlib import reload
@@ -280,6 +281,7 @@ def run_day_detection(
     Main wrapper function to run reading, initial processing, detection etc. on
     one day of data.
     """
+    current_day_str = date.strftime('%Y-%m-%d')
     # Check if party file for current day already exists
     if skip_days_with_existing_events:
         detection_file_name = os.path.join(detection_path,
@@ -313,7 +315,6 @@ def run_day_detection(
     starttime_req = starttime - 15 * 60
     endtime = starttime + 60 * 60 * 24
     endtime_req = endtime + 15 * 60
-    current_day_str = date.strftime('%Y-%m-%d')
 
     if not os.path.exists(detection_path):
         os.mkdir(detection_path)

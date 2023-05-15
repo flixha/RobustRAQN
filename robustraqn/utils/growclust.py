@@ -1,12 +1,15 @@
 
 import pandas as pd
 import csv
+import numpy as np
+import datetime
 
 from obspy.core import UTCDateTime
 from obspy.core.event import (
     Catalog, Origin, OriginUncertainty, CreationInfo, QuantityError,
     OriginQuality)
-from obspy.geodetics.base import degrees2kilometers, kilometers2degrees
+from obspy.geodetics.base import (
+    degrees2kilometers, kilometers2degrees, locations2degrees)
 from eqcorrscan.utils.catalog_to_dd import _generate_event_id_mapper
 
 import logging
@@ -168,6 +171,158 @@ def update_tribe_from_gc_file(tribe, gc_cat_file, max_diff_seconds=3):
     return tribe
 
 
+def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
+                               max_diff_seconds=8,
+                               max_reloc_distance_km=50,
+                               return_relocated_events_only=False):
+    """
+    """
+    # full_cat_df_backup = full_cat_df.copy()
+    gc_df = read_gc_cat_to_df(gc_cat_file)
+    gc_df['timestamp'] = pd.to_datetime(
+        gc_df[['year', 'month', 'day', 'hour', 'minute', 'second']])
+    gc_df['datetime'] = pd.to_datetime(gc_df.timestamp)
+    # gc_df['utcdatetime'] = [UTCDateTime(gc_df.datetime.iloc[nr])
+    #                         for nr in range(len(gc_df))]
+
+    n_events = len(full_cat_df)
+    # initialize new columns
+    if 'growclustR' not in full_cat_df.columns:
+        full_cat_df['growclustR'] = np.zeros(n_events, dtype=np.int8)
+    if 'timeR' not in full_cat_df.columns:
+        # full_cat_df['timeR'] = np.array([np.datetime64('NaT')
+        #                                  for j in range(n_events)])
+        full_cat_df['timeR'] =  np.array([pd.NaT for j in range(n_events)])
+    if 'latR' not in full_cat_df.columns:
+        full_cat_df['latR'] = np.nan * np.ones(n_events)
+    if 'lonR' not in full_cat_df.columns:
+        full_cat_df['lonR'] = np.nan * np.ones(n_events)
+    if 'depR' not in full_cat_df.columns:
+        full_cat_df['depR'] = np.nan * np.ones(n_events)
+    if 'qID' not in full_cat_df.columns:
+        full_cat_df['qID'] = np.nan * np.ones(n_events)
+    if 'cID' not in full_cat_df.columns:
+        full_cat_df['cID'] = np.nan * np.ones(n_events)
+    if 'nbranch' not in full_cat_df.columns:
+        full_cat_df['nbranch'] = np.nan * np.ones(n_events)
+    if 'qnpair' not in full_cat_df.columns:
+        full_cat_df['qnpair'] = np.nan * np.ones(n_events)
+    if 'qndiffP' not in full_cat_df.columns:
+        full_cat_df['qndiffP'] = np.nan * np.ones(n_events)
+    if 'qndiffS' not in full_cat_df.columns:
+        full_cat_df['qndiffS'] = np.nan * np.ones(n_events)
+    if 'rmsP' not in full_cat_df.columns:
+        full_cat_df['rmsP'] = np.nan * np.ones(n_events)
+    if 'rmsS' not in full_cat_df.columns:
+        full_cat_df['rmsS'] = np.nan * np.ones(n_events)
+    if 'eh' not in full_cat_df.columns:
+        full_cat_df['eh'] = np.nan * np.ones(n_events)
+    if 'ez' not in full_cat_df.columns:
+        full_cat_df['ez'] = np.nan * np.ones(n_events)
+    if 'et' not in full_cat_df.columns:
+        full_cat_df['et'] = np.nan * np.ones(n_events)
+    if 'latC' not in full_cat_df.columns:
+        full_cat_df['latC'] = np.nan * np.ones(n_events)
+    if 'lonC' not in full_cat_df.columns:
+        full_cat_df['lonC'] = np.nan * np.ones(n_events)
+    if 'depC' not in full_cat_df.columns:
+        full_cat_df['depC'] = np.nan * np.ones(n_events)
+
+    # keep copy of original origin solution
+    if 'otime' not in full_cat_df.columns:
+        full_cat_df['otime'] = full_cat_df['time']
+    if 'olat' not in full_cat_df.columns:
+        full_cat_df['olat'] = full_cat_df['latitude']
+    if 'olon' not in full_cat_df.columns:
+        full_cat_df['olon'] = full_cat_df['longitude']
+    if 'odepth' not in full_cat_df.columns:
+        full_cat_df['odepth'] = full_cat_df['depth']
+
+    # Loop through relocated events, find original event, and update it.
+    for n_row, gc_event in gc_df.iterrows():
+        lower_dtime = (
+            gc_event.datetime - datetime.timedelta(seconds=max_diff_seconds))
+        upper_dtime = (
+            gc_event.datetime + datetime.timedelta(seconds=max_diff_seconds))
+
+        tmp_cat_df = full_cat_df.loc[(full_cat_df.otime > lower_dtime)
+                                     & (full_cat_df.otime < upper_dtime)]
+        if len(tmp_cat_df) == 0:
+            closest_time_diff = np.abs(
+                full_cat_df.otime - gc_event.time).min()
+            Logger.warning(
+                'Could not find matching event within %s s time difference '
+                '(closest: %s s) in catalog for relocated event %s, %s, %s, %s'
+                , max_diff_seconds, closest_time_diff,
+                gc_event.datetime, gc_event.latR, gc_event.lonR, gc_event.depR)
+            continue
+        # Check the distance between the relocated event and the original,
+        # if there are multiple candidates select the one closest in time and
+        # space.
+        # distances = [degrees2kilometers(
+        #     locations2degrees(gc_event.latR, gc_event.lonR,
+        #                       tmp_cat_df.iloc[nr].olat,
+        #                       tmp_cat_df.iloc[nr].olon)
+        #     for nr in range(len(tmp_cat_df)))]
+        nj = len(tmp_cat_df)
+        distances = degrees2kilometers(locations2degrees(
+            np.array([gc_event.latR for j in range(nj)]),
+            np.array([gc_event.lonR for j in range(nj)]),
+            tmp_cat_df.olat, tmp_cat_df.olon))
+        # include depth difference in distance estimate if possible
+        distances = np.array([
+            distance if np.isnan(tmp_cat_df.iloc[nr].odepth)
+            else np.sqrt(distance ** 2 + (
+                gc_event.depR / 1000 - tmp_cat_df.iloc[nr].odepth / 1000) ** 2)
+            for nr, distance in enumerate(distances)])
+        closest_distance_km = min(distances)
+        if min(distances) > max_reloc_distance_km:
+            Logger.warning(
+                'Could not find event within %s s time difference and %s km '
+                'distance (closest: %s km) for relocated event %s, %s, %s, %s'
+                , max_diff_seconds, max_reloc_distance_km, closest_distance_km,
+                gc_event.datetime, gc_event.latR, gc_event.lonR, gc_event.depR)
+            continue
+        tmp_event_index = np.argmin(distances)
+        tmp_event = tmp_cat_df.iloc[tmp_event_index]
+        # Now update the catalog with the relocated event information.
+        if tmp_event.growclustR:
+            Logger.warning(
+                'Event %s, %s, %s, %s already has been assigned a Growclust-'
+                'hypocenter, overwriting it with %s, %s, %s, %s',
+                tmp_event.time, tmp_event.latR, tmp_event.lonR, tmp_event.depR,
+                gc_event.datetime, gc_event.latR, gc_event.lonR, gc_event.depR)
+        tmp_event.growclustR = True
+        tmp_event.timeR = gc_event.datetime
+        tmp_event.latR = gc_event.latR
+        tmp_event.lonR = gc_event.lonR
+        tmp_event.depR = gc_event.depR
+        tmp_event.qID = gc_event.qID
+        tmp_event.cID = gc_event.cID
+        tmp_event.nbranch = gc_event.nbranch
+        tmp_event.qnpair = gc_event.qnpair
+        tmp_event.qndiffP = gc_event.qndiffP
+        tmp_event.qndiffS = gc_event.qndiffS
+        tmp_event.rmsP = gc_event.rmsP
+        tmp_event.rmsS = gc_event.rmsS
+        tmp_event.eh = gc_event.eh
+        tmp_event.ez = gc_event.ez
+        tmp_event.et = gc_event.et
+        tmp_event.latC = gc_event.latC
+        tmp_event.lonC = gc_event.lonC
+        tmp_event.depC = gc_event.depC
+        # update origin in catalog with GC solution
+        tmp_event.time = gc_event.datetime
+        tmp_event.latitude = gc_event.latR
+        tmp_event.longitude = gc_event.lonR
+        tmp_event.depth = gc_event.depR
+
+    if return_relocated_events_only:
+        sel_df = full_cat_df[full_cat_df['growclustR'] == True]
+        return sel_df
+    return full_cat_df
+
+
 def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
     """
     Growclust eh, ez errors are median absolute deviations of the bootstrap
@@ -198,9 +353,12 @@ def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
             (gc_df.datetime > lower_dtime) & (gc_df.datetime < upper_dtime)]
         if len(tmp_cat_df) > 0:
             # Only change relocated events
-            if (tmp_cat_df.eh.iloc[0] != -1 and
-                    tmp_cat_df.ez.iloc[0] != -1 and
-                    tmp_cat_df.et.iloc[0] != -1):
+            if (tmp_cat_df.eh.iloc[0] != -1
+                 and not np.isnan(tmp_cat_df.eh.iloc[0])
+                 and tmp_cat_df.ez.iloc[0] != -1
+                 and not np.isnan(tmp_cat_df.ez.iloc[0])
+                 and tmp_cat_df.et.iloc[0] != -1
+                 and not np.isnan(tmp_cat_df.et.iloc[0])):
                 # gc_orig.latitude = tmp_cat_df.latR.iloc[0]
                 # gc_orig.longitude = tmp_cat_df.lonR.iloc[0]
                 # gc_orig.depth = tmp_cat_df.depR.iloc[0] * 1000

@@ -933,6 +933,8 @@ def create_template_objects(
     :param write_out: whether to write templates to disk
     :type write_individual_templates: bool
     :param write_individual_templates:
+    :type out_folder: str
+    :param out_folder: folder to write templates to
     :type check_template_strict: bool
     :param check_template_strict:
     :type templ_path: str

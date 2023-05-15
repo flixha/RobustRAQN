@@ -140,8 +140,12 @@ def read_seisan_database(database_path, nordic_format='UKN',
         sfiles = gsfiles
 
     Logger.info('Reading %i S-files from database', len(sfiles))
-    cats = Parallel(n_jobs=cores)(delayed(_read_nordic)(
-        sfile, nordic_format=nordic_format) for sfile in sfiles)
+    if cores > 1:
+        cats = Parallel(n_jobs=cores)(delayed(_read_nordic)(
+            sfile, nordic_format=nordic_format) for sfile in sfiles)
+    else:
+        cats = [_read_nordic(sfile, nordic_format=nordic_format)
+                for sfile in sfiles]
     cat = Catalog([cat[0] for cat in cats if cat])
     for event, sfile in zip(cat, sfiles):
         # event.comments.append(Comment(text='Sfile-name: ' + sfile))
@@ -149,7 +153,6 @@ def read_seisan_database(database_path, nordic_format='UKN',
         #     event.extra = AttribDict()
         # event.extra.update(
         #     {'sfile_name': {'value': sfile, 'namespace': 'Seisan'}})
-
         if check_resource_ids:
             attach_all_resource_ids(event)
     # attach_all_resource_ids(cat)

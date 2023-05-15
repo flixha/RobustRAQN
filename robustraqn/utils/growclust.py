@@ -182,6 +182,9 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
     gc_df['timestamp'] = pd.to_datetime(
         gc_df[['year', 'month', 'day', 'hour', 'minute', 'second']])
     gc_df['datetime'] = pd.to_datetime(gc_df.timestamp)
+    # only need to check events that were relocated in Growclust
+    gc_df = gc_df[~np.isnan(gc_df['rmsP'])]
+
     # gc_df['utcdatetime'] = [UTCDateTime(gc_df.datetime.iloc[nr])
     #                         for nr in range(len(gc_df))]
 
@@ -284,6 +287,7 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
                 gc_event.datetime, gc_event.latR, gc_event.lonR, gc_event.depR)
             continue
         tmp_event_index = np.argmin(distances)
+        fc_index = tmp_cat_df.index[tmp_event_index]
         tmp_event = tmp_cat_df.iloc[tmp_event_index]
         # Now update the catalog with the relocated event information.
         if tmp_event.growclustR:
@@ -292,30 +296,30 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
                 'hypocenter, overwriting it with %s, %s, %s, %s',
                 tmp_event.time, tmp_event.latR, tmp_event.lonR, tmp_event.depR,
                 gc_event.datetime, gc_event.latR, gc_event.lonR, gc_event.depR)
-        tmp_event.growclustR = True
-        tmp_event.timeR = gc_event.datetime
-        tmp_event.latR = gc_event.latR
-        tmp_event.lonR = gc_event.lonR
-        tmp_event.depR = gc_event.depR
-        tmp_event.qID = gc_event.qID
-        tmp_event.cID = gc_event.cID
-        tmp_event.nbranch = gc_event.nbranch
-        tmp_event.qnpair = gc_event.qnpair
-        tmp_event.qndiffP = gc_event.qndiffP
-        tmp_event.qndiffS = gc_event.qndiffS
-        tmp_event.rmsP = gc_event.rmsP
-        tmp_event.rmsS = gc_event.rmsS
-        tmp_event.eh = gc_event.eh
-        tmp_event.ez = gc_event.ez
-        tmp_event.et = gc_event.et
-        tmp_event.latC = gc_event.latC
-        tmp_event.lonC = gc_event.lonC
-        tmp_event.depC = gc_event.depC
+        full_cat_df['growclustR'].loc[fc_index] = True
+        full_cat_df['timeR'].loc[fc_index] = gc_event.datetime
+        full_cat_df['latR'].loc[fc_index] = gc_event.latR
+        full_cat_df['lonR'].loc[fc_index] = gc_event.lonR
+        full_cat_df['depR'].loc[fc_index] = gc_event.depR
+        full_cat_df['qID'].loc[fc_index] = gc_event.qID
+        full_cat_df['cID'].loc[fc_index] = gc_event.cID
+        full_cat_df['nbranch'].loc[fc_index] = gc_event.nbranch
+        full_cat_df['qnpair'].loc[fc_index] = gc_event.qnpair
+        full_cat_df['qndiffP'].loc[fc_index] = gc_event.qndiffP
+        full_cat_df['qndiffS'].loc[fc_index] = gc_event.qndiffS
+        full_cat_df['rmsP'].loc[fc_index] = gc_event.rmsP
+        full_cat_df['rmsS'].loc[fc_index] = gc_event.rmsS
+        full_cat_df['eh'].loc[fc_index] = gc_event.eh
+        full_cat_df['ez'].loc[fc_index] = gc_event.ez
+        full_cat_df['et'].loc[fc_index] = gc_event.et
+        full_cat_df['latC'].loc[fc_index] = gc_event.latC
+        full_cat_df['lonC'].loc[fc_index] = gc_event.lonC
+        full_cat_df['depC'].loc[fc_index] = gc_event.depC
         # update origin in catalog with GC solution
-        tmp_event.time = gc_event.datetime
-        tmp_event.latitude = gc_event.latR
-        tmp_event.longitude = gc_event.lonR
-        tmp_event.depth = gc_event.depR
+        full_cat_df['time'].loc[fc_index] = gc_event.datetime
+        full_cat_df['latitude'].loc[fc_index] = gc_event.latR
+        full_cat_df['longitude'].loc[fc_index] = gc_event.lonR
+        full_cat_df['depth'].loc[fc_index] = gc_event.depR
 
     if return_relocated_events_only:
         sel_df = full_cat_df[full_cat_df['growclustR'] == True]

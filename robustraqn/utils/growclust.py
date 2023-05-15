@@ -15,6 +15,9 @@ from eqcorrscan.utils.catalog_to_dd import _generate_event_id_mapper
 import logging
 Logger = logging.getLogger(__name__)
 
+# Silcence pandas warnings for updating rows
+pd.options.mode.chained_assignment = None  # default='warn'
+
 GC_HEADER_LIST = [
         'year', 'month', 'day', 'hour', 'minute', 'second', 'evid', 'latR',
         'lonR', 'depR', 'mag', 'qID', 'cID', 'nbranch', 'qnpair', 'qndiffP',
@@ -252,7 +255,7 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
                                      & (full_cat_df.otime < upper_dtime)]
         if len(tmp_cat_df) == 0:
             closest_time_diff = np.abs(
-                full_cat_df.otime - gc_event.time).min()
+                full_cat_df.otime - gc_event.datetime).min()
             Logger.warning(
                 'Could not find matching event within %s s time difference '
                 '(closest: %s s) in catalog for relocated event %s, %s, %s, %s'

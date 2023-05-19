@@ -173,7 +173,7 @@ def update_tribe_from_gc_file(tribe, gc_cat_file, max_diff_seconds=3):
         tribe[ne].event = event
     return tribe
 
-
+# @profile
 def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
                                max_diff_seconds=8,
                                max_reloc_distance_km=50,
@@ -182,11 +182,20 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
     """
     # full_cat_df_backup = full_cat_df.copy()
     gc_df = read_gc_cat_to_df(gc_cat_file)
+    # Convert depth to meters as is usual in obspy
+    cat_df['depR'] = cat_df.depR * 1000
     gc_df['timestamp'] = pd.to_datetime(
         gc_df[['year', 'month', 'day', 'hour', 'minute', 'second']])
     gc_df['datetime'] = pd.to_datetime(gc_df.timestamp)
     # only need to check events that were relocated in Growclust
     gc_df = gc_df[~np.isnan(gc_df['rmsP'])]
+    
+    # limit full cat to the geographical region of interest
+    full_cat_df = full_cat_df[
+        (full_cat_df['latitude'] > gc_df['latR'].min() - 0.5) &
+        (full_cat_df['latitude'] < gc_df['latR'].max() + 0.5) &
+        (full_cat_df['longitude'] > gc_df['lonR'].min() - 0.5) &
+        (full_cat_df['longitude'] < gc_df['lonR'].max() + 0.5)]
 
     # gc_df['utcdatetime'] = [UTCDateTime(gc_df.datetime.iloc[nr])
     #                         for nr in range(len(gc_df))]
@@ -289,6 +298,7 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
                 , max_diff_seconds, max_reloc_distance_km, closest_distance_km,
                 gc_event.datetime, gc_event.latR, gc_event.lonR, gc_event.depR)
             continue
+        within_bounds_df = tmp_cat_df.loc[distances <= max_reloc_distance_km]
         tmp_event_index = np.argmin(distances)
         fc_index = tmp_cat_df.index[tmp_event_index]
         tmp_event = tmp_cat_df.iloc[tmp_event_index]
@@ -296,33 +306,61 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
         if tmp_event.growclustR:
             Logger.warning(
                 'Event %s, %s, %s, %s already has been assigned a Growclust-'
-                'hypocenter, overwriting it with %s, %s, %s, %s',
+                'hypocenter (%s events within bounds), overwriting it with '
+                '%s, %s, %s, %s',
                 tmp_event.time, tmp_event.latR, tmp_event.lonR, tmp_event.depR,
+                len(within_bounds_df),
                 gc_event.datetime, gc_event.latR, gc_event.lonR, gc_event.depR)
-        full_cat_df['growclustR'].loc[fc_index] = True
-        full_cat_df['timeR'].loc[fc_index] = gc_event.datetime
-        full_cat_df['latR'].loc[fc_index] = gc_event.latR
-        full_cat_df['lonR'].loc[fc_index] = gc_event.lonR
-        full_cat_df['depR'].loc[fc_index] = gc_event.depR
-        full_cat_df['qID'].loc[fc_index] = gc_event.qID
-        full_cat_df['cID'].loc[fc_index] = gc_event.cID
-        full_cat_df['nbranch'].loc[fc_index] = gc_event.nbranch
-        full_cat_df['qnpair'].loc[fc_index] = gc_event.qnpair
-        full_cat_df['qndiffP'].loc[fc_index] = gc_event.qndiffP
-        full_cat_df['qndiffS'].loc[fc_index] = gc_event.qndiffS
-        full_cat_df['rmsP'].loc[fc_index] = gc_event.rmsP
-        full_cat_df['rmsS'].loc[fc_index] = gc_event.rmsS
-        full_cat_df['eh'].loc[fc_index] = gc_event.eh
-        full_cat_df['ez'].loc[fc_index] = gc_event.ez
-        full_cat_df['et'].loc[fc_index] = gc_event.et
-        full_cat_df['latC'].loc[fc_index] = gc_event.latC
-        full_cat_df['lonC'].loc[fc_index] = gc_event.lonC
-        full_cat_df['depC'].loc[fc_index] = gc_event.depC
-        # update origin in catalog with GC solution
-        full_cat_df['time'].loc[fc_index] = gc_event.datetime
-        full_cat_df['latitude'].loc[fc_index] = gc_event.latR
-        full_cat_df['longitude'].loc[fc_index] = gc_event.lonR
-        full_cat_df['depth'].loc[fc_index] = gc_event.depR
+        # Below is a quicker way to assign the new values in a row
+        # full_cat_df['growclustR'].loc[fc_index] = True
+        # full_cat_df['timeR'].loc[fc_index] = gc_event.datetime
+        # full_cat_df['latR'].loc[fc_index] = gc_event.latR
+        # full_cat_df['lonR'].loc[fc_index] = gc_event.lonR
+        # full_cat_df['depR'].loc[fc_index] = gc_event.depR
+        # full_cat_df['qID'].loc[fc_index] = gc_event.qID
+        # full_cat_df['cID'].loc[fc_index] = gc_event.cID
+        # full_cat_df['nbranch'].loc[fc_index] = gc_event.nbranch
+        # full_cat_df['qnpair'].loc[fc_index] = gc_event.qnpair
+        # full_cat_df['qndiffP'].loc[fc_index] = gc_event.qndiffP
+        # full_cat_df['qndiffS'].loc[fc_index] = gc_event.qndiffS
+        # full_cat_df['rmsP'].loc[fc_index] = gc_event.rmsP
+        # full_cat_df['rmsS'].loc[fc_index] = gc_event.rmsS
+        # full_cat_df['eh'].loc[fc_index] = gc_event.eh
+        # full_cat_df['ez'].loc[fc_index] = gc_event.ez
+        # full_cat_df['et'].loc[fc_index] = gc_event.et
+        # full_cat_df['latC'].loc[fc_index] = gc_event.latC
+        # full_cat_df['lonC'].loc[fc_index] = gc_event.lonC
+        # full_cat_df['depC'].loc[fc_index] = gc_event.depC
+        # # update origin in catalog with GC solution
+        # full_cat_df['time'].loc[fc_index] = gc_event.datetime
+        # full_cat_df['latitude'].loc[fc_index] = gc_event.latR
+        # full_cat_df['longitude'].loc[fc_index] = gc_event.lonR
+        # full_cat_df['depth'].loc[fc_index] = gc_event.depR
+
+        full_cat_df.at[fc_index, 'growclustR'] = True
+        full_cat_df.at[fc_index, 'timeR'] = gc_event.datetime
+        full_cat_df.at[fc_index, 'latR'] = gc_event.latR
+        full_cat_df.at[fc_index, 'lonR'] = gc_event.lonR
+        full_cat_df.at[fc_index, 'depR'] = gc_event.depR
+        full_cat_df.at[fc_index, 'qID'] = gc_event.qID
+        full_cat_df.at[fc_index, 'cID'] = gc_event.cID
+        full_cat_df.at[fc_index, 'nbranch'] = gc_event.nbranch
+        full_cat_df.at[fc_index, 'qnpair'] = gc_event.qnpair
+        full_cat_df.at[fc_index, 'qndiffP'] = gc_event.qndiffP
+        full_cat_df.at[fc_index, 'qndiffS'] = gc_event.qndiffS
+        full_cat_df.at[fc_index, 'rmsP'] = gc_event.rmsP
+        full_cat_df.at[fc_index, 'rmsS'] = gc_event.rmsS
+        full_cat_df.at[fc_index, 'eh'] = gc_event.eh
+        full_cat_df.at[fc_index, 'ez'] = gc_event.ez
+        full_cat_df.at[fc_index, 'et'] = gc_event.et
+        full_cat_df.at[fc_index, 'latC'] = gc_event.latC
+        full_cat_df.at[fc_index, 'lonC'] = gc_event.lonC
+        full_cat_df.at[fc_index, 'depC'] = gc_event.depC
+        # update origin in catalog with GC solution 
+        full_cat_df.at[fc_index, 'time'] = gc_event.datetime
+        full_cat_df.at[fc_index, 'latitude'] = gc_event.latR
+        full_cat_df.at[fc_index, 'longitude'] = gc_event.lonR
+        full_cat_df.at[fc_index, 'depth'] = gc_event.depR
 
     if return_relocated_events_only:
         sel_df = full_cat_df[full_cat_df['growclustR'] == True]

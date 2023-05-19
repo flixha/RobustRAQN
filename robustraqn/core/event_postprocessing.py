@@ -123,8 +123,10 @@ def add_origins_to_detected_events(
         # pick for that reference station.
         single_station_picks = [
             pick for pick in event.picks
-            if pick.creation_info and pick.creation_info.agency_id
-            and pick.creation_info.agency_id != 'RR']
+            if pick.creation_info is None
+            or (pick.creation_info and pick.creation_info.agency_id is None)
+            or (pick.creation_info and pick.creation_info.agency_id
+                and pick.creation_info.agency_id != 'RR')]
         if single_station_picks:
             # If possible, origin time should be set based on template origin:
             if template_event.picks:

@@ -183,7 +183,7 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
     # full_cat_df_backup = full_cat_df.copy()
     gc_df = read_gc_cat_to_df(gc_cat_file)
     # Convert depth to meters as is usual in obspy
-    cat_df['depR'] = cat_df.depR * 1000
+    gc_df['depR'] = gc_df.depR * 1000
     gc_df['timestamp'] = pd.to_datetime(
         gc_df[['year', 'month', 'day', 'hour', 'minute', 'second']])
     gc_df['datetime'] = pd.to_datetime(gc_df.timestamp)

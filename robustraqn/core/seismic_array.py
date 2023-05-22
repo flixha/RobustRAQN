@@ -117,6 +117,10 @@ SEISARRAY_REF_STATIONS = {
     for ref_station in REF_STATIONS for seisarray_prefix in SEISARRAY_PREFIXES
     if fnmatch.fnmatch(ref_station, seisarray_prefix, flags=fnmatch.EXTMATCH)}
 
+SEISARRAY_STATIONS = {
+    ref_station: seisarray_prefix
+    for seisarray_prefix, ref_station in SEISARRAY_REF_STATIONS.items()}
+
 # List of array beam points that have the same location as an actual seismic
 # station that is part of the seismic array.
 SEISARRAY_REF_EQUIVALENT_STATIONS = {
@@ -267,7 +271,28 @@ def get_station_sites(stations, seisarray_prefixes=SEISARRAY_PREFIXES):
     return station_sites
 
 
-def get_array_stations_from_df(stations_df=pd.DataFrame(),
+def get_site_stations(sites, seisarray_prefixes=SEISARRAY_PREFIXES):
+    """
+    Return a list of stations sites, i.e., for arrays, return the station
+    names of all stations in the array, while for single stations return the
+    station code.
+    """
+    site_stations = []
+    for site in sites:
+        try:
+            check_prefix = None
+            for seisarray_prefix in seisarray_prefixes:
+                if fnmatch.fnmatch(site, seisarray_prefix,
+                                   flags=fnmatch.EXTMATCH):
+                    check_prefix = seisarray_prefix
+            ref_station = SEISARRAY_REF_STATIONS[check_prefix]
+        except KeyError:
+            ref_station = site
+        site_stations.append(ref_station)
+    return site_stations
+
+
+def get_array_stations_from_df(stations_df=pd.DataFrame(), array_sites=None,
                                seisarray_prefixes=SEISARRAY_PREFIXES):
     # array_list is a list of tuples, with the first tuple element containing
     # the array-prefix and the 2nd tuple element containing a list of stations
@@ -293,6 +318,18 @@ def get_array_stations_from_df(stations_df=pd.DataFrame(),
     single_station_list = stations_df.copy()
     # alternative pattern 'E*K!(O)*' (works only  in wcmatch, not glob)
     # ''E*K[!O]*'
+    # Limit the array sites to the relevant ones or the given array_sites
+    if array_sites is not None:
+        sel_seisarray_prefixes = []
+        # seisarray_prefixes = [SEISARRAY_STATIONS[array_site]
+        #                       for array_site in array_sites]
+        for array_site in array_sites:
+            try:
+                sel_seisarray_prefixes.append(SEISARRAY_STATIONS[array_site])
+            except KeyError:
+                continue
+        seisarray_prefixes = sel_seisarray_prefixes
+    # Check strings for stations that are part of an array
     for seisarray_prefix in seisarray_prefixes:
         seisarray_station_list = list()
         for resp in stations_df.iterrows():

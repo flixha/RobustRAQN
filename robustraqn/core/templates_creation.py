@@ -1164,6 +1164,8 @@ def create_template_objects(
                 ev_stations = list(
                     set(ev_stations).intersection(set(selected_stations)))
                 ev_station_fnmatch_str = '@(' + '|'.join(ev_stations) + ')'
+                Logger.debug('Prepared event batch: Event %s stations: %s',
+                             event_file, ev_stations)
             station_match_strs.append(ev_station_fnmatch_str)
             if len(ev_stations) > 0:
                 selected_station_lists.append(ev_stations)

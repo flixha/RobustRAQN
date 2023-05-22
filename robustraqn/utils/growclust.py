@@ -185,8 +185,9 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
     # Convert depth to meters as is usual in obspy
     gc_df['depR'] = gc_df.depR * 1000
     gc_df['timestamp'] = pd.to_datetime(
-        gc_df[['year', 'month', 'day', 'hour', 'minute', 'second']])
-    gc_df['datetime'] = pd.to_datetime(gc_df.timestamp)
+        gc_df[['year', 'month', 'day', 'hour', 'minute', 'second']],
+        utc=True)
+    gc_df['datetime'] = pd.to_datetime(gc_df.timestamp, utc=True)
     # only need to check events that were relocated in Growclust
     gc_df = gc_df[~np.isnan(gc_df['rmsP'])]
     
@@ -362,6 +363,9 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
         full_cat_df.at[fc_index, 'longitude'] = gc_event.lonR
         full_cat_df.at[fc_index, 'depth'] = gc_event.depR
 
+    # Make sure that timeR is a dtype: datetime64 and not dtype: object
+    full_cat_df['timeR'] = pd.to_datetime(full_cat_df['timeR'], utc=True)
+
     if return_relocated_events_only:
         sel_df = full_cat_df[full_cat_df['growclustR'] == True]
         return sel_df
@@ -376,8 +380,8 @@ def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
     cat_backup = cat.copy()
     gc_df = read_gc_cat_to_df(gc_cat_file)
     gc_df['timestamp'] = pd.to_datetime(
-        gc_df[['year', 'month', 'day', 'hour', 'minute', 'second']])
-    gc_df['datetime'] = pd.to_datetime(gc_df.timestamp)
+        gc_df[['year', 'month', 'day', 'hour', 'minute', 'second']], utc=True)
+    gc_df['datetime'] = pd.to_datetime(gc_df.timestamp, utc=True)
     gc_df['utcdatetime'] = [UTCDateTime(gc_df.datetime.iloc[nr])
                             for nr in range(len(gc_df))]
 

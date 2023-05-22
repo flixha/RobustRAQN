@@ -46,7 +46,8 @@ from robustraqn.core.load_events import (
 from robustraqn.core.seismic_array import (
     extract_array_picks, add_array_station_picks, get_station_sites,
     LARGE_APERTURE_SEISARRAY_PREFIXES, get_updated_stations_df,
-    mask_array_trace_offsets)
+    mask_array_trace_offsets, get_array_stations_from_df,
+    SEISARRAY_STATIONS)
 from robustraqn.utils.bayesloc import update_cat_from_bayesloc
 from robustraqn.utils.spectral_tools import st_balance_noise
 from robustraqn.utils.quality_metrics import (
@@ -1082,12 +1083,18 @@ def create_template_objects(
         # Check if we can get the selected stations to shorten the inventory
         # sent to the workers
         station_match_strs = []
+        selected_station_lists = []
         Logger.info(
             'Preparing station match strings for %s events to limit the size '
             'of the transmitted inventory.', len(event_file_batches))
         # Make 'sfile' the index of the catalog_df for faster lookups
         if catalog_df is not None and len(catalog_df) > 0:
-            catalog_df.set_index(['sfile'], inplace=True)
+            catalog_df = catalog_df.set_index(['sfile'], inplace=False)
+            array_stations_dict = get_array_stations_from_df(stations_df)
+            # array_sites=array_sites)
+            large_array_stations_dict = get_array_stations_from_df(
+                        stations_df,  # # array_sites=array_sites,
+                        seisarray_prefixes=LARGE_APERTURE_SEISARRAY_PREFIXES)
         for event_file_batch in event_file_batches:
             ev_station_fnmatch_str = '*'
             # If there's only 1 file in batch, retrieve stations; otherwise
@@ -1106,8 +1113,18 @@ def create_template_objects(
                         event_file_name = os.path.split(event_file)[-1]
                         # 'sfile' is the index, gives quick lookup
                         event_df = catalog_df.loc[event_file_name]
-                        ev_stations = list(event_df.stations)
-                    else:
+                        # TODO: make sure that there cannot be two events with
+                        #       same filename when merging two databases.
+                        #       May need to use the full path to the file..
+                        if isinstance(event_df, pd.DataFrame):
+                            event_df = event_df.iloc[0]
+                        # ev_stations = list(event_df.stations)
+                        ev_stations = [
+                            sta.strip()
+                            for sta in event_df['stations'].split(',')]
+                    # no stations could happen when dataframe doesnt contain
+                    # station info or when there is no dataframe
+                    if len(ev_stations) == 0:
                         # If no catalog dataframe is available, check whether
                         # to read the event from a file
                         event = read_nordic(event_file, **kwargs)[0]
@@ -1118,8 +1135,40 @@ def create_template_objects(
                     event = event_file
                     ev_stations = list(set([pick.waveform_id.station_code
                                             for pick in event.picks]))
+                # When we get a list of the stations for the event, we may
+                # need to add array stations so that the relevant inventory
+                # is transmitted.
+                if add_array_picks:
+                    array_sites = list(set(get_station_sites(ev_stations)))
+                    # array_stations = get_array_stations(array_sites)
+                    array_stations = []
+                    for array_site in array_sites:
+                        try:
+                            array_stations += array_stations_dict[
+                                SEISARRAY_STATIONS[array_site]]
+                        except KeyError:
+                            continue
+                    ev_stations = list(set(ev_stations + array_stations))
+                if add_large_aperture_array_picks:
+                    large_array_sites = set(get_station_sites(
+                        ev_stations,
+                        seisarray_prefixes=LARGE_APERTURE_SEISARRAY_PREFIXES))
+                    large_array_stations = []
+                    for large_array_site in large_array_sites:
+                        try:
+                            large_array_stations += large_array_stations_dict[
+                                SEISARRAY_STATIONS[large_array_site]]
+                        except KeyError:
+                            continue
+                    ev_stations = list(set(ev_stations + large_array_stations))
+                ev_stations = list(
+                    set(ev_stations).intersection(set(selected_stations)))
                 ev_station_fnmatch_str = '@(' + '|'.join(ev_stations) + ')'
             station_match_strs.append(ev_station_fnmatch_str)
+            if len(ev_stations) > 0:
+                selected_station_lists.append(ev_stations)
+            else:
+                selected_station_lists.append(selected_stations)
 
         Logger.info('Start parallel template creation.')
         # With multiprocessing as backend, this parallel loop seems to be more
@@ -1129,7 +1178,8 @@ def create_template_objects(
         res_out = Parallel(n_jobs=cores, backend='multiprocessing')(
             delayed(_create_template_objects)(
                 events_files=event_file_batch.copy(),
-                selected_stations=selected_stations,
+                # selected_stations=selected_stations,
+                selected_stations=selected_station_lists[nbatch],
                 template_length=template_length,
                 lowcut=lowcut, highcut=highcut, min_snr=min_snr,
                 prepick=prepick, samp_rate=samp_rate,

@@ -1084,6 +1084,12 @@ def create_template_objects(
         # sent to the workers
         station_match_strs = []
         selected_station_lists = []
+        # Check if inventory.select supports fnmatch-based extended globbing
+        # (not in all obspy releases):
+        tmp_inv = inv.select(station='@(*[A-Z]*|*[A-Z]*)')
+        fnmatch_supported_inv_select = False
+        if len(tmp_inv) > 0:
+            fnmatch_supported_inv_select = True
         Logger.info(
             'Preparing station match strings for %s events to limit the size '
             'of the transmitted inventory.', len(event_file_batches))
@@ -1166,7 +1172,10 @@ def create_template_objects(
                 ev_station_fnmatch_str = '@(' + '|'.join(ev_stations) + ')'
                 Logger.debug('Prepared event batch: Event %s stations: %s',
                              event_file, ev_stations)
-            station_match_strs.append(ev_station_fnmatch_str)
+            if fnmatch_supported_inv_select:
+                station_match_strs.append(ev_station_fnmatch_str)
+            else:
+                station_match_strs.append('*')
             if len(ev_stations) > 0:
                 selected_station_lists.append(ev_stations)
             else:

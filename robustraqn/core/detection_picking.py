@@ -309,6 +309,9 @@ def pick_events_for_day(
             date.day, date.year, date.month)
         sfiles_match = os.path.join(sfile_match_path, sfile_match)
         sfiles = glob.glob(sfiles_match)
+        # Take care of events that were detected on the next day, but whose
+        # origin time was set to this day.
+        sfiles = [sfile for sfile in sfiles if '-235' not in sfile]
         if len(sfiles) > 0:
             Logger.info('Skipping day %s as %s sfiles already exist in %s',
                         current_day_str, len(sfiles), sfile_match_path)

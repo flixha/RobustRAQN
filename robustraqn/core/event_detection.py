@@ -290,6 +290,11 @@ def run_day_detection(
         if len(day_party_files) > 0:
             Logger.info('Skipping day %s as detection file %s already exists.',
                         current_day_str, day_party_files[0])
+            if not return_stream and dump_stream_to_disk:
+                return
+            else:
+                return [Party(), Stream()]
+
 
     Logger.info('Starting detection run for day %s', str(date)[0:10])
     if (arch == 'precise' or arch == 'CPU' and

@@ -10,7 +10,7 @@ from obspy.taup.taup_create import build_taup_model
 # obspy taup velocity models
 
 vel_model_files = glob.glob('*.tvel')
-vel_model_files = glob.glob('Snorre_plusAK135.tvel')
+vel_model_files = glob.glob('barents16.tvel')
 
 for vel_model_file in vel_model_files:
     build_taup_model(filename=vel_model_file, output_folder='.', verbose=True)

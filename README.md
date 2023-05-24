@@ -15,6 +15,7 @@
 - optionally sets station-specific filters derived from noise data
 - optionally applies automatic gain control to reduce the prominence of spurious detections
 - optionally weights channels according to RMS signal-to-noise ratio of template, and noise level during recording of template against noise level in data that is being searched 
+- robustrly measures relative amplitudes and computes relative magnitudes based on the templates with effective exclusion of outliers
 
 **In addition, there is extra support for:**
 - read and write input/output files for the location programs Growclust and Bayesloc

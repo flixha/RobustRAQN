@@ -327,7 +327,7 @@ def load_event_stream(
                 Logger.warning(e)
             except (TypeError, ValueError, AssertionError,
                     SEGYTraceReadingError, InternalMSEEDError,
-                    NotImplementedError) as e:
+                    NotImplementedError, IndexError) as e:
                 Logger.warning(
                     'Could not read waveform file %s', full_wav_file)
                 Logger.warning(e)

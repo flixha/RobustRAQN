@@ -1091,8 +1091,9 @@ def create_template_objects(
         if len(tmp_inv) > 0:
             fnmatch_supported_inv_select = True
         Logger.info(
-            'Preparing station match strings for %s events to limit the size '
-            'of the transmitted inventory.', len(event_file_batches))
+            'Preparing station match strings for %s event file batches '
+            '(%s events) to limit the size of the transmitted inventory.',
+            len(event_file_batches), len(sfiles or catalog))
         # Make 'sfile' the index of the catalog_df for faster lookups
         if catalog_df is not None and len(catalog_df) > 0:
             catalog_df = catalog_df.set_index(['sfile'], inplace=False)

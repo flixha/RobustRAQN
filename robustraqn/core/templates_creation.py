@@ -1097,11 +1097,14 @@ def create_template_objects(
         # Make 'sfile' the index of the catalog_df for faster lookups
         if catalog_df is not None and len(catalog_df) > 0:
             catalog_df = catalog_df.set_index(['sfile'], inplace=False)
-            array_stations_dict = get_array_stations_from_df(stations_df)
+        if stations_df is not None and len(stations_df) > 0:
+            if add_array_picks:
+                array_stations_dict = get_array_stations_from_df(stations_df)
             # array_sites=array_sites)
-            large_array_stations_dict = get_array_stations_from_df(
-                        stations_df,  # # array_sites=array_sites,
-                        seisarray_prefixes=LARGE_APERTURE_SEISARRAY_PREFIXES)
+            if add_large_aperture_array_picks:
+                large_array_stations_dict = get_array_stations_from_df(
+                    stations_df,  # # array_sites=array_sites,
+                    seisarray_prefixes=LARGE_APERTURE_SEISARRAY_PREFIXES)
         for event_file_batch in event_file_batches:
             ev_station_fnmatch_str = '*'
             # If there's only 1 file in batch, retrieve stations; otherwise

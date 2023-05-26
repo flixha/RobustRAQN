@@ -10,11 +10,11 @@ def read(fname):
 
 setup(
     name = "RobustRAQN",
-    version = "0.0.1",
+    version = "0.0.4",
     author = "Felix Halpaap",
     author_email = "felix.halpaap@uib.no",
-    description = ("Demonstration of robust request and seismic data quality "
-                   " metrics negotiation."),
+    description = ("Robust request and seismic data quality metrics negotiation "
+                   " for template matching-based earthquake detection."),
     license = "GPL3",
     keywords = "Template matching",
     url = "https://github.com/flixha/RobustRAQN",
@@ -34,8 +34,8 @@ setup(
         'Topic :: Scientific/Engineering',
         'License :: OSI Approved :: GNU Library or General Public '
         'License (GPL)',
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
     ],
 )

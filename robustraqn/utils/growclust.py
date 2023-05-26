@@ -18,6 +18,7 @@ Logger = logging.getLogger(__name__)
 # Silcence pandas warnings for updating rows
 pd.options.mode.chained_assignment = None  # default='warn'
 
+# The GC header list can be modified to include additional columns.
 GC_HEADER_LIST = [
         'year', 'month', 'day', 'hour', 'minute', 'second', 'evid', 'latR',
         'lonR', 'depR', 'mag', 'qID', 'cID', 'nbranch', 'qnpair', 'qndiffP',
@@ -144,6 +145,16 @@ def write_station(inventory, use_elevation=False, filename="stlist.txt"):
 def read_gc_cat_to_df(gc_cat_file, gc_header_list=GC_HEADER_LIST):
     """
     Read Growclust-output catalog into a dataframe.
+
+    :type gc_cat_file: str
+    :param gc_cat_file: Path to growclust cat-file.
+    :type gc_header_list: list
+    :param gc_header_list:
+        List of column headers for growclust cat-file, defaults to global
+        GC_HEADER_LIST.
+
+    :rtype: pandas.DataFrame
+    :returns: Dataframe with updated origin solutions.
     """
     with open(gc_cat_file) as f:
         reader = csv.reader(f, delimiter=' ', skipinitialspace=True)
@@ -165,6 +176,21 @@ def read_gc_cat_to_df(gc_cat_file, gc_header_list=GC_HEADER_LIST):
 
 def update_tribe_from_gc_file(tribe, gc_cat_file, max_diff_seconds=3):
     """
+    Function to update a :class:`eqcorrscan.core.match_filter.Tribe` of
+    templates with associated events with new origin times and locations from
+    a Growclust output catalog file.
+
+    :type tribe: eqcorrscan.core.match_filter.Tribe
+    :param tribe: Tribe of templates to be updated
+    :type gc_cat_file: str
+    :param gc_cat_file: path to Growclust output catalog file
+    :type max_diff_seconds: float
+    :param max_diff_seconds:
+        maximum time difference between template and event origin times in
+        seconds.
+
+    :rtype: :class:`eqcorrscan.core.match_filter.Tribe`
+    :returns: updated tribe
     """
     cat = Catalog([t.event for t in tribe])
     cat = update_cat_from_gc_file(cat, gc_cat_file,
@@ -173,12 +199,33 @@ def update_tribe_from_gc_file(tribe, gc_cat_file, max_diff_seconds=3):
         tribe[ne].event = event
     return tribe
 
-# @profile
+
 def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
                                max_diff_seconds=8,
                                max_reloc_distance_km=50,
                                return_relocated_events_only=False):
     """
+    Function to update a catalog dataframe (e.g. from obsplus.events_to_df)
+    with new origin times and locations from a Growclust output catalog file.
+
+    :type full_cat_df: pandas dataframe
+    :param full_cat_df: pandas dataframe of the full catalog to be updated
+    :type gc_cat_file: str
+    :param gc_cat_file: path to the Growclust output catalog file
+    :type max_diff_seconds: float
+    :param max_diff_seconds:
+        maximum time difference between the original and relocated event origin
+        times in seconds to be considered as a candidate for updating
+    :type max_reloc_distance_km: float
+    :param max_reloc_distance_km:
+        maximum distance in km between the original and relocated event for
+        the event to be matched.
+    :type return_relocated_events_only: bool
+    :param return_relocated_events_only:
+        if True, only return the relocated events in the catalog dataframe
+
+    :returns: pandas dataframe of the updated catalog
+    :rtype: pandas dataframe
     """
     # full_cat_df_backup = full_cat_df.copy()
     gc_df = read_gc_cat_to_df(gc_cat_file)
@@ -189,8 +236,11 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
         utc=True)
     gc_df['datetime'] = pd.to_datetime(gc_df.timestamp, utc=True)
     # only need to check events that were relocated in Growclust
-    gc_df = gc_df[~np.isnan(gc_df['rmsP'])]
-    
+    # Actually, only events with eh / ez / et have been relocated,
+    # events with an rmsP or rmsS value did not pass through GC QC
+    # gc_df = gc_df[~np.isnan(gc_df['rmsP'])]
+    gc_df = gc_df[~np.isnan(gc_df['et'])]
+
     # limit full cat to the geographical region of interest
     full_cat_df = full_cat_df[
         (full_cat_df['latitude'] > gc_df['latR'].min() - 0.5) &
@@ -312,32 +362,7 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
                 tmp_event.time, tmp_event.latR, tmp_event.lonR, tmp_event.depR,
                 len(within_bounds_df),
                 gc_event.datetime, gc_event.latR, gc_event.lonR, gc_event.depR)
-        # Below is a quicker way to assign the new values in a row
-        # full_cat_df['growclustR'].loc[fc_index] = True
-        # full_cat_df['timeR'].loc[fc_index] = gc_event.datetime
-        # full_cat_df['latR'].loc[fc_index] = gc_event.latR
-        # full_cat_df['lonR'].loc[fc_index] = gc_event.lonR
-        # full_cat_df['depR'].loc[fc_index] = gc_event.depR
-        # full_cat_df['qID'].loc[fc_index] = gc_event.qID
-        # full_cat_df['cID'].loc[fc_index] = gc_event.cID
-        # full_cat_df['nbranch'].loc[fc_index] = gc_event.nbranch
-        # full_cat_df['qnpair'].loc[fc_index] = gc_event.qnpair
-        # full_cat_df['qndiffP'].loc[fc_index] = gc_event.qndiffP
-        # full_cat_df['qndiffS'].loc[fc_index] = gc_event.qndiffS
-        # full_cat_df['rmsP'].loc[fc_index] = gc_event.rmsP
-        # full_cat_df['rmsS'].loc[fc_index] = gc_event.rmsS
-        # full_cat_df['eh'].loc[fc_index] = gc_event.eh
-        # full_cat_df['ez'].loc[fc_index] = gc_event.ez
-        # full_cat_df['et'].loc[fc_index] = gc_event.et
-        # full_cat_df['latC'].loc[fc_index] = gc_event.latC
-        # full_cat_df['lonC'].loc[fc_index] = gc_event.lonC
-        # full_cat_df['depC'].loc[fc_index] = gc_event.depC
-        # # update origin in catalog with GC solution
-        # full_cat_df['time'].loc[fc_index] = gc_event.datetime
-        # full_cat_df['latitude'].loc[fc_index] = gc_event.latR
-        # full_cat_df['longitude'].loc[fc_index] = gc_event.lonR
-        # full_cat_df['depth'].loc[fc_index] = gc_event.depR
-
+        # Quickest way to assign one value to a field in pandas is with .at
         full_cat_df.at[fc_index, 'growclustR'] = True
         full_cat_df.at[fc_index, 'timeR'] = gc_event.datetime
         full_cat_df.at[fc_index, 'latR'] = gc_event.latR
@@ -362,6 +387,7 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
         full_cat_df.at[fc_index, 'latitude'] = gc_event.latR
         full_cat_df.at[fc_index, 'longitude'] = gc_event.lonR
         full_cat_df.at[fc_index, 'depth'] = gc_event.depR
+        # full_cat_df.at[fc_index, 'author'] = 'Growclust'
 
     # Make sure that timeR is a dtype: datetime64 and not dtype: object
     full_cat_df['timeR'] = pd.to_datetime(full_cat_df['timeR'], utc=True)
@@ -376,6 +402,17 @@ def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
     """
     Growclust eh, ez errors are median absolute deviations of the bootstrap
     distribution.
+
+    :type cat: :class:`obspy.core.event.Catalog`
+    :param cat: Catalog to update with Growclust results.
+    :type gc_cat_file: str
+    :param gc_cat_file: Path to Growclust catalog file.
+    :type max_diff_seconds: float
+    :param max_diff_seconds:
+        Maximum time difference in seconds between Growclust and catalog event
+
+    :rtype: :class:`obspy.core.event.Catalog`
+    :return: Catalog with updated events.
     """
     cat_backup = cat.copy()
     gc_df = read_gc_cat_to_df(gc_cat_file)

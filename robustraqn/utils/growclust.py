@@ -236,8 +236,11 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
         utc=True)
     gc_df['datetime'] = pd.to_datetime(gc_df.timestamp, utc=True)
     # only need to check events that were relocated in Growclust
-    gc_df = gc_df[~np.isnan(gc_df['rmsP'])]
-    
+    # Actually, only events with eh / ez / et have been relocated,
+    # events with an rmsP or rmsS value did not pass through GC QC
+    # gc_df = gc_df[~np.isnan(gc_df['rmsP'])]
+    gc_df = gc_df[~np.isnan(gc_df['et'])]
+
     # limit full cat to the geographical region of interest
     full_cat_df = full_cat_df[
         (full_cat_df['latitude'] > gc_df['latR'].min() - 0.5) &

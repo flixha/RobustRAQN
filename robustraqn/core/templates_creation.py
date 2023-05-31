@@ -91,7 +91,7 @@ def _shorten_tribe_streams(
         min_n_traces=0, write_out=False, make_pretty_plot=False,
         prefix='short', noise_balancing=False, apply_agc=False,
         write_individual_templates=False, check_len_strict=True,
-        inplace=False):
+        inplace=False, equalize_scaling=False, max_taper_percentage=0.05):
     """Create shorter templates from a tribe of longer templates
 
     :param tribe: Tribe with long templates
@@ -153,6 +153,12 @@ def _shorten_tribe_streams(
         for tr in templ.st:
             tr.trim(starttime=tr.stats.starttime + trace_offset,
                     endtime=tr.stats.starttime + new_templ_len + trace_offset)
+            if equalize_scaling:
+                tr.data = tr.data / np.nanmax(np.abs(tr.data))
+            # DETREND and TAPER!
+            tr.taper(max_percentage=max_taper_percentage, type='cosine').detrend()
+            # Cast to float32 to save memory
+            tr.data = tr.data.astype(np.float32)
         if len(templ.st) >= min_n_traces:
             templ_name = templ.name
             # orig = templ.event.preferred_origin() or templ.event.origins[0]
@@ -692,6 +698,10 @@ def _create_template_objects(
             prepick=prepick, all_vert=True, all_horiz=True,
             delayed=True, min_snr=min_snr, horizontal_chans=horizontal_chans,
             vertical_chans=vertical_chans)  # , **kwargs)
+        # Cast to float32 to save memory (Obspy likes to make it float64 but
+        # that is not necessary for our purposes).
+        for tr in template_st:
+            tr.data = tr.data.astype(np.float32)
         # quality-control template
         if len(template_st) == 0:
             Logger.info('Rejected template: event %s (sfile %s): no traces '
@@ -854,7 +864,8 @@ def create_template_objects(
         sfiles=[], catalog=None, selected_stations=[],
         event_stations_filter=[], catalog_df=None, template_length=60,
         lowcut=2.5, highcut=9.9, min_snr=5.0, prepick=0.5, samp_rate=20,
-        seisan_wav_path=None, clients=[], inv=Inventory(),
+        seisan_wav_path=None, sfiles_include_path=None,
+        clients=[], inv=Inventory(),
         remove_response=False, output='VEL', noise_balancing=False,
         balance_power_coefficient=2, ground_motion_input=[],
         apply_agc=False, agc_window_sec=5,
@@ -1119,8 +1130,12 @@ def create_template_objects(
                 if isinstance(event_file, str):
                     # Quickest way to get stations is from catalog dataframe
                     if catalog_df is not None:
-                        # Get only the filename without the path
-                        event_file_name = os.path.split(event_file)[-1]
+                        # Get the filename, with / without REA path
+                        if sfiles_include_path:
+                            event_file_name = os.path.join(*os.path.normpath(
+                                event_file).split(os.sep)[-4:])
+                        else:  # Get only the filename without the path
+                            event_file_name = os.path.split(event_file)[-1]
                         # 'sfile' is the index, gives quick lookup
                         event_df = catalog_df.loc[event_file_name]
                         # TODO: make sure that there cannot be two events with

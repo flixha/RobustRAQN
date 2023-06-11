@@ -14,12 +14,15 @@ def remove_multiple_phase_picks(self, full_phase_hint=False):
     """
     SeedPickID = namedtuple("SeedPickID", ["seed_id", "phase_hint"])
     event = self.event
+    # Collect non-duplicated picks in new_picks
     new_picks = []
+    # Prepare dict of all seed_ids and their picks
     seed_pick_ids = {
         SeedPickID(pick.waveform_id.get_seed_string(), (
             pick.phase_hint if full_phase_hint else pick.phase_hint[0]))
         for pick in event.picks if pick.phase_hint.startswith(("P", "S"))}
     seed_pick_id_dict = defaultdict(list)
+    # Loop over all picks and add to dict with seed-ids as keys
     for seed_pick_id in seed_pick_ids:
         for pick in event.picks:
             if pick.waveform_id.get_seed_string() == seed_pick_id.seed_id:

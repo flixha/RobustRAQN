@@ -1,8 +1,10 @@
 
+
 import pandas as pd
 import csv
 import numpy as np
 import datetime
+import pytz
 
 from obspy.core import UTCDateTime
 from obspy.core.event import (
@@ -227,7 +229,7 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
     :returns: pandas dataframe of the updated catalog
     :rtype: pandas dataframe
     """
-    # full_cat_df_backup = full_cat_df.copy()
+    full_cat_df_backup = full_cat_df.copy()
     gc_df = read_gc_cat_to_df(gc_cat_file)
     # Convert depth to meters as is usual in obspy
     gc_df['depR'] = gc_df.depR * 1000
@@ -297,12 +299,27 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
     # keep copy of original origin solution
     if 'otime' not in full_cat_df.columns:
         full_cat_df['otime'] = full_cat_df['time']
+    # If some rows already have a value in otime, that's probably we updated
+    # a part of the dataframe catalog from a growclust run, but now we need to
+    # update the rows that are relevant for this run here.
+    elif any(full_cat_df.otime.isnull()):
+        tmp_df = full_cat_df[full_cat_df.otime.isnull()]
+        full_cat_df['otime'].loc[tmp_df.index] = tmp_df['time']
     if 'olat' not in full_cat_df.columns:
         full_cat_df['olat'] = full_cat_df['latitude']
+    elif any(full_cat_df.olat.isnull()):
+        tmp_df = full_cat_df[full_cat_df.olat.isnull()]
+        full_cat_df['olat'].loc[tmp_df.index] = tmp_df['latitude']
     if 'olon' not in full_cat_df.columns:
         full_cat_df['olon'] = full_cat_df['longitude']
+    elif any(full_cat_df.olon.isnull()):
+        tmp_df = full_cat_df[full_cat_df.olon.isnull()]
+        full_cat_df['olon'].loc[tmp_df.index] = tmp_df['longitude']
     if 'odepth' not in full_cat_df.columns:
         full_cat_df['odepth'] = full_cat_df['depth']
+    elif any(full_cat_df.odepth.isnull()):
+        tmp_df = full_cat_df[full_cat_df.odepth.isnull()]
+        full_cat_df['odepth'].loc[tmp_df.index] = tmp_df['depth']
 
     # Loop through relocated events, find original event, and update it.
     for n_row, gc_event in gc_df.iterrows():
@@ -350,13 +367,15 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
                 gc_event.datetime, gc_event.latR, gc_event.lonR, gc_event.depR)
             continue
         within_bounds_df = tmp_cat_df.loc[distances <= max_reloc_distance_km]
+        # Take the event wtihtin the time bounds that is closest to the
+        # growcluster hypocenter:
         tmp_event_index = np.argmin(distances)
         fc_index = tmp_cat_df.index[tmp_event_index]
         tmp_event = tmp_cat_df.iloc[tmp_event_index]
         # Now update the catalog with the relocated event information.
-        if tmp_event.growclustR:
+        if tmp_event.growclustR == True:  # Could be NaN
             Logger.warning(
-                'Event %s, %s, %s, %s already has been assigned a Growclust-'
+                'Event %s, %s, %s, %s has already been assigned a Growclust-'
                 'hypocenter (%s events within bounds), overwriting it with '
                 '%s, %s, %s, %s',
                 tmp_event.time, tmp_event.latR, tmp_event.lonR, tmp_event.depR,
@@ -395,6 +414,28 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
     if return_relocated_events_only:
         sel_df = full_cat_df[full_cat_df['growclustR'] == True]
         return sel_df
+    else:
+        # full_cat_df_backup.update(full_cat_df)
+        # merge the two dataframes, so that there are not duplicate events
+        # (merge on index), growclust-info is added to events that have a
+        # growclust solution, with other events being NaN. The growclust
+        # solution should take precedence over the original catalog solution
+        # (hence growclust-df on left).
+        
+        # we know that we want to keep the growclust solution, so we can
+        # remove indices from the full cat. 
+        full_cat_df_backup = full_cat_df_backup.drop(index=full_cat_df.index)
+        cdf = full_cat_df.combine_first(full_cat_df_backup)
+        # Or make this merge quicker....??????????
+
+        # Rearrange columns in the original order of full_cat_df:
+        full_cat_df = cdf[full_cat_df.columns]
+        # full_cat_df_without_overlap = full_cat_df_backup.drop(index=full_cat_df.index)
+        # full_cat_df = pd.concat([full_cat_df_without_overlap, full_cat_df],
+        #                         axis=0, join='outer', keys=['index'])
+        # full_cat_df = pd.concat([full_cat_df_backup, full_cat_df], axis=1)
+        # full_cat_df = pd.concat([full_cat_df_backup, full_cat_df], #keys=['index'])
+        #                             axis=0, join='outer', keys=['index'])
     return full_cat_df
 
 
@@ -432,8 +473,11 @@ def update_cat_from_gc_file(cat, gc_cat_file, max_diff_seconds=3):
     # Code to sort in the new locations from growclust into catalog
     for event in cat:
         cat_orig = (event.preferred_origin() or event.origins[0]).copy()
-        lower_dtime = (cat_orig.time - max_diff_seconds)._get_datetime()
-        upper_dtime = (cat_orig.time + max_diff_seconds)._get_datetime()
+        lower_dtime = (cat_orig.time - max_diff_seconds).datetime
+        upper_dtime = (cat_orig.time + max_diff_seconds).datetime
+        # make lower_dtime time zone aware:
+        lower_dtime = lower_dtime.replace(tzinfo=pytz.UTC)
+        upper_dtime = upper_dtime.replace(tzinfo=pytz.UTC)
 
         tmp_cat_df = gc_df.loc[
             (gc_df.datetime > lower_dtime) & (gc_df.datetime < upper_dtime)]

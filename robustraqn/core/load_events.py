@@ -941,10 +941,33 @@ def get_matching_trace_for_pick(pick, stream):
 
 def _make_append_new_pick_and_arrival(
         origin, st, tr, phase, new_picks, new_arrivals, app_vel, dist_deg,
-        min_snr=1, pre_pick=0, winlen=2, *args, **kwargs):
+        # min_snr=1, pre_pick=0, winlen=2,
+        *args, **kwargs):
     """
     creates a new pick from an apparent velocity and adds it to the picks- and
     arrivals-list.
+    
+    :type origin: obspy.core.event.Origin
+    :param origin: Origin object
+    :type st: obspy.core.stream.Stream
+    :param st: Stream object
+    :type tr: obspy.core.trace.Trace
+    :param tr: Trace object
+    :type phase: str
+    :param phase: phase name of pick to be added
+    :type new_picks: list
+    :param new_picks: list of picks
+    :type new_arrivals: list
+    :param new_arrivals: list of arrivals
+    :type app_vel: float
+    :param app_vel: apparent phase velocity for the pick
+    :type dist_deg: float
+    :param dist_deg: epicentral distance in degrees
+    :type args: list
+    :param args: additional arguments
+
+    :rtype: tuple
+    :return: new_picks, new_arrivals
     """
     tr = tr.copy()
     if tr.stats.station in [
@@ -977,6 +1000,8 @@ def _make_append_new_pick_and_arrival(
 
 def compute_picks_from_app_velocity(
         event, origin, stream=Stream(), pick_calculation=None,
+        add_only_missing_picks=True,
+        pick_calculation_stations=None, add_array_picks=False,
         crossover_distance_km=100, app_vel_Pg=7.2, app_vel_Sg=4.1,
         app_vel_Pn=8.1, app_vel_Sn=4.6, *args, **kwargs):
     """
@@ -1001,56 +1026,85 @@ def compute_picks_from_app_velocity(
     new_picks = []
     new_arrivals = []
     # FIRST, deal with existing Picks
-    for pick in event.picks:
-        arrivals = [arr for arr in origin.arrivals
-                    if arr.pick_id == pick.resource_id]
-        if pick is None or len(arrivals) == 0:
-            continue
-        arr = arrivals[0]
-        dist_km = degrees2kilometers(arr.distance)
-        add_pick = False
-        if pick_calculation == 'only_direct':
-            if dist_km is not None and dist_km >= crossover_distance_km:
-                if pick.phase_hint in ['Pg', 'Sg', 'Pb', 'Sb']:
+    if not add_only_missing_picks:
+        for pick in event.picks:
+            pick_sta = pick.waveform_id.station_code
+            # Skip stations if they are not in the list of stations to add
+            # picks for
+            if (pick_calculation_stations is not None and
+                   pick_sta not in pick_calculation_stations):
+                continue
+            arrivals = [arr for arr in origin.arrivals
+                        if arr.pick_id == pick.resource_id]
+            if pick is None: # or len(arrivals) == 0:
+                continue
+            if len(arrivals) > 0:
+                arr = arrivals[0]
+                dist_km = degrees2kilometers(arr.distance)
+            else:
+                # Compute distance without arrival, but with location of origin
+                # and station
+                if (not tr.stats.coordinates.latitude or
+                        not tr.stats.coordinates.longitude):
+                    continue
+                dist_km = degrees2kilometers(locations2degrees(
+                    origin.latitude, origin.longitude,
+                    tr.stats.coordinates.latitude,
+                    tr.stats.coordinates.longitude))
+            add_pick = False
+            if pick_calculation == 'only_direct':
+                if dist_km is not None and dist_km >= crossover_distance_km:
+                    if pick.phase_hint in ['Pg', 'Sg', 'Pb', 'Sb']:
+                        add_pick = True
+                    elif pick.phase_hint in ['P', 'Pn']:
+                        pick.time = origin.time + dist_km / app_vel_Pg
+                        pick.phase_hint = 'Pg'
+                        add_pick = True
+                    elif pick.phase_hint in ['S', 'Sn']:
+                        pick.time = origin.time + dist_km / app_vel_Sg
+                        pick.phase_hint = 'Sg'
+                        add_pick = True
+                elif pick.phase_hint in ['P', 'S', 'Pg', 'Sg']:
                     add_pick = True
-                elif pick.phase_hint in ['P', 'Pn']:
-                    pick.time = origin.time + dist_km / app_vel_Pg
-                    pick.phase_hint = 'Pg'
+            elif pick_calculation == 'only_refracted':
+                if dist_km is not None and dist_km >= crossover_distance_km:
+                    if pick.phase_hint in ['Pg', 'Sg', 'Pb', 'Sb']:
+                        add_pick = True
+                    elif pick.phase_hint in ['P', 'Pg']:
+                        pick.time = origin.time + dist_km / app_vel_Pn
+                        pick.phase_hint = 'Pg'
+                        add_pick = True
+                    elif pick.phase_hint in ['S', 'Sg']:
+                        pick.time = origin.time + dist_km / app_vel_Sn
+                        pick.phase_hint = 'Sg'
+                        add_pick = True
+                elif pick.phase_hint in ['P', 'S', 'Pn', 'Sn']:
                     add_pick = True
-                elif pick.phase_hint in ['S', 'Sn']:
-                    pick.time = origin.time + dist_km / app_vel_Sg
-                    pick.phase_hint = 'Sg'
-                    add_pick = True
-            elif pick.phase_hint in ['P', 'S', 'Pg', 'Sg']:
-                add_pick = True
-        elif pick_calculation == 'only_refracted':
-            if dist_km is not None and dist_km >= crossover_distance_km:
-                if pick.phase_hint in ['Pg', 'Sg', 'Pb', 'Sb']:
-                    add_pick = True
-                elif pick.phase_hint in ['P', 'Pg']:
-                    pick.time = origin.time + dist_km / app_vel_Pn
-                    pick.phase_hint = 'Pg'
-                    add_pick = True
-                elif pick.phase_hint in ['S', 'Sg']:
-                    pick.time = origin.time + dist_km / app_vel_Sn
-                    pick.phase_hint = 'Sg'
-                    add_pick = True
-            elif pick.phase_hint in ['P', 'S', 'Pn', 'Sn']:
-                add_pick = True
-        if add_pick:
-            # if pick was moved, make clear that residual and takeoff
-            # aren't known any more
-            if arr.phase != pick.phase_hint:
-                arr.time_residual = None
-                arr.takeoff_angle = None
-                arr.phase = pick.phase_hint
-            arr.pick_id = pick.resource_id
-            new_arrivals.append(arr)
-            new_picks.append(pick)
+            if add_pick:
+                # if pick was moved, make clear that residual and takeoff
+                # aren't known any more
+                if arr is not None:
+                    if arr.phase != pick.phase_hint:
+                        arr.time_residual = None
+                        arr.takeoff_angle = None
+                        arr.phase = pick.phase_hint
+                    arr.pick_id = pick.resource_id
+                    new_arrivals.append(arr)
+                new_picks.append(pick)
+        else:
+            # In case we only want to add missing picks, we need to keep a copy
+            # of all existing ones.
+            new_arrivals = origin.arrivals
+            new_picks = event.picks
 
     # SECOND deal with traces where there's no picks:
     st = stream
     for tr in stream:
+        # Skip stations if they are not in the list of stations to add
+        # picks for
+        if (pick_calculation_stations is not None and
+                tr.stats.station not in pick_calculation_stations):
+            continue
         # found_matching_resp, tr, sel_inv = try_find_matching_response(tr,inv)
         # if not found_matching_resp:
         #     continue
@@ -1058,6 +1112,12 @@ def compute_picks_from_app_velocity(
         if (not tr.stats.coordinates.latitude or
                 not tr.stats.coordinates.longitude):
             continue
+        # If array picks are requested, then we can skip all stations that
+        # belong to the array in case there is already a pick for at least one
+        # station at the array.
+        # TODO: This is not yet implemented
+        # if add_array_picks:
+    
         dist_deg = locations2degrees(
             origin.latitude, origin.longitude,
             tr.stats.coordinates.latitude, tr.stats.coordinates.longitude)
@@ -1103,6 +1163,8 @@ def prepare_picks(
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         sta_translation_file="station_code_translation.txt",
         vertical_chans=['Z', 'H'], horizontal_chans=['E', 'N', '1', '2', '3'],
+        stations_with_verticals_for_s=[],
+        remove_lonely_s_from_verticals=False, # was True
         allowed_phase_types='PST',
         allowed_phase_hints=['Pn', 'Pg', 'P', 'Sn', 'Sg', 'S', 'Lg', 'sP',
                              'pP', 'Pb', 'PP', 'Sb', 'SS'],
@@ -1237,6 +1299,7 @@ def prepare_picks(
         # TODO: add option to avoid switching picks when data quality bad on
         #       one channel - picks may have been set on other channel
         #       deliberately
+        found_lonely_s_on_verticals = False
         if (pick.phase_hint.upper()[0] == 'P' and
                 pick.waveform_id.channel_code[-1] not in vertical_chans):
             for vertical_chan in vertical_chans:
@@ -1259,20 +1322,37 @@ def prepare_picks(
                 pick.waveform_id.channel_code = (
                     horizontal_traces[0].stats.channel)
             # 4b. If S-pick is on vertical and there is no P-pick, then
-            # remove S-pick.
-            else:
-                P_picks = [
+            # remove S-pick. - probably needed so long because EQcorrscan
+            # may otherwise change the pick to being a P pick???
+            elif remove_lonely_s_from_verticals:
+                p_picks = [
                     p for p in event.picks if len(p.phase_hint) > 0
                     if p.phase_hint.upper()[0] == 'P' and
                     p.waveform_id.station_code ==
                     pick.waveform_id.station_code]
-                if len(P_picks) == 0:
+                if len(p_picks) == 0:
+                    # found_lonely_s_on_verticals = True
                     continue
         # If not fixed yet, make sure to always fix codes
         if pick.waveform_id.channel_code == previous_chan_id:
             pick.waveform_id.channel_code = (
                 std_channel_prefix + pick.waveform_id.channel_code[-1])
         new_event.picks.append(pick)
+
+        # Check if the S-pick should also be copied so that there is one for
+        # the vertical channels (to allow correlating Z-chans for S picks in
+        # case a station was 1-component for a period of time and 3-comp at
+        # other times)
+        if pick.waveform_id.station_code in stations_with_verticals_for_s:
+            if not pick.phase_hint.upper()[0] == 'S':
+                continue
+            for vertical_chan in vertical_chans:
+                if vertical_chan in avail_comps:
+                    s_pick_on_vert = pick.copy()
+                    s_pick_on_vert.waveform_id.channel_code =(
+                        s_pick_on_vert.waveform_id.channel_code[:-1]
+                        + vertical_chan)
+                    new_event.picks.append(s_pick_on_vert)
         # else:
         #    new_event.picks.append(pick)
 

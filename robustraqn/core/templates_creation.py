@@ -92,7 +92,8 @@ def _shorten_tribe_streams(
         prefix='short', noise_balancing=False, apply_agc=False,
         write_individual_templates=False, check_len_strict=True,
         inplace=False, equalize_scaling=False, max_taper_percentage=0.05):
-    """Create shorter templates from a tribe of longer templates
+    """
+    Create shorter templates from a tribe of longer templates
 
     :param tribe: Tribe with long templates
     :type tribe: class:`eqcorrscan.core.match_filter.Tribe`
@@ -151,10 +152,34 @@ def _shorten_tribe_streams(
     for templ in short_tribe:
         templ.trace_offset = trace_offset
         for tr in templ.st:
-            tr.trim(starttime=tr.stats.starttime + trace_offset,
+            if new_templ_len is not None:
+                tr.trim(
+                    starttime=tr.stats.starttime + trace_offset,
                     endtime=tr.stats.starttime + new_templ_len + trace_offset)
+
+                # Try this to make sure catalog_to_dd.write_correlations works
+                # exactly the same with presliced traces: -TODO: BUT IT DOESNT.
+                # There is one sample difference in dt-values with presliced streams.
+
+                # If there is one sample too many after this remove the first one
+                # by convention
+                n_samples_intended = new_templ_len * tr.stats.sampling_rate
+                if len(tr.data) == n_samples_intended + 1:
+                    tr.data = tr.data[1:len(tr.data)]
+                # if tr.stats.endtime - tr.stats.starttime != extract_len:
+                if tr.stats.npts < n_samples_intended:
+                    Logger.warning(
+                        "Insufficient data ({rlen} s) for {tr_id}, discarding. "
+                        "Check that your traces are at least of length {length} s,"
+                        #" with a pre_pick time of at least {prepick} s!".format(
+                        "".format(
+                            rlen=tr.stats.endtime - tr.stats.starttime,
+                            tr_id=tr.id, length=new_templ_len))
+                    continue
+
             if equalize_scaling:
-                tr.data = tr.data / np.nanmax(np.abs(tr.data))
+                # tr.data = tr.data / np.nanmax(np.abs(tr.data))
+                tr.data = tr.data / np.sqrt(np.nanmean(tr.data ** 2))
             # DETREND and TAPER!
             tr.taper(max_percentage=max_taper_percentage, type='cosine').detrend()
             # Cast to float32 to save memory
@@ -316,6 +341,7 @@ def _create_template_objects(
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         vertical_chans=['Z', 'H'],
         horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
+        stations_with_verticals_for_s=[],
         bayesloc_event_solutions=None, erase_mags=False,
         wavetool_path='/home/felix/Software/SEISANrick/PRO/linux64/wavetool',
         parallel=False, cores=1, thread_parallel=False, n_threads=1,
@@ -662,7 +688,8 @@ def _create_template_objects(
         event = prepare_picks(
             event=event, stream=wavef, normalize_NSLC=normalize_NSLC, inv=inv,
             sta_translation_file=sta_translation_file,
-            vertical_chans=vertical_chans, horizontal_chans=horizontal_chans)
+            vertical_chans=vertical_chans, horizontal_chans=horizontal_chans,
+            stations_with_verticals_for_s=stations_with_verticals_for_s)
         # Extra checks for sampling rate and length of trace - if a trace is
         # very short, resample will fail.
         st = Stream()
@@ -878,7 +905,9 @@ def create_template_objects(
         std_network_code='NS', std_location_code='00', std_channel_prefix='BH',
         vertical_chans=['Z', 'H'],
         wavetool_path='/home/felix/Software/SEISANrick/PRO/linux64/wavetool',
-        horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'], erase_mags=False,
+        horizontal_chans=['E', 'N', '1', '2', 'X', 'Y'],
+        stations_with_verticals_for_s=[],
+        erase_mags=False,
         parallel=False, cores=1, thread_parallel=False, n_threads=1,
         max_events_per_file=200, task_id=None,
         *args, **kwargs):
@@ -1234,6 +1263,7 @@ def create_template_objects(
                 std_channel_prefix=std_channel_prefix,
                 vertical_chans=vertical_chans,
                 horizontal_chans=horizontal_chans,
+                stations_with_verticals_for_s=stations_with_verticals_for_s,
                 wavetool_path=wavetool_path,
                 erase_mags=erase_mags,
                 parallel=False, cores=1,
@@ -1277,9 +1307,31 @@ def create_template_objects(
             std_location_code=std_location_code,
             std_channel_prefix=std_channel_prefix,
             vertical_chans=vertical_chans, horizontal_chans=horizontal_chans,
+            stations_with_verticals_for_s=stations_with_verticals_for_s,
             wavetool_path=wavetool_path, erase_mags=erase_mags,
             thread_parallel=thread_parallel, n_threads=n_threads,
             *args, **kwargs)
+
+    # Remove horizontal traces with P picks / vertical traces with S picks for
+    # stations that shouldn't have them
+    # (EQcorrscan's template_gen only adds S-picks to verticals if we include
+    # horizontal channels in vertical_chans. BUt then it also adds P picks to
+    # horizontal channels, so we want to remove these after. and we only want
+    # to allows S-picks on Z channels at selected stations (maybe)
+    # horizontal channels, bu
+    for templ in tribe:
+        # Here I want to keep S-picks on Z, but not P-picks on horizontal
+        # channels:
+        templ.st = Stream([tr for tr in templ.st if not (
+            tr.stats.channel[-1] in horizontal_chans
+            and tr.stats.extra.phase_hint[0] == 'P')])
+        # stations_with_verticals_for_s # TODO: limit to specific stations
+        if stations_with_verticals_for_s:
+            templ.st = Stream([tr for tr in templ.st if not (
+                tr.stats.channel[-1] in vertical_chans
+                and tr.stats.station not in stations_with_verticals_for_s
+                and tr.stats.extra.phase_hint[0] == 'S'
+            )])
 
     tribe = tribe.sort()
     # Add labels to the output files to indicate changes in processing

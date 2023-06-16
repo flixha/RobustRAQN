@@ -347,7 +347,7 @@ def load_event_stream(
                     " -format MSEED"], shell=True, env=MY_ENV)
                 try:
                     st += obspyread(new_wav_file_name)
-                except FileNotFoundError:
+                except (FileNotFoundError, TypeError):
                     Logger.error('Could not read converted file %s, skipping.',
                                  new_wav_file_name)
         Logger.info(
@@ -1000,8 +1000,8 @@ def _make_append_new_pick_and_arrival(
 
 def compute_picks_from_app_velocity(
         event, origin, stream=Stream(), pick_calculation=None,
-        add_only_missing_picks=True,
-        pick_calculation_stations=None, add_array_picks=False,
+        add_only_missing_picks=True, keep_only_new_picks=False,
+        pick_calculation_stations=None,
         crossover_distance_km=100, app_vel_Pg=7.2, app_vel_Sg=4.1,
         app_vel_Pn=8.1, app_vel_Sn=4.6, *args, **kwargs):
     """
@@ -1112,40 +1112,64 @@ def compute_picks_from_app_velocity(
         if (not tr.stats.coordinates.latitude or
                 not tr.stats.coordinates.longitude):
             continue
-        # If array picks are requested, then we can skip all stations that
-        # belong to the array in case there is already a pick for at least one
-        # station at the array.
-        # TODO: This is not yet implemented
-        # if add_array_picks:
-    
+
         dist_deg = locations2degrees(
             origin.latitude, origin.longitude,
             tr.stats.coordinates.latitude, tr.stats.coordinates.longitude)
         dist_km = degrees2kilometers(dist_deg)
         if not dist_deg or np.isnan(dist_deg) or np.isnan(dist_km):
             continue
+        # Check if there are already picks for this station
+        relevant_picks = []
+        relevant_phases = []
+        if add_only_missing_picks:
+            relevant_picks = [
+                pick for pick in event.picks
+                if pick.waveform_id.station_code == tr.stats.station]
+            relevant_phases = list(set(
+                [pick.phase_hint[0] for pick in relevant_picks]))
         if pick_calculation == 'only_direct':
             # then get theoretical p -pick
-            new_picks, new_arrivals = _make_append_new_pick_and_arrival(
-                origin=origin, st=st, tr=tr, phase='Pg', new_picks=new_picks,
-                new_arrivals=new_arrivals, app_vel=app_vel_Pg,
-                dist_deg=dist_deg, *args, **kwargs)
-            new_picks, new_arrivals = _make_append_new_pick_and_arrival(
-                origin=origin, st=st, tr=tr, phase='Sg', new_picks=new_picks,
-                new_arrivals=new_arrivals, app_vel=app_vel_Sg,
-                dist_deg=dist_deg, *args, **kwargs)
+            skip_station = False
+            if 'P' in relevant_phases: # 'Pg' in relevant_phases or
+                skip_station = True
+            if not skip_station:
+                new_picks, new_arrivals = _make_append_new_pick_and_arrival(
+                    origin=origin, st=st, tr=tr, phase='Pg', new_picks=new_picks,
+                    new_arrivals=new_arrivals, app_vel=app_vel_Pg,
+                    dist_deg=dist_deg, *args, **kwargs)
+            skip_station = False
+            if 'S' in relevant_phases:
+                skip_station = True
+            if not skip_station:
+                new_picks, new_arrivals = _make_append_new_pick_and_arrival(
+                    origin=origin, st=st, tr=tr, phase='Sg', new_picks=new_picks,
+                    new_arrivals=new_arrivals, app_vel=app_vel_Sg,
+                    dist_deg=dist_deg, *args, **kwargs)
         elif (pick_calculation == 'only_refracted'
                 and dist_km > crossover_distance_km):
-            new_picks, new_arrivals = _make_append_new_pick_and_arrival(
-                origin=origin, st=st, tr=tr, phase='Pn', new_picks=new_picks,
-                new_arrivals=new_arrivals, app_vel=app_vel_Pn,
-                dist_deg=dist_deg, *args, **kwargs)
-            new_picks, new_arrivals = _make_append_new_pick_and_arrival(
-                origin=origin, st=st, tr=tr, phase='Sn', new_picks=new_picks,
-                new_arrivals=new_arrivals, app_vel=app_vel_Sn,
-                dist_deg=dist_deg, *args, **kwargs)
-    event.picks = new_picks
-    origin.arrivals = new_arrivals
+            skip_station = False
+            if 'P' in relevant_phases:
+                skip_station = True
+            if not skip_station:
+                new_picks, new_arrivals = _make_append_new_pick_and_arrival(
+                    origin=origin, st=st, tr=tr, phase='Pn', new_picks=new_picks,
+                    new_arrivals=new_arrivals, app_vel=app_vel_Pn,
+                    dist_deg=dist_deg, *args, **kwargs)
+            skip_station = False
+            if 'S' in relevant_phases:
+                skip_station = True
+            if not skip_station:
+                new_picks, new_arrivals = _make_append_new_pick_and_arrival(
+                    origin=origin, st=st, tr=tr, phase='Sn', new_picks=new_picks,
+                    new_arrivals=new_arrivals, app_vel=app_vel_Sn,
+                    dist_deg=dist_deg, *args, **kwargs)
+    if not keep_only_new_picks:
+        event.picks += new_picks
+        origin.arrivals += new_arrivals
+    else:
+        event.picks = new_picks
+        origin.arrivals = new_arrivals
     return event, origin
 
 
@@ -1164,7 +1188,7 @@ def prepare_picks(
         sta_translation_file="station_code_translation.txt",
         vertical_chans=['Z', 'H'], horizontal_chans=['E', 'N', '1', '2', '3'],
         stations_with_verticals_for_s=[],
-        remove_lonely_s_from_verticals=False, # was True
+        remove_lonely_s_from_verticals=True, # was True - not sure why it hs to be?
         allowed_phase_types='PST',
         allowed_phase_hints=['Pn', 'Pg', 'P', 'Sn', 'Sg', 'S', 'Lg', 'sP',
                              'pP', 'Pb', 'PP', 'Sb', 'SS'],

@@ -689,7 +689,8 @@ def _create_template_objects(
             event=event, stream=wavef, normalize_NSLC=normalize_NSLC, inv=inv,
             sta_translation_file=sta_translation_file,
             vertical_chans=vertical_chans, horizontal_chans=horizontal_chans,
-            stations_with_verticals_for_s=stations_with_verticals_for_s)
+            stations_with_verticals_for_s=stations_with_verticals_for_s,
+            **kwargs)
         # Extra checks for sampling rate and length of trace - if a trace is
         # very short, resample will fail.
         st = Stream()
@@ -1333,6 +1334,8 @@ def create_template_objects(
                 and tr.stats.extra.phase_hint[0] == 'S'
             )])
 
+    # Make sure that there are no empty streams in tribe
+    tribe = Tribe([templ for templ in tribe if len(templ.st) > 0])
     tribe = tribe.sort()
     # Add labels to the output files to indicate changes in processing
     label = ''

@@ -80,6 +80,20 @@ def _growclust_event_str(event, event_id, no_magnitude_value=-2.0):
     return event_str
 
 
+def read_evlist_file(evlist_file):
+    # with open(evlist_file, 'r') as f:
+    #     lines = f.readlines()
+    evlist_df = pd.read_csv(
+        evlist_file, sep=' ', header=None, names=[
+            'year', 'month', 'day', 'hour', 'minute', 'second', 'lat', 'lon',
+            'depth', 'mag', 'x_err', 'z_err', 'time_err', 'event_id'])
+            # 'nsta', 'gap', 'dist', 'rms', 'source'])
+    evlist_df['datetime'] = pd.to_datetime(
+        evlist_df[['year', 'month', 'day', 'hour', 'minute', 'second']],
+        tz='UTC')
+    return evlist_df
+
+
 def write_event(catalog, event_id_mapper=None):
     """
     Write obspy.core.event.Catalog to a growclust phase-format evlist.txt file.

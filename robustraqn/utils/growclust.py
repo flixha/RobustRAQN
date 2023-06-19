@@ -84,13 +84,13 @@ def read_evlist_file(evlist_file):
     # with open(evlist_file, 'r') as f:
     #     lines = f.readlines()
     evlist_df = pd.read_csv(
-        evlist_file, sep=' ', header=None, names=[
+        evlist_file, delim_whitespace=True, header=None, names=[
             'year', 'month', 'day', 'hour', 'minute', 'second', 'lat', 'lon',
             'depth', 'mag', 'x_err', 'z_err', 'time_err', 'event_id'])
             # 'nsta', 'gap', 'dist', 'rms', 'source'])
     evlist_df['datetime'] = pd.to_datetime(
-        evlist_df[['year', 'month', 'day', 'hour', 'minute', 'second']],
-        tz='UTC')
+        evlist_df[['year', 'month', 'day', 'hour', 'minute', 'second']])
+    # evlist_df['datetime'] = evlist_df['datetime'].values.replace(tzinfo=pytz.UTC)
     return evlist_df
 
 

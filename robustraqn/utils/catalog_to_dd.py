@@ -14,6 +14,13 @@ from joblib import Parallel, delayed
 # from robustraqn.utils.growclust import read_evlist_file
 
 import logging
+
+# Need to set up logging so that loky backend does proper logging of progress
+log_format = "%(asctime)s\t%(name)40s:%(lineno)s\t%(funcName)20s()\t%(levelname)s\t%(message)s"
+logging.basicConfig(
+    level=logging.INFO,
+    format=log_format)
+
 Logger = logging.getLogger(__name__)
 
 SEISARRAY_PREFIXES = [
@@ -25,13 +32,18 @@ SEISARRAY_PREFIXES = [
 
 def _read_correlation_file_quick(
         existing_corr_file, SEISARRAY_PREFIXES, t_diff_max=None,
-        return_event_pair_dicts=False, return_list_of_dfs=True):
+        return_event_pair_dicts=False, return_list_of_dfs=True,
+        float_dtype=np.float32):
     """
     Quickly read in a dt.cc file and return a dictionary of dictionaries of
     dataframes with the dt.cc values for each event pair.
     """
-    cc_df = pd.read_csv(existing_corr_file, delim_whitespace=True, header=None,
-                        names=['station', 'dt', 'cc', 'phase'])
+    # Specify dtypes to save some memory on dt- and cc-columns
+    cc_df = pd.read_csv(
+        existing_corr_file, delim_whitespace=True, header=None,
+        names=['station', 'dt', 'cc', 'phase'], dtype={
+            'station': str, 'dt': float_dtype, 'cc': float_dtype,
+            'phase': str})
     if t_diff_max is not None:
         # Drop rows where station is not "#" and where abs(dt) > t_diff_max
         cc_df = cc_df[
@@ -95,8 +107,19 @@ def _read_correlation_file_quick(
 
 def _filter_master_arrivals(
         master_dict, master_id=None, update_event_pair_dict=False,
-        return_event_pair_dicts=False, return_list_of_dfs=True, dt_df=None):
-    Logger.info('Filtering master event %s for array arrivals', master_id)
+        return_event_pair_dicts=False, return_list_of_dfs=True, dt_df=None,
+        n_jobs=None):
+    if return_event_pair_dicts:
+        Logger.info('Filtering master event %s for array arrivals', master_id)
+    elif return_list_of_dfs:
+        if n_jobs is not None:
+            precision = len(str(n_jobs))
+            progress = round(master_id / n_jobs, precision)
+            if progress in np.arange(0, 1, 0.01):
+                Logger.info(
+                    'Filtering master-worker event pair %s for array arrivals'
+                    ' - progress: %s %% ( %s / %s )', master_id,
+                    round(progress * 100, 1), master_id, n_jobs)
     remove_indices = []
     remove_dfs = []
     # Work through each event pair for one master event
@@ -138,8 +161,8 @@ def _filter_master_arrivals(
         # Remove the array picks that are not the best observation for this
         # phase:
         if len(not_best_array_phase_pick_indices) != 0:
-            for phases in not_best_array_phase_pick_indices:
-                remove_indices.extend(phases)
+            for phase_indices in not_best_array_phase_pick_indices:
+                remove_indices.extend(phase_indices)
             if update_event_pair_dict:
                 remove_df = pd.concat(not_best_array_phase_pick_indices)
                 dt_df.drop(remove_df.index, inplace=True)
@@ -178,14 +201,14 @@ def filter_correlation_file_for_array_arrivals(
                     None, master_id=master_id,
                     return_event_pair_dicts=False,
                     return_list_of_dfs=return_list_of_dfs,
-                    update_event_pair_dict=update_event_pair_dict,
                     dt_df=dt_df)
         else:
             # joblib is much quicker than threadpoolexecutor here..
             results = Parallel(n_jobs=cores)(delayed(_filter_master_arrivals)(
-                None, master_id=None, return_event_pair_dicts=False,
+                None, master_id=df_j, n_jobs=len(list_of_dfs),
+                return_event_pair_dicts=False,
                 return_list_of_dfs=return_list_of_dfs, dt_df=dt_df)
-                for dt_df in list_of_dfs)
+                for df_j, dt_df in enumerate(list_of_dfs))
             for res in results:
                 remove_indices += res
 
@@ -226,7 +249,7 @@ def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
             return_list_of_dfs=return_list_of_dfs)
         Logger.info('Filtering correlation file for array arrivals')
         # Select the highest-CC phase type for each array and remove the others
-        dt_df_list, cc_df = filter_correlation_file_for_array_arrivals(
+        _, cc_df = filter_correlation_file_for_array_arrivals(
             None, cc_df, return_event_pair_dicts=False,
             return_list_of_dfs=True, list_of_dfs=list_of_dfs,
             parallel=parallel, cores=cores)
@@ -277,10 +300,10 @@ if __name__ == '__main__':
     # folders = ['HypoDD_files/07_NSvalbard']
     # folders = ['HypoDD_files/08_WSvalbard']
     # folders = ['HypoDD_files/09_Knipovich']
-    folders = ['HypoDD_files/10_Molloy']
+    # folders = ['HypoDD_files/10_Molloy']
     # folders = ['HypoDD_files/11_LenaTrough']
 
-    # folders = ['HypoDD_files/MohnRidgeTest_202204_wINTEU']
+    folders = ['HypoDD_files/MohnRidgeTest_202204_wINTEU']
 
     t_diff_max = 15
 

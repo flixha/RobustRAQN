@@ -29,11 +29,25 @@ SEISARRAY_PREFIXES = [
 ]
 
 
+def _add_seisarray_columns(cc_df, seisarray_prefix):
+    """
+    """
+    cc_df[seisarray_prefix] = np.zeros(len(cc_df), dtype=bool)
+    # cc_df[seisarray_prefix] = cc_df.swifter.progress_bar(False).apply(
+    #     lambda row: fnmatch.fnmatch(row['station'], seisarray_prefix,
+    #                                 flags=fnmatch.EXTMATCH), axis=1)
+    uniq_array_stations = set(fnmatch.filter(
+        cc_df.station, seisarray_prefix, flags=fnmatch.EXTMATCH))
+    for array_station in uniq_array_stations:
+        cc_df[seisarray_prefix] = cc_df[seisarray_prefix] | (
+            cc_df['station'] == array_station)
+    return cc_df[seisarray_prefix]
+
 
 def _read_correlation_file_quick(
         existing_corr_file, SEISARRAY_PREFIXES, t_diff_max=None,
-        return_event_pair_dicts=False, return_list_of_dfs=True,
-        float_dtype=np.float32):
+        return_event_pair_dicts=False, return_df_gen=True,
+        float_dtype=np.float32, parallel=False, cores=None):
     """
     Quickly read in a dt.cc file and return a dictionary of dictionaries of
     dataframes with the dt.cc values for each event pair.
@@ -55,16 +69,29 @@ def _read_correlation_file_quick(
     cc_df.reset_index(drop=True, inplace=True)
     Logger.info('Adding columns for each seismic array...')
     # Add columns for each seismic array
-    for seisarray_prefix in SEISARRAY_PREFIXES:
-        cc_df[seisarray_prefix] = np.zeros(len(cc_df), dtype=bool)
-        # cc_df[seisarray_prefix] = cc_df.swifter.progress_bar(False).apply(
-        #     lambda row: fnmatch.fnmatch(row['station'], seisarray_prefix,
-        #                                 flags=fnmatch.EXTMATCH), axis=1)
-        uniq_array_stations = set(fnmatch.filter(
-            cc_df.station, seisarray_prefix, flags=fnmatch.EXTMATCH))
-        for array_station in uniq_array_stations:
-            cc_df[seisarray_prefix] = cc_df[seisarray_prefix] | (
-                cc_df['station'] == array_station)
+    if not parallel:
+        for seisarray_prefix in SEISARRAY_PREFIXES:
+            seisaray_column = _add_seisarray_columns(cc_df)
+            # Concatenate seisaray_column to the right of cc_df:
+            cc_df = pd.concat([cc_df, seisaray_column], axis=1)
+    else:
+        # Parallelize adding columns for each seismic array
+        station_df = pd.DataFrame(cc_df['station'])
+        arr_jobs = min(cores, len(SEISARRAY_PREFIXES))
+        results = Parallel(n_jobs=arr_jobs)(delayed(_add_seisarray_columns)(
+            station_df, seisarray_prefix)
+                               for seisarray_prefix in SEISARRAY_PREFIXES)
+        cc_df = pd.concat([cc_df, *results], axis=1)
+
+        # cc_df[seisarray_prefix] = np.zeros(len(cc_df), dtype=bool)
+        # # cc_df[seisarray_prefix] = cc_df.swifter.progress_bar(False).apply(
+        # #     lambda row: fnmatch.fnmatch(row['station'], seisarray_prefix,
+        # #                                 flags=fnmatch.EXTMATCH), axis=1)
+        # uniq_array_stations = set(fnmatch.filter(
+        #     cc_df.station, seisarray_prefix, flags=fnmatch.EXTMATCH))
+        # for array_station in uniq_array_stations:
+        #     cc_df[seisarray_prefix] = cc_df[seisarray_prefix] | (
+        #         cc_df['station'] == array_station)
 
     Logger.info('Splitting dt.cc file into event pairs...')
     event_pairs = cc_df[cc_df['station'] == "#"]
@@ -88,8 +115,10 @@ def _read_correlation_file_quick(
     stop_index[:-1] = event_pairs.index.values[1:] - 1
     # Set last index to last row of cc_df
     stop_index[-1] = cc_df.index.values[-1]
-    list_of_dfs = [cc_df.loc[start_index[n] : stop_index[n]]
-                   for n in range(len(event_pairs))]
+    dt_df_generator = (cc_df.loc[start_index[n] : stop_index[n]]
+                       for n in range(len(event_pairs)))
+    # Save number of event pairs for return
+    n_jobs = len(start_index)
 
     # Create a dictionary of dictionaries, with the first key being the
     # master event id, the second key being the worker event id, and the values
@@ -98,22 +127,22 @@ def _read_correlation_file_quick(
         event_pair_dict = defaultdict(dict)
         # Loop through all event pairs in the dt.cc file
         Logger.info('Sorting arrival dataframes into dicts...')
-        for event_pair, dt_df in zip(event_pairs.iterrows(), list_of_dfs):
+        for event_pair, dt_df in zip(event_pairs.iterrows(), dt_df_generator):
             master_id = int(event_pair[1]['dt'])
             worker_id = int(event_pair[1]['cc'])
             event_pair_dict[master_id][worker_id] = dt_df
-        return event_pair_dict, cc_df
-    elif return_list_of_dfs:
-        return list_of_dfs, cc_df
+        return event_pair_dict, cc_df, n_jobs
+    elif return_df_gen:
+        return dt_df_generator, cc_df, n_jobs
 
 
 def _filter_master_arrivals(
         master_dict, master_id=None, update_event_pair_dict=False,
-        return_event_pair_dicts=False, return_list_of_dfs=True, dt_df=None,
+        return_event_pair_dicts=False, return_df_gen=True, dt_df=None,
         filter_all_stations=False, n_jobs=None):
     if return_event_pair_dicts:
         Logger.info('Filtering master event %s for array arrivals', master_id)
-    elif return_list_of_dfs:
+    elif return_df_gen:
         if n_jobs is not None:
             # Show log information, but only in steps of 1 % (need to compare
             # how far we have gotten, but pay attention to rounding effects)
@@ -130,7 +159,7 @@ def _filter_master_arrivals(
     if return_event_pair_dicts:
         master_dict = master_dict
     # Work through one dataframe at a time
-    elif return_list_of_dfs:
+    elif return_df_gen:
         master_dict = {1: dt_df}
     for worker_id, dt_df in master_dict.items():
         # not_best_array_phase_picks_list = []
@@ -193,8 +222,9 @@ def _filter_master_arrivals(
 
 def filter_correlation_file_for_array_arrivals(
         event_pair_dict, cc_df, update_event_pair_dict=False,
-        return_event_pair_dicts=False, return_list_of_dfs=True,
-        list_of_dfs=[], filter_all_stations=False, parallel=False, cores=None):
+        return_event_pair_dicts=False, return_df_gen=True,
+        dt_df_generator=[], n_jobs=0, filter_all_stations=False,
+        parallel=False, cores=None):
     """
     """
     remove_indices = []
@@ -204,36 +234,40 @@ def filter_correlation_file_for_array_arrivals(
                 remove_indices += _filter_master_arrivals(
                     master_dict, master_id=master_id,
                     return_event_pair_dicts=return_event_pair_dicts,
-                    return_list_of_dfs=False,
+                    return_df_gen=False,
                     filter_all_stations=filter_all_stations,
                     update_event_pair_dict=update_event_pair_dict)
         else:
             # joblib is much quicker than threadpoolexecutor here..
-            results = Parallel(n_jobs=cores)(delayed(_filter_master_arrivals)(
-                event_pair_dict[master_id], master_id=master_id,
-                return_event_pair_dicts=return_event_pair_dicts,
-                return_list_of_dfs=False,
-                filter_all_stations=filter_all_stations)
+            filt_jobs = min(len(event_pair_dict), cores)
+            results = Parallel(n_jobs=filt_jobs)(
+                delayed(_filter_master_arrivals)(
+                    event_pair_dict[master_id], master_id=master_id,
+                    return_event_pair_dicts=return_event_pair_dicts,
+                    return_df_gen=False,
+                    filter_all_stations=filter_all_stations)
                 for master_id in event_pair_dict.keys())
             for res in results:
                 remove_indices += res
-    elif return_list_of_dfs:
+    elif return_df_gen:
         if not parallel:
-            for dt_df in list_of_dfs:
+            for dt_df in dt_df_generator:
                 remove_indices += _filter_master_arrivals(
                     None, master_id=master_id,
                     return_event_pair_dicts=False,
-                    return_list_of_dfs=return_list_of_dfs,
+                    return_df_gen=return_df_gen,
                     filter_all_stations=filter_all_stations,
                     dt_df=dt_df)
         else:
             # joblib is much quicker than threadpoolexecutor here..
-            results = Parallel(n_jobs=cores)(delayed(_filter_master_arrivals)(
-                None, master_id=df_j, n_jobs=len(list_of_dfs),
-                return_event_pair_dicts=False,
-                return_list_of_dfs=return_list_of_dfs, dt_df=dt_df,
-                filter_all_stations=filter_all_stations,)
-                for df_j, dt_df in enumerate(list_of_dfs))
+            filt_jobs = min(n_jobs, cores)
+            results = Parallel(n_jobs=filt_jobs)(delayed(
+                _filter_master_arrivals)(
+                    None, master_id=df_j, n_jobs=n_jobs,
+                    return_event_pair_dicts=False,
+                    return_df_gen=return_df_gen, dt_df=dt_df,
+                    filter_all_stations=filter_all_stations,)
+                for df_j, dt_df in enumerate(dt_df_generator))
             for res in results:
                 remove_indices += res
 
@@ -244,42 +278,43 @@ def filter_correlation_file_for_array_arrivals(
     cc_df = cc_df[mask]
     if return_event_pair_dicts:
         return event_pair_dict, cc_df
-    elif return_list_of_dfs:
+    elif return_df_gen:
         return None, cc_df
 
 
 def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
-                              parallel=False, cores=None,
                               return_event_pair_dicts=False,
                               filter_all_stations=False,
-                              return_list_of_dfs=True):
+                              return_df_gen=True, n_jobs=0,
+                              parallel=False, cores=None):
     """
     """
     dt_file = glob.glob(os.path.join(folder, 'dt.cc'))[0]
     Logger.info('Reading correlation file: ' + dt_file)
     if return_event_pair_dicts:
-        event_pair_dict, cc_df = _read_correlation_file_quick(
+        event_pair_dict, cc_df, n_jobs = _read_correlation_file_quick(
             dt_file, SEISARRAY_PREFIXES, t_diff_max=t_diff_max,
             return_event_pair_dicts=return_event_pair_dicts,
-            return_list_of_dfs=False)
+            return_df_gen=False, parallel=parallel, cores=cores)
         Logger.info('Filtering correlation file for array arrivals')
         # Select the highest-CC phase type for each array and remove the others
-        event_pair_dict, cc_df = filter_correlation_file_for_array_arrivals(
+        event_pair_dict, cc_df, n_jobs = filter_correlation_file_for_array_arrivals(
             event_pair_dict, cc_df,
             return_event_pair_dicts=return_event_pair_dicts,
-            return_list_of_dfs=False, filter_all_stations=filter_all_stations,
+            return_df_gen=False, filter_all_stations=filter_all_stations,
             parallel=parallel, cores=cores)
-    elif return_list_of_dfs:
-        list_of_dfs, cc_df = _read_correlation_file_quick(
+    elif return_df_gen:
+        dt_df_generator, cc_df, n_jobs = _read_correlation_file_quick(
             dt_file, SEISARRAY_PREFIXES, t_diff_max=t_diff_max,
             return_event_pair_dicts=False,
-            return_list_of_dfs=return_list_of_dfs)
+            return_df_gen=return_df_gen,
+            parallel=parallel, cores=cores)
         Logger.info('Filtering correlation file for array arrivals')
         # Select the highest-CC phase type for each array and remove the others
         _, cc_df = filter_correlation_file_for_array_arrivals(
             None, cc_df, return_event_pair_dicts=False,
-            return_list_of_dfs=True, list_of_dfs=list_of_dfs,
-            filter_all_stations=filter_all_stations,
+            return_df_gen=True, dt_df_generator=dt_df_generator,
+            filter_all_stations=filter_all_stations, n_jobs=n_jobs,
             parallel=parallel, cores=cores)
 
     # Need to reset index now (no?!)
@@ -338,6 +373,6 @@ if __name__ == '__main__':
     for folder in folders:
         filter_dt_file_for_arrays(
             folder, SEISARRAY_PREFIXES, t_diff_max=t_diff_max,
-            return_event_pair_dicts=False, return_list_of_dfs=True,
+            return_event_pair_dicts=False, return_df_gen=True,
             filter_all_stations=False,
             parallel=True, cores=50)

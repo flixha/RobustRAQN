@@ -31,6 +31,19 @@ SEISARRAY_PREFIXES = [
 
 def _add_seisarray_columns(cc_df, seisarray_prefix):
     """
+    Internal function to add bool-columns to a dataframe that state whether
+    observation is  part of a specific seismic array. For adding one column
+    for each seismic array.
+
+    Parameters:
+    -----------
+    :type cc_df: pandas.DataFrame
+    :param cc_df: Dataframe with columns 'station' and 'dt' from a dt.cc file
+    :type seisarray_prefix: str
+    :param seisarray_prefix: String with prefix of seismic array, e.g. 'AR'
+
+    :rtype: pandas.Series
+    :return: Series with bool values stating whether observation is part of
     """
     cc_df[seisarray_prefix] = np.zeros(len(cc_df), dtype=bool)
     # cc_df[seisarray_prefix] = cc_df.swifter.progress_bar(False).apply(
@@ -49,8 +62,50 @@ def _read_correlation_file_quick(
         return_event_pair_dicts=False, return_df_gen=True,
         float_dtype=np.float32, parallel=False, cores=None):
     """
-    Quickly read in a dt.cc file and return a dictionary of dictionaries of
-    dataframes with the dt.cc values for each event pair.
+    Function to quickly read in a dt.cc file and return either:
+    - a dictionary of dictionaries of dataframes with the dt.cc values for each
+      event pair.
+    - a generator of dataframes with the dt.cc values for each event pair.
+
+    Parameters:
+    -----------
+    :type existing_corr_file: str
+    :param existing_corr_file: Path to dt.cc file
+    :type SEISARRAY_PREFIXES: list
+    :param SEISARRAY_PREFIXES:
+        List of extended glob-strings that describe all stations belonging to
+        a seismic array, e.g.: [
+            '@(ARCES|AR[ABCDE][0-9])', '@(SPITS|SP[ABC][0-5])']
+    :type t_diff_max: float
+    :param t_diff_max:
+        Maximum dt-cc value to keep in dataframe (Values larger than this will
+        be removed, default is None)
+    :type return_event_pair_dicts: bool
+    :param return_event_pair_dicts:
+        Whether to return a dictionary of dictionaries of dataframes with the
+        dt.cc values for each event pair (default is False, then a generator
+        for dataframes is returned)
+    :type return_df_gen: bool
+    :param return_df_gen:
+        Whether to return a generator of dataframes with the dt.cc values for
+        each event pair (default is True)
+    :type float_dtype: numpy.dtype
+    :param float_dtype:
+        dtype to use for dt and cc columns (default is np.float32 which should
+        give enough precision for dt measurements)
+    :type parallel: bool
+    :param parallel: Whether to parallelize adding columns for each array
+    :type cores: int
+    :param cores: Number of cores to use for parallelization
+
+    :rtype: dict
+    :return:
+        Dictionary of dictionaries of dataframes with the dt.cc values (when
+        return_event_pair_dicts is True)
+    :rtype: generator
+    :return:
+        Generator of dataframes with the dt.cc values (when return_df_gen is
+        True)
     """
     # Specify dtypes to save some memory on dt- and cc-columns,
     # np.float32 should be enough precision for dt-measurements and
@@ -140,6 +195,34 @@ def _filter_master_arrivals(
         master_dict, master_id=None, update_event_pair_dict=False,
         return_event_pair_dicts=False, return_df_gen=True, dt_df=None,
         filter_all_stations=False, n_jobs=None):
+    """
+    Function to filter the master event arrivals for a given master event id.
+
+    Parameters
+    ----------
+    :type master_dict: dict
+    :param master_dict: Dictionary of dictionaries, with the first key being
+    :type master_id: int
+    :param master_id: Master event id to filter arrivals for
+    :type update_event_pair_dict: bool
+    :param update_event_pair_dict: Whether to update the event pair dictionary
+    :type return_event_pair_dicts: bool
+    :param return_event_pair_dicts: Whether to return the event pair dictionary
+    :type return_df_gen: bool
+    :param return_df_gen:
+        Whether to return the dataframe generator (instead of the dictionary)
+    :type dt_df: pandas.DataFrame
+    :param dt_df: Dataframe of dt.cc values for the master event
+    :type filter_all_stations: bool
+    :param filter_all_stations:
+    :type n_jobs: int
+    :param n_jobs: Number of jobs to split the dataframe into
+
+    :rtype: list
+    :return:
+        List of indices for suboptimal observations to be removed from the
+        dataframe.
+    """
     if return_event_pair_dicts:
         Logger.info('Filtering master event %s for array arrivals', master_id)
     elif return_df_gen:
@@ -220,12 +303,49 @@ def _filter_master_arrivals(
     return remove_indices
 
 
-def filter_correlation_file_for_array_arrivals(
+def filter_correlation_file_arrivals(
         event_pair_dict, cc_df, update_event_pair_dict=False,
         return_event_pair_dicts=False, return_df_gen=True,
         dt_df_generator=[], n_jobs=0, filter_all_stations=False,
         parallel=False, cores=None):
     """
+    Function to filter a correlation file for array arrivals. This
+    is done by finding the observations that are not the best observation for
+    each phase type at each array / station, and removing them from the
+    dataframe in place.
+
+    :type event_pair_dict: dict
+    :param event_pair_dict:
+        Dictionary of event pairs, with master event ID as key and a dictionary
+        of worker event IDs as value. Each worker event ID is a key to a
+        dataframe of correlation coefficients for that event pair.
+    :type cc_df: pd.DataFrame
+    :param cc_df:
+        The correlation dataframe to filter (basically the full dt-cc file).
+    :type update_event_pair_dict: bool
+    :param update_event_pair_dict:
+        Whether to update the event pair dict with the filtered dataframes.
+    :type return_event_pair_dicts: bool
+    :param return_event_pair_dicts:
+        Whether to return the event pair dict. (Quicker to not return it and
+        only use the df-generator).
+    :type return_df_gen: bool
+    :param return_df_gen: Whether to return a generator of dataframes.
+    :type dt_df_generator: generator
+    :param dt_df_generator: Generator for event-pair dataframes.
+    :type n_jobs: int
+    :param n_jobs: Total number of jobs to be run.
+    :type filter_all_stations: bool
+    :param filter_all_stations:
+        Whether to filter all stations for multiple observations of the same
+        phase type, and not just array stations.
+    :type parallel: bool
+    :param parallel: Whether to run in parallel.
+    :type cores: int
+    :param cores: Number of cores to use.
+
+    :rtype: generator
+    :return: Generator of dataframes.
     """
     remove_indices = []
     if return_event_pair_dicts:
@@ -285,9 +405,42 @@ def filter_correlation_file_for_array_arrivals(
 def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
                               return_event_pair_dicts=False,
                               filter_all_stations=False,
-                              return_df_gen=True, n_jobs=0,
+                              return_df_gen=True,
                               parallel=False, cores=None):
     """
+    Top level function to filter a correlation file for array arrivals. This
+    function reads the correlation file, filters it, and writes the filtered
+    dt-cc file to disk.
+
+    :type folder: str
+    :param folder: Path to folder containing dt.cc file.
+    :type SEISARRAY_PREFIXES: list
+    :param SEISARRAY_PREFIXES:
+        List of extended glob-strings that describe all stations belonging to
+        a seismic array, e.g.: [
+            '@(ARCES|AR[ABCDE][0-9])', '@(SPITS|SP[ABC][0-5])']
+    :type t_diff_max: float
+    :param t_diff_max:
+        Maximum dt-cc value to keep in dataframe (Values larger than this will
+        be removed, default is None)
+    :type return_event_pair_dicts: bool
+    :param return_event_pair_dicts:
+        Whether to return the event pair dict. (Quicker to not return it and
+        just use the df-generator).
+    :type filter_all_stations: bool
+    :param filter_all_stations:
+        Whether to filter all stations and not just array stations.
+    :type return_df_gen: bool
+    :param return_df_gen:
+        Whether to return a generator of dataframes (default is True, this is
+        the quickest option).
+    :type parallel: bool
+    :param parallel: Whether to run in parallel.
+    :type cores: int
+    :param cores: Number of cores to use.
+
+    :rtype: tuple
+    :return: Tuple of event pair dict and filtered dataframe.
     """
     dt_file = glob.glob(os.path.join(folder, 'dt.cc'))[0]
     Logger.info('Reading correlation file: ' + dt_file)
@@ -298,7 +451,7 @@ def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
             return_df_gen=False, parallel=parallel, cores=cores)
         Logger.info('Filtering correlation file for array arrivals')
         # Select the highest-CC phase type for each array and remove the others
-        event_pair_dict, cc_df, n_jobs = filter_correlation_file_for_array_arrivals(
+        event_pair_dict, cc_df, n_jobs = filter_correlation_file_arrivals(
             event_pair_dict, cc_df,
             return_event_pair_dicts=return_event_pair_dicts,
             return_df_gen=False, filter_all_stations=filter_all_stations,
@@ -311,7 +464,7 @@ def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
             parallel=parallel, cores=cores)
         Logger.info('Filtering correlation file for array arrivals')
         # Select the highest-CC phase type for each array and remove the others
-        _, cc_df = filter_correlation_file_for_array_arrivals(
+        _, cc_df = filter_correlation_file_arrivals(
             None, cc_df, return_event_pair_dicts=False,
             return_df_gen=True, dt_df_generator=dt_df_generator,
             filter_all_stations=filter_all_stations, n_jobs=n_jobs,

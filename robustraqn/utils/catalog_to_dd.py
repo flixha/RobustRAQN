@@ -544,6 +544,8 @@ def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
 
     # Need to reset index now (no?!)
     # cc_df.reset_index(drop=True, inplace=True)
+    if backup_parquet_file:
+        cc_df.to_parquet(os.path.join(folder, 'dt_filt.cc.parquet'))
 
     out_file = os.path.join(folder, 'dt_filt.cc')
     Logger.info('Formatting output lines for file: ' + out_file)
@@ -556,15 +558,24 @@ def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
         header_df.phase)
 
     nonheader_df = cc_df[cc_df['station'] != "#"]
+    # Pyarrow 10.0.1 struggles with str-array > 2GB, so we better convert to
+    # python object-type string first
+    if nonheader_df.memory_usage().sum() > 2147483646:
+        header_df['station'] = header_df['station'].astype('str')
+        header_df['phase'] = header_df['phase'].astype('str')
+        header_str_df = header_str_df.astype(str)
+        nonheader_df['station'] = nonheader_df['station'].astype('str')
+        nonheader_df['phase'] = nonheader_df['phase'].astype('str')
+
     nonheader_str_df = (
         nonheader_df.station.apply(lambda x: '{:6s}'.format(x)) +
         nonheader_df.dt.apply(lambda x: '{:9.3f}'.format(x)) +
         nonheader_df.cc.apply(lambda x: '{:7.4f} '.format(x)) +
         nonheader_df.phase)
-
-    if backup_parquet_file:
-        cc_df.to_parquet(os.path.join(folder, 'dt_filt.cc.parquet'))
     
+    # with open(out_file,'w') as file:
+    #   df.to_string(file, columns=use_cols)
+
     # Combine headers and nonheader lines, sort by index into right order
     cc_df['print_str'] = pd.concat([header_str_df, nonheader_str_df]
                                    ).sort_index()

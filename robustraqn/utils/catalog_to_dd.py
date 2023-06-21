@@ -323,46 +323,46 @@ def _filter_master_arrivals(
             # pandas sum is slower here:
             # non_array_picks = dt_df[
             #     dt_df[SEISARRAY_PREFIXES].sum(axis=1) == 0]
-            if len(non_array_picks) <= 1:
-                continue
+            if len(non_array_picks) > 1:
+                # Total 46 seconds for this part:
+                # for phase, phase_picks in non_array_picks.groupby(
+                #         [non_array_picks['station'], non_array_picks['phase']],
+                #         sort=False):
+                #     # Select highest-CC pick for each phase at each station, remove
+                #     # rest.
+                #     if len(phase_picks) <= 1:
+                #         continue
+                #     # Get the index of the best phase observation:
+                #     best_phase_pick_name = phase_picks['cc'].idxmax()
+                #     # Find the other observations for this phase at this array:
+                #     not_best_phase_pick_index = phase_picks.index[
+                #         phase_picks.index != best_phase_pick_name].values
+                #     not_best_phase_pick_indices.append(not_best_phase_pick_index)
 
-            # Total 46 seconds for this part:
-            # for phase, phase_picks in non_array_picks.groupby(
-            #         [non_array_picks['station'], non_array_picks['phase']],
-            #         sort=False):
-            #     # Select highest-CC pick for each phase at each station, remove
-            #     # rest.
-            #     if len(phase_picks) <= 1:
-            #         continue
-            #     # Get the index of the best phase observation:
-            #     best_phase_pick_name = phase_picks['cc'].idxmax()
-            #     # Find the other observations for this phase at this array:
-            #     not_best_phase_pick_index = phase_picks.index[
-            #         phase_picks.index != best_phase_pick_name].values
-            #     not_best_phase_pick_indices.append(not_best_phase_pick_index)
-
-            # Total 20 seconds for this part:
-            # Do grouping manually with defaultdict:
-            groups = defaultdict(lambda: [])
-            # station_phases = (non_array_picks['station'] + '_' +
-            #                   non_array_picks['phase']).values
-            # Much quicker to concatenate strings with list comprehension:
-            station_phases = [
-                "{}_{}".format(sta, ph) for sta, ph in zip(
-                    non_array_picks.station.values,
-                    non_array_picks.phase.values)]
-            for station_phase, index, cc in zip(
-                    station_phases, non_array_picks.index, non_array_picks.cc):
-                groups[station_phase].append((index, cc))
-            for station_phase, index_cc_tuple in groups.items():
-                best_phase_pick_local_index = np.argmax(
-                    [cc for index, cc in index_cc_tuple])
-                best_phase_pick_index = index_cc_tuple[
-                    best_phase_pick_local_index][0]
-                not_best_phase_pick_index = [
-                    index for index, cc in index_cc_tuple
-                    if index != best_phase_pick_index]
-                not_best_phase_pick_indices.append(not_best_phase_pick_index)
+                # Total 20 seconds for this part:
+                # Do grouping manually with defaultdict:
+                groups = defaultdict(lambda: [])
+                # station_phases = (non_array_picks['station'] + '_' +
+                #                   non_array_picks['phase']).values
+                # Much quicker to concatenate strings with list comprehension:
+                station_phases = [
+                    "{}_{}".format(sta, ph) for sta, ph in zip(
+                        non_array_picks.station.values,
+                        non_array_picks.phase.values)]
+                for station_phase, index, cc in zip(
+                        station_phases, non_array_picks.index,
+                        non_array_picks.cc):
+                    groups[station_phase].append((index, cc))
+                for station_phase, index_cc_tuple in groups.items():
+                    best_phase_pick_local_index = np.argmax(
+                        [cc for index, cc in index_cc_tuple])
+                    best_phase_pick_index = index_cc_tuple[
+                        best_phase_pick_local_index][0]
+                    not_best_phase_pick_index = [
+                        index for index, cc in index_cc_tuple
+                        if index != best_phase_pick_index]
+                    not_best_phase_pick_indices.append(
+                        not_best_phase_pick_index)
 
         # Remove the array and station picks that are not the best observation
         # for this phase:

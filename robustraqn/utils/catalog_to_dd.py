@@ -125,10 +125,12 @@ def _read_correlation_file_quick(
     Logger.info('Adding columns for each seismic array...')
     # Add columns for each seismic array
     if not parallel:
+        seisarray_columns = []
         for seisarray_prefix in SEISARRAY_PREFIXES:
-            seisaray_column = _add_seisarray_columns(cc_df)
-            # Concatenate seisaray_column to the right of cc_df:
-            cc_df = pd.concat([cc_df, seisaray_column], axis=1)
+            seisarray_columns.append(_add_seisarray_columns(
+                cc_df, seisarray_prefix=seisarray_prefix))
+        # Concatenate seisaray_column to the right of cc_df:
+        # cc_df = pd.concat([cc_df, *seisarray_columns], axis=1)
     else:
         # Parallelize adding columns for each seismic array
         station_df = pd.DataFrame(cc_df['station'])
@@ -170,8 +172,15 @@ def _read_correlation_file_quick(
     stop_index[:-1] = event_pairs.index.values[1:] - 1
     # Set last index to last row of cc_df
     stop_index[-1] = cc_df.index.values[-1]
-    dt_df_generator = (cc_df.loc[start_index[n] : stop_index[n]]
-                       for n in range(len(event_pairs)))
+    # Drop dt- column because it's not needed for the workers - but this
+    # actually makes it slower
+    # Speed timings:
+    # with list: 43 s for 16 MB dt-cc file
+    # with list, drop dt: 102 s for 16 MB dt-cc file
+    # with generator: 52 s for 16 MB dt-cc file, but much less memory usage
+    dt_df_generator = (
+        cc_df.loc[start_index[n] : stop_index[n]]  # .drop(columns='dt')
+        for n in range(len(event_pairs)))
     # Save number of event pairs for return
     n_jobs = len(start_index)
 
@@ -190,7 +199,7 @@ def _read_correlation_file_quick(
     elif return_df_gen:
         return dt_df_generator, cc_df, n_jobs
 
-
+# @profile
 def _filter_master_arrivals(
         master_dict, master_id=None, update_event_pair_dict=False,
         return_event_pair_dicts=False, return_df_gen=True, dt_df=None,
@@ -253,42 +262,106 @@ def _filter_master_arrivals(
             #     lambda row: fnmatch.fnmatch(
             #         row['station'], seisarray_prefix, flags=fnmatch.EXTMATCH),
             #     axis=1)]
+            # pandas sum is quicker here than np.sum:
             if dt_df[seisarray_prefix].sum() <= 1:
                 continue
+            # This selection is quite slow:
             array_picks = dt_df[dt_df[seisarray_prefix]]
             # Get all phase types recorded for each array
             # array_pick_phases = array_picks['phase'].unique()
-            for phase, array_phase_picks in array_picks.groupby(
-                    array_picks['phase']):
-                if len(array_phase_picks) <= 1:
-                    continue
-                # Select the highest-CC phase type for each array and
-                # remove others. Find the best observation for this phase
-                # at this array:
-                # best_phase_loc = np.argmax(array_phase_picks['cc'])
-                # Get the index of the best phase observation:
-                best_array_phase_pick_name = array_phase_picks['cc'].idxmax()
-                # Find the other observations for this phase at this array:
-                not_best_array_phase_pick_index = array_phase_picks.index[
-                    array_phase_picks.index != best_array_phase_pick_name
-                    ].values
-                not_best_phase_pick_indices.append(
-                    not_best_array_phase_pick_index)
+
+            # uniq_array_phases = set(array_picks['phase'].values)
+            # for phase in uniq_array_phases:
+            #     array_phase_picks = array_picks[array_picks['phase'] == phase]
+            if len(array_picks) <= 1:
+                continue
+
+            # With this, total time: 20 s
+            # for phase, array_phase_picks in array_picks.groupby(
+            #         array_picks['phase'], sort=False):
+            #     if len(array_phase_picks) <= 1:
+            #         continue
+            #     # Select the highest-CC phase type for each array and
+            #     # remove others. Find the best observation for this phase
+            #     # at this array:
+            #     # best_phase_loc = np.argmax(array_phase_picks['cc'])
+            #     # Get the index of the best phase observation:
+            #     best_array_phase_pick_name = array_phase_picks['cc'].idxmax()
+            #     # Find the other observations for this phase at this array:
+            #     not_best_array_phase_pick_index = array_phase_picks.index[
+            #         array_phase_picks.index != best_array_phase_pick_name
+            #         ].values
+            #     not_best_phase_pick_indices.append(
+            #         not_best_array_phase_pick_index)
+
+            # With this, total time: 16 s
+            # Do grouping manually with defaultdict:
+            groups = defaultdict(lambda: [])
+            for phase, index, cc in zip(
+                    array_picks.phase, array_picks.index, array_picks.cc):
+                groups[phase].append((index, cc))
+            for phase, index_cc_tuple in groups.items():
+                best_phase_pick_local_index = np.argmax(
+                    [cc for index, cc in index_cc_tuple])
+                best_phase_pick_index = index_cc_tuple[
+                    best_phase_pick_local_index][0]
+                not_best_phase_pick_index = [
+                    index for index, cc in index_cc_tuple
+                    if index != best_phase_pick_index]
+                not_best_phase_pick_indices.append(not_best_phase_pick_index)
+                
+                
         # Now filter individual stations (not part of arrays) for multiple
         # measurements of same arrival at the same station:
         if filter_all_stations:
-            non_array_picks = dt_df[~dt_df[SEISARRAY_PREFIXES].any(axis=1)]
-            for phase, phase_picks in non_array_picks.groupby(
-                    [non_array_picks['station'], non_array_picks['phase']]):
-                # Select highest-CC pick for each phase at each station, remove
-                # rest.
-                if len(phase_picks) <= 1:
-                    continue
-                # Get the index of the best phase observation:
-                best_phase_pick_name = phase_picks['cc'].idxmax()
-                # Find the other observations for this phase at this array:
-                not_best_phase_pick_index = phase_picks.index[
-                    phase_picks.index != best_phase_pick_name].values
+            # This formulation with .any is quite slow:
+            # non_array_picks = dt_df[~dt_df[SEISARRAY_PREFIXES].any(axis=1)]
+            # Quicker? - select rows where all seisarray-
+            non_array_picks = dt_df[np.sum([
+                dt_df[seisarray_prefix]
+                for seisarray_prefix in SEISARRAY_PREFIXES], axis=0) == 0]
+            # pandas sum is slower here:
+            # non_array_picks = dt_df[
+            #     dt_df[SEISARRAY_PREFIXES].sum(axis=1) == 0]
+            if len(non_array_picks) <= 1:
+                continue
+
+            # Total 46 seconds for this part:
+            # for phase, phase_picks in non_array_picks.groupby(
+            #         [non_array_picks['station'], non_array_picks['phase']],
+            #         sort=False):
+            #     # Select highest-CC pick for each phase at each station, remove
+            #     # rest.
+            #     if len(phase_picks) <= 1:
+            #         continue
+            #     # Get the index of the best phase observation:
+            #     best_phase_pick_name = phase_picks['cc'].idxmax()
+            #     # Find the other observations for this phase at this array:
+            #     not_best_phase_pick_index = phase_picks.index[
+            #         phase_picks.index != best_phase_pick_name].values
+            #     not_best_phase_pick_indices.append(not_best_phase_pick_index)
+
+            # Total 20 seconds for this part:
+            # Do grouping manually with defaultdict:
+            groups = defaultdict(lambda: [])
+            # station_phases = (non_array_picks['station'] + '_' +
+            #                   non_array_picks['phase']).values
+            # Much quicker to concatenate strings with list comprehension:
+            station_phases = [
+                "{}_{}".format(sta, ph) for sta, ph in zip(
+                    non_array_picks.station.values,
+                    non_array_picks.phase.values)]
+            for station_phase, index, cc in zip(
+                    station_phases, non_array_picks.index, non_array_picks.cc):
+                groups[station_phase].append((index, cc))
+            for station_phase, index_cc_tuple in groups.items():
+                best_phase_pick_local_index = np.argmax(
+                    [cc for index, cc in index_cc_tuple])
+                best_phase_pick_index = index_cc_tuple[
+                    best_phase_pick_local_index][0]
+                not_best_phase_pick_index = [
+                    index for index, cc in index_cc_tuple
+                    if index != best_phase_pick_index]
                 not_best_phase_pick_indices.append(not_best_phase_pick_index)
 
         # Remove the array and station picks that are not the best observation
@@ -371,13 +444,12 @@ def filter_correlation_file_arrivals(
                 remove_indices += res
     elif return_df_gen:
         if not parallel:
-            for dt_df in dt_df_generator:
+            for df_j, dt_df in enumerate(dt_df_generator):
                 remove_indices += _filter_master_arrivals(
-                    None, master_id=master_id,
+                    None, master_id=df_j, n_jobs=n_jobs,
                     return_event_pair_dicts=False,
-                    return_df_gen=return_df_gen,
-                    filter_all_stations=filter_all_stations,
-                    dt_df=dt_df)
+                    return_df_gen=return_df_gen, dt_df=dt_df,
+                    filter_all_stations=filter_all_stations)
         else:
             # joblib is much quicker than threadpoolexecutor here..
             filt_jobs = min(n_jobs, cores)
@@ -405,7 +477,7 @@ def filter_correlation_file_arrivals(
 def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
                               return_event_pair_dicts=False,
                               filter_all_stations=False,
-                              return_df_gen=True,
+                              return_df_gen=True, backup_parquet_file=False,
                               parallel=False, cores=None):
     """
     Top level function to filter a correlation file for array arrivals. This
@@ -490,6 +562,9 @@ def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
         nonheader_df.cc.apply(lambda x: '{:7.4f} '.format(x)) +
         nonheader_df.phase)
 
+    if backup_parquet_file:
+        cc_df.to_parquet(os.path.join(folder, 'dt_filt.cc.parquet'))
+    
     # Combine headers and nonheader lines, sort by index into right order
     cc_df['print_str'] = pd.concat([header_str_df, nonheader_str_df]
                                    ).sort_index()
@@ -500,7 +575,7 @@ def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
 
 
 
-# %%
+# %% TEST FUNCTION
 
 if __name__ == '__main__':
 

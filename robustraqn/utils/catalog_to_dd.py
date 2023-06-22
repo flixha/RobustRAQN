@@ -60,6 +60,7 @@ def _add_seisarray_columns(cc_df, seisarray_prefix):
 def _read_correlation_file_quick(
         existing_corr_file, SEISARRAY_PREFIXES, t_diff_max=None,
         return_event_pair_dicts=False, return_df_gen=True,
+        excluded_event_ids=[],
         float_dtype=np.float32, parallel=False, cores=None):
     """
     Function to quickly read in a dt.cc file and return either:
@@ -119,6 +120,27 @@ def _read_correlation_file_quick(
         # Drop rows where station is not "#" and where abs(dt) > t_diff_max
         cc_df = cc_df[
             (cc_df['station'] == "#") | (abs(cc_df['dt']) <= t_diff_max)]
+
+    # Need to exclude event pairs where one event is part of excluded_event_ids
+    if len(excluded_event_ids) > 0:
+        Logger.info('Removing event pairs for %s excluded events...',
+                    len(excluded_event_ids))
+        remove_indices = []
+        remove_pair = False
+        for jr, row in cc_df.iterrows():
+            if '#' in row['station']:
+                if (row['cc'] in excluded_event_ids or 
+                        row['dt'] in excluded_event_ids):
+                    remove_pair = True
+                    remove_indices.append(jr)
+                else:
+                    remove_pair = False
+            else:
+                if remove_pair:
+                    remove_indices.append(jr)
+        cc_df.drop(remove_indices, inplace=True)
+        Logger.info('Removed %s lines from cc-dataframe for excluded events',
+                    len(remove_indices))
 
     # Need to reset index after removing rows with abs(dt) > t_diff_max
     cc_df.reset_index(drop=True, inplace=True)
@@ -478,6 +500,7 @@ def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
                               return_event_pair_dicts=False,
                               filter_all_stations=False,
                               return_df_gen=True, backup_parquet_file=False,
+                              excluded_event_ids=[],
                               parallel=False, cores=None):
     """
     Top level function to filter a correlation file for array arrivals. This
@@ -520,6 +543,7 @@ def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
         event_pair_dict, cc_df, n_jobs = _read_correlation_file_quick(
             dt_file, SEISARRAY_PREFIXES, t_diff_max=t_diff_max,
             return_event_pair_dicts=return_event_pair_dicts,
+            excluded_event_ids=excluded_event_ids,
             return_df_gen=False, parallel=parallel, cores=cores)
         Logger.info('Filtering correlation file for array arrivals')
         # Select the highest-CC phase type for each array and remove the others
@@ -533,6 +557,7 @@ def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
             dt_file, SEISARRAY_PREFIXES, t_diff_max=t_diff_max,
             return_event_pair_dicts=False,
             return_df_gen=return_df_gen,
+            excluded_event_ids=excluded_event_ids,
             parallel=parallel, cores=cores)
         Logger.info('Filtering correlation file for array arrivals')
         # Select the highest-CC phase type for each array and remove the others

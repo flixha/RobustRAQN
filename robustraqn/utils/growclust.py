@@ -88,10 +88,34 @@ def read_evlist_file(evlist_file):
             'year', 'month', 'day', 'hour', 'minute', 'second', 'lat', 'lon',
             'depth', 'mag', 'x_err', 'z_err', 'time_err', 'event_id'])
             # 'nsta', 'gap', 'dist', 'rms', 'source'])
-    evlist_df['datetime'] = pd.to_datetime(
+    evlist_df['time'] = pd.to_datetime(
         evlist_df[['year', 'month', 'day', 'hour', 'minute', 'second']])
     # evlist_df['datetime'] = evlist_df['datetime'].values.replace(tzinfo=pytz.UTC)
+    # Add timezone info
+    evlist_df['time'] = evlist_df['time'].apply(
+        lambda x: x.replace(tzinfo=pytz.UTC))
+
     return evlist_df
+
+
+def write_event_from_df(ev_df, filename='evlist_filt.txt'):
+    """
+    Write evlist-dataframe to a growclust formatted evlist.txt file.
+    """
+    ev_df['event_str'] = [
+        "{year:4d} {month:02d} {day:02d} {hour:2d} {minute:02d} "
+        "{seconds:06.3f}  {latitude:8.5f} {longitude:10.5f}"
+        " {depth:7.3f}   {magnitude:5.2f} {x_err:6.3f} {z_err:6.3f} "
+        "{time_err:6.3f} {event_id:9d}".format(
+            year=ev_row.year, month=ev_row.month, day=ev_row.day,
+            hour=ev_row.hour, minute=ev_row.minute, seconds=ev_row.second,
+            latitude=ev_row.lat, longitude=ev_row.lon,
+            depth=ev_row.depth, magnitude=ev_row.mag,
+            x_err=ev_row.x_err, z_err=ev_row.z_err, time_err=ev_row.time_err,
+            event_id=ev_row.event_id)
+        for nr, ev_row in ev_df.iterrows()]
+    # Save to file
+    np.savetxt(filename, ev_df['event_str'].values, fmt='%s')
 
 
 def write_event(catalog, event_id_mapper=None):

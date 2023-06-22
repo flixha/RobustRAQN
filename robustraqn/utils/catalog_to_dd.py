@@ -126,18 +126,36 @@ def _read_correlation_file_quick(
         Logger.info('Removing event pairs for %s excluded events...',
                     len(excluded_event_ids))
         remove_indices = []
-        remove_pair = False
-        for jr, row in cc_df.iterrows():
-            if '#' in row['station']:
-                if (row['cc'] in excluded_event_ids or 
-                        row['dt'] in excluded_event_ids):
-                    remove_pair = True
-                    remove_indices.append(jr)
-                else:
-                    remove_pair = False
-            else:
-                if remove_pair:
-                    remove_indices.append(jr)
+        # Find all rows with '#' in station column and check if they contain
+        # excluded event ids
+        pair_df = cc_df[cc_df.station == '#']
+        excluded_pair_df = pair_df[
+            (np.sum([
+                pair_df.dt == excluded_event_id
+                for excluded_event_id in excluded_event_ids], axis=0) > 0) |
+            (np.sum([
+                pair_df.cc == excluded_event_id
+                for excluded_event_id in excluded_event_ids], axis=0) > 0)]
+        remove_indices.extend(excluded_pair_df.index)
+        for jr, row in excluded_pair_df.iterrows():
+            for kr, dt_row in cc_df.loc[row.name+1:].iterrows():
+                if dt_row.station == '#':
+                    break
+                remove_indices.append(dt_row.name)
+
+        # SLower version with iterrows across all rows:
+        # remove_pair = False
+        # for jr, row in cc_df.iterrows():
+        #     if '#' in row['station']:
+        #         if (row['cc'] in excluded_event_ids or
+        #                 row['dt'] in excluded_event_ids):
+        #             remove_pair = True
+        #             remove_indices.append(jr)
+        #         else:
+        #             remove_pair = False
+        #     else:
+        #         if remove_pair:
+        #             remove_indices.append(jr)
         cc_df.drop(remove_indices, inplace=True)
         Logger.info('Removed %s lines from cc-dataframe for excluded events',
                     len(remove_indices))

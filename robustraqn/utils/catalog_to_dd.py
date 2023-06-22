@@ -60,7 +60,7 @@ def _add_seisarray_columns(cc_df, seisarray_prefix):
 def _read_correlation_file_quick(
         existing_corr_file, SEISARRAY_PREFIXES, t_diff_max=None,
         return_event_pair_dicts=False, return_df_gen=True,
-        excluded_event_ids=[],
+        excluded_event_ids=[], max_n_dt=100,
         float_dtype=np.float32, parallel=False, cores=None):
     """
     Function to quickly read in a dt.cc file and return either:
@@ -129,16 +129,29 @@ def _read_correlation_file_quick(
         # Find all rows with '#' in station column and check if they contain
         # excluded event ids
         pair_df = cc_df[cc_df.station == '#']
-        excluded_pair_df = pair_df[
-            (np.sum([
-                pair_df.dt == excluded_event_id
-                for excluded_event_id in excluded_event_ids], axis=0) > 0) |
-            (np.sum([
-                pair_df.cc == excluded_event_id
-                for excluded_event_id in excluded_event_ids], axis=0) > 0)]
+        # excluded_pair_df = pair_df[
+        #     (np.sum([
+        #         pair_df.dt == excluded_event_id
+        #         for excluded_event_id in excluded_event_ids], axis=0) > 0) |
+        #     (np.sum([
+        #         pair_df.cc == excluded_event_id
+        #         for excluded_event_id in excluded_event_ids], axis=0) > 0)]
+        # Memory-saving numpy formulation:
+        rsum1 = np.zeros(len(pair_df), dtype=np.int32)
+        rsum2 = np.zeros(len(pair_df), dtype=np.int32)
+        for excluded_event_id in excluded_event_ids:
+            rsum1 += (pair_df.dt == excluded_event_id)
+            rsum2 += (pair_df.cc == excluded_event_id)
+        excluded_pair_df = pair_df[(rsum1 > 0) | (rsum2 > 0)]
         remove_indices.extend(excluded_pair_df.index)
+        prev_event_id = 0
         for jr, row in excluded_pair_df.iterrows():
-            for kr, dt_row in cc_df.loc[row.name+1:].iterrows():
+            if row.dt != prev_event_id:
+                Logger.info('Removing event pairs for event id %s', row.dt)
+            # Limit the number of rows before starting the iteration, otherwise
+            # this can take a long time...
+            for kr, dt_row in cc_df.loc[row.name+1 : row.name+max_n_dt
+                                        ].iterrows():
                 if dt_row.station == '#':
                     break
                 remove_indices.append(dt_row.name)

@@ -108,18 +108,44 @@ def _read_correlation_file_quick(
         Generator of dataframes with the dt.cc values (when return_df_gen is
         True)
     """
+    # if size of dt.cc file is larger than 10 GB or so (but what exactly?) use
+    # python strings instead of pyarrow strings to avoid pyarrow overflows:
+    string_dtype = "string[pyarrow]"
+    if os.path.getsize(existing_corr_file) > 1.3 * 10e9:
+        string_dtype = "string"
+        Logger.info('Reverting to python strings because dt.cc file is very '
+                    'large')
+    else:
+        string_dtype = "string[pyarrow]"
     # Specify dtypes to save some memory on dt- and cc-columns,
     # np.float32 should be enough precision for dt-measurements and
     # pyarrow-string saves 90 % compared to object dtype
     cc_df = pd.read_csv(
         existing_corr_file, delim_whitespace=True, header=None,
         names=['station', 'dt', 'cc', 'phase'], dtype={
-            'station': "string[pyarrow]", 'dt': float_dtype,
-            'cc': float_dtype, 'phase': "string[pyarrow]"})
+            'station': string_dtype, 'dt': float_dtype,
+            'cc': float_dtype, 'phase': string_dtype})
+    # if the dataframe has more than 2147483647 rows, then convert pyarrow-
+    # strings to python-strings to avoid pyarrow overflows:
+    # Doesnt work
+    # if len(cc_df) > 2147483647:
+    #     Logger.info('Casting pyarrow strings to python strings because '
+    #                 'dataframe has more than 2147483647 rows')
+    #     cc_df['station'] = cc_df['station'].apply(lambda x: str(x))
+    #     cc_df['phase'] = cc_df['phase'].apply(lambda x: str(x))
     if t_diff_max is not None:
         # Drop rows where station is not "#" and where abs(dt) > t_diff_max
-        cc_df = cc_df[
-            (cc_df['station'] == "#") | (abs(cc_df['dt']) <= t_diff_max)]
+        # For large dt.cc files (e.g., 1169809308 rows) there could be a 
+        # pyarrow.lib.ArrowInvalid: offset overflow while concatenating arrays
+        # due to bool[pyarrow], so better convert to python bool
+        bool_array = ((cc_df['station'] == "#") |
+                      (abs(cc_df['dt']) <= t_diff_max)).values.astype(bool)
+        cc_df = cc_df[bool_array]
+
+    # Remove consecutive duplicate rows to speed up later comparisons - such
+    # rows are definitely not helpful to Growclust
+    consec_dup_df = cc_df[np.all(cc_df.shift() == cc_df, axis=1)]
+    cc_df.drop(consec_dup_df.index, inplace=True)
 
     # Need to exclude event pairs where one event is part of excluded_event_ids
     if len(excluded_event_ids) > 0:
@@ -140,14 +166,17 @@ def _read_correlation_file_quick(
         rsum1 = np.zeros(len(pair_df), dtype=np.int32)
         rsum2 = np.zeros(len(pair_df), dtype=np.int32)
         for excluded_event_id in excluded_event_ids:
-            rsum1 += (pair_df.dt == excluded_event_id)
-            rsum2 += (pair_df.cc == excluded_event_id)
+            # Add 1 to rsum1 and rsum2 for each row where dt or cc is equal to
+            # the event id, for each event id in excluded_event_ids.
+            rsum1 += (pair_df['dt'] == excluded_event_id)
+            rsum2 += (pair_df['cc'] == excluded_event_id)
         excluded_pair_df = pair_df[(rsum1 > 0) | (rsum2 > 0)]
         remove_indices.extend(excluded_pair_df.index)
         prev_event_id = 0
         for jr, row in excluded_pair_df.iterrows():
-            if row.dt != prev_event_id:
-                Logger.info('Removing event pairs for event id %s', row.dt)
+            if row['dt'] != prev_event_id:
+                Logger.info('Removing event pairs for event id %s', row['dt'])
+                prev_event_id = row['dt']
             # Limit the number of rows before starting the iteration, otherwise
             # this can take a long time...
             for kr, dt_row in cc_df.loc[row.name+1 : row.name+max_n_dt
@@ -569,6 +598,21 @@ def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
     :return: Tuple of event pair dict and filtered dataframe.
     """
     dt_file = glob.glob(os.path.join(folder, 'dt.cc'))[0]
+    # One can also supply a dt_uniq.cc file where consecutive duplicates have
+    # already been removed with "uniq dt.cc dt_uniq.cc" (Linux)
+    dt_uniq_file = glob.glob(os.path.join(folder, 'dt_uniq.cc'))
+    # Check if dt_uniq_file is newere than dt_file:
+    if len(dt_uniq_file) > 0:
+        dt_uniq_file = dt_uniq_file[0]
+        if os.path.getmtime(dt_uniq_file) > os.path.getmtime(dt_file):
+            dt_file = dt_uniq_file
+            Logger.info('Using dt_uniq.cc file instead of dt.cc file')
+    dt_prefilt_file = sorted(glob.glob(os.path.join(folder, 'dt_CCmin*.cc')))
+    if len(dt_prefilt_file) > 0:
+        dt_prefilt_file = dt_prefilt_file[0]
+        if os.path.getmtime(dt_prefilt_file) > os.path.getmtime(dt_file):
+            dt_file = dt_prefilt_file
+            Logger.info('Using %s file instead of dt.cc file', dt_prefilt_file)
     Logger.info('Reading correlation file: ' + dt_file)
     if return_event_pair_dicts:
         event_pair_dict, cc_df, n_jobs = _read_correlation_file_quick(

@@ -24,3 +24,9 @@ fastparquet
 libiconv
 gputil
 wcmatch                # only available on pip
+pytz
+pyfftw
+cycler
+joblib
+difflib
+futures

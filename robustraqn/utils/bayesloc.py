@@ -1111,8 +1111,10 @@ def add_bayesloc_arrivals(arrival_file, catalog=Catalog(), custom_epoch=None):
             # groupby(by='ev_id')
         else:
             Logger.error(
-                'There are %s arrivals and %s output stats for phases, can ',
-                'not merge stats together...', len(arrival_df), len(phases_df))
+                'There are %s arrivals and %s output stats for phases, can '
+                'not merge stats together... (check if you allowed all phase '
+                'types in arrival.dat in cfg-file!)',
+                len(arrival_df), len(phases_df))
 
     add_picks = False
     # Add picks and arrivals if there are no picks in catalog yet
@@ -1481,7 +1483,8 @@ def _update_bayesloc_phase_hints(cat, remove_1_suffix=False):
             bayesloc_origin = origin
             for arrival in bayesloc_origin.arrivals:
                 pick = arrival.pick_id.get_referred_object()
-                if hasattr(arrival, 'extra'):
+                if (hasattr(arrival, 'extra') and
+                        hasattr(arrival.extra, 'most_prob_phase')):
                     if (arrival.extra.original_phase.value !=
                             arrival.extra.most_prob_phase.value):
                         # Rename pick phase according to Bayesloc

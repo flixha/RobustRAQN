@@ -30,3 +30,4 @@ cycler
 joblib
 difflib
 futures
+orderedset

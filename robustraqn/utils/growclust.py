@@ -243,7 +243,8 @@ def update_tribe_from_gc_file(tribe, gc_cat_file, max_diff_seconds=3):
 def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
                                max_diff_seconds=8,
                                max_reloc_distance_km=50,
-                               return_relocated_events_only=False):
+                               return_relocated_events_only=False,
+                               overwrite_gc_solution=True):
     """
     Function to update a catalog dataframe (e.g. from obsplus.events_to_df)
     with new origin times and locations from a Growclust output catalog file.
@@ -279,7 +280,9 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
     # Actually, only events with eh / ez / et have been relocated,
     # events with an rmsP or rmsS value did not pass through GC QC
     # gc_df = gc_df[~np.isnan(gc_df['rmsP'])]
-    gc_df = gc_df[~np.isnan(gc_df['et'])]
+
+    if return_relocated_events_only:
+        gc_df = gc_df[~np.isnan(gc_df['et'])]
 
     # limit full cat to the geographical region of interest
     full_cat_df = full_cat_df[
@@ -358,6 +361,11 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
     elif any(full_cat_df.odepth.isnull()):
         tmp_df = full_cat_df[full_cat_df.odepth.isnull()]
         full_cat_df['odepth'].loc[tmp_df.index] = tmp_df['depth']
+    if 'oauthor' not in full_cat_df.columns:
+        full_cat_df['oauthor'] = full_cat_df['author']
+    elif any(full_cat_df.oauthor.isnull()):
+        tmp_df = full_cat_df[full_cat_df.oauthor.isnull()]
+        full_cat_df['oauthor'].loc[tmp_df.index] = tmp_df['author']
 
     # Loop through relocated events, find original event, and update it.
     for n_row, gc_event in gc_df.iterrows():
@@ -411,7 +419,13 @@ def update_cat_df_from_gc_file(full_cat_df, gc_cat_file,
         fc_index = tmp_cat_df.index[tmp_event_index]
         tmp_event = tmp_cat_df.iloc[tmp_event_index]
         # Now update the catalog with the relocated event information.
-        if tmp_event.growclustR == True:  # Could be NaN
+        if not overwrite_gc_solution and tmp_event.growclustR == True:
+            Logger.warning(
+                'Event %s, %s, %s, %s has already been assigned a Growclust-'
+                'hypocenter (%s events within bounds), skipping it.',
+                tmp_event.time, tmp_event.latR, tmp_event.lonR, tmp_event.depR,
+                len(within_bounds_df),)
+        elif tmp_event.growclustR == True:  # Could be NaN
             Logger.warning(
                 'Event %s, %s, %s, %s has already been assigned a Growclust-'
                 'hypocenter (%s events within bounds), overwriting it with '

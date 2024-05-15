@@ -1304,7 +1304,19 @@ def mask_shared_trace_offsets(
         for tr in s_stream:
             ampstep_data_list.append(tr.data[1:] - tr.data[:-1])
         # Store changes in one n_tr x npts array
-        ampstep_data = np.abs(np.array(ampstep_data_list))
+        try:
+            ampstep_data = np.abs(np.array(ampstep_data_list))
+        except ValueError as e:
+            # TODO: this is a hack to work around very rare bug where this
+            #       gives error - need to debug. Error is:
+            #       " alueError: setting an array element with a sequence. The
+            #       requested array has an inhomogeneous shape after 1 
+            #       dimensions. The detected shape was (3,) + inhomogeneous part."
+            Logger.error(e)
+            Logger.error(
+                "Cannot merge ampstep data lists for %s- this is a rare bug "
+                "that needs to be debugged.", s_stream)
+            continue
         # Find the index for the maximum absolute change
         # max_indices = np.argmax(ampstep_data, axis=1)
         # uniq_indices = list(set(max_indices))

@@ -1325,12 +1325,16 @@ def create_template_objects(
         # channels:
         templ.st = Stream([tr for tr in templ.st if not (
             tr.stats.channel[-1] in horizontal_chans
+            and hasattr(tr.stats, 'extra')
+            and hasattr(tr.stats.extra, 'phase_hint')
             and tr.stats.extra.phase_hint[0] == 'P')])
         # stations_with_verticals_for_s # TODO: limit to specific stations
         if stations_with_verticals_for_s:
             templ.st = Stream([tr for tr in templ.st if not (
                 tr.stats.channel[-1] in vertical_chans
                 and tr.stats.station not in stations_with_verticals_for_s
+                and hasattr(tr.stats, 'extra')
+                and hasattr(tr.stats.extra, 'phase_hint')
                 and tr.stats.extra.phase_hint[0] == 'S'
             )])
 

@@ -381,50 +381,50 @@ def run_day_detection(
         except FileNotFoundError:
             pass
 
-        # Read in continuous data and prepare for processing
-        day_st = Stream()
-        for client in clients:
-            Logger.info('Requesting waveforms from client %s', client)
-            day_st += client.get_waveforms_bulk(
-                bulk_request, parallel=parallel, cores=io_cores)
+    # Read in continuous data and prepare for processing
+    day_st = Stream()
+    for client in clients:
+        Logger.info('Requesting waveforms from client %s', client)
+        day_st += client.get_waveforms_bulk(
+            bulk_request, parallel=parallel, cores=io_cores)
 
-        Logger.info(
-            'Successfully read in %s traces for bulk request of %s NSLC-'
-            'objects for %s - %s.', len(day_st), len(bulk_request),
-            str(starttime)[0:19], str(endtime)[0:19])
-        day_st = prepare_detection_stream(
-            day_st, tribe, parallel=parallel, cores=cores, try_despike=False,
-            ispaq=day_stats)
-        # Do initial processing (rotation, stats normalization, merging)
-        # by parallelization across three-component seismogram sets.
-        nyquist_f = minimum_sample_rate / 2
-        day_st = day_st.init_processing_w_rotation(
-            starttime=starttime_req, endtime=endtime_req,
-            # day_st, starttime=starttime, endtime=endtime,
-            remove_response=remove_response, output=output, inv=inv,
-            pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],
-            parallel=parallel, cores=cores,
-            suppress_arraywide_steps=suppress_arraywide_steps,
-            sta_translation_file=sta_translation_file,
-            noise_balancing=noise_balancing,
-            balance_power_coefficient=balance_power_coefficient, **kwargs)
+    Logger.info(
+        'Successfully read in %s traces for bulk request of %s NSLC-'
+        'objects for %s - %s.', len(day_st), len(bulk_request),
+        str(starttime)[0:19], str(endtime)[0:19])
+    day_st = prepare_detection_stream(
+        day_st, tribe, parallel=parallel, cores=cores, try_despike=False,
+        ispaq=day_stats)
+    # Do initial processing (rotation, stats normalization, merging)
+    # by parallelization across three-component seismogram sets.
+    nyquist_f = minimum_sample_rate / 2
+    day_st = day_st.init_processing_w_rotation(
+        starttime=starttime_req, endtime=endtime_req,
+        # day_st, starttime=starttime, endtime=endtime,
+        remove_response=remove_response, output=output, inv=inv,
+        pre_filt=[0.1, 0.2, 0.9 * nyquist_f, 0.95 * nyquist_f],
+        parallel=parallel, cores=cores,
+        suppress_arraywide_steps=suppress_arraywide_steps,
+        sta_translation_file=sta_translation_file,
+        noise_balancing=noise_balancing,
+        balance_power_coefficient=balance_power_coefficient, **kwargs)
 
-        # # Alternatively, do parallel processing across each trace, but then
-        # # the NSLC-normalization with rotation has to happen independently.
-        # day_st = init_processing(
-        #    day_st, inv, starttime=starttime, endtime=endtime,
-        #    parallel=parallel, cores=cores, min_segment_length_s=10,
-        #    max_sample_rate_diff=1, skip_interp_sample_rate_smaller=1e-7,
-        #    interpolation_method='lanczos',
-        #    skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
-        #    taper_fraction=0.005, downsampled_max_rate=None,
-        #    noise_balancing=noise_balancing)
-        # # Normalize NSLC codes
-        # day_st, trace_id_change_dict = day_st.normalize_nslc_codes(
-        #     inv, parallel=False, cores=cores,
-        #     std_network_code="NS", std_location_code="00",
-        #     std_channel_prefix="BH",
-        #     sta_translation_file="station_code_translation.txt")
+    # # Alternatively, do parallel processing across each trace, but then
+    # # the NSLC-normalization with rotation has to happen independently.
+    # day_st = init_processing(
+    #    day_st, inv, starttime=starttime, endtime=endtime,
+    #    parallel=parallel, cores=cores, min_segment_length_s=10,
+    #    max_sample_rate_diff=1, skip_interp_sample_rate_smaller=1e-7,
+    #    interpolation_method='lanczos',
+    #    skip_check_sampling_rates=[20, 40, 50, 66, 75, 100, 500],
+    #    taper_fraction=0.005, downsampled_max_rate=None,
+    #    noise_balancing=noise_balancing)
+    # # Normalize NSLC codes
+    # day_st, trace_id_change_dict = day_st.normalize_nslc_codes(
+    #     inv, parallel=False, cores=cores,
+    #     std_network_code="NS", std_location_code="00",
+    #     std_channel_prefix="BH",
+    #     sta_translation_file="station_code_translation.txt")
 
     # If there is no data for the day, then continue on next day.
     if not day_st.traces:

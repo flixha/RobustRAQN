@@ -58,7 +58,7 @@ def _add_seisarray_columns(cc_df, seisarray_prefix):
 
 
 def _read_correlation_file_quick(
-        existing_corr_file, SEISARRAY_PREFIXES, t_diff_max=None,
+        existing_corr_file, seisarray_prefixes, t_diff_max=None,
         return_event_pair_dicts=False, return_df_gen=True,
         excluded_event_ids=[], max_n_dt=100,
         float_dtype=np.float32, parallel=False, cores=None):
@@ -204,11 +204,12 @@ def _read_correlation_file_quick(
 
     # Need to reset index after removing rows with abs(dt) > t_diff_max
     cc_df.reset_index(drop=True, inplace=True)
-    Logger.info('Adding columns for each seismic array...')
+    Logger.info('Adding columns for each of the %s seismic array...',
+                len(seisarray_prefixes))
     # Add columns for each seismic array
     if not parallel:
         seisarray_columns = []
-        for seisarray_prefix in SEISARRAY_PREFIXES:
+        for seisarray_prefix in seisarray_prefixes:
             seisarray_columns.append(_add_seisarray_columns(
                 cc_df, seisarray_prefix=seisarray_prefix))
         # Concatenate seisaray_column to the right of cc_df:
@@ -216,10 +217,10 @@ def _read_correlation_file_quick(
     else:
         # Parallelize adding columns for each seismic array
         station_df = pd.DataFrame(cc_df['station'])
-        arr_jobs = min(cores, len(SEISARRAY_PREFIXES))
+        arr_jobs = min(cores, len(seisarray_prefixes))
         results = Parallel(n_jobs=arr_jobs)(delayed(_add_seisarray_columns)(
             station_df, seisarray_prefix)
-                               for seisarray_prefix in SEISARRAY_PREFIXES)
+                               for seisarray_prefix in seisarray_prefixes)
         cc_df = pd.concat([cc_df, *results], axis=1)
 
         # cc_df[seisarray_prefix] = np.zeros(len(cc_df), dtype=bool)
@@ -283,7 +284,8 @@ def _read_correlation_file_quick(
 
 # @profile
 def _filter_master_arrivals(
-        master_dict, master_id=None, update_event_pair_dict=False,
+        master_dict, seisarray_prefixes=[],
+        master_id=None, update_event_pair_dict=False,
         return_event_pair_dicts=False, return_df_gen=True, dt_df=None,
         filter_all_stations=False, n_jobs=None):
     """
@@ -339,7 +341,7 @@ def _filter_master_arrivals(
         # not_best_array_phase_picks_list = []
         not_best_phase_pick_indices = []
         # For each array, loop through all phase types
-        for seisarray_prefix in SEISARRAY_PREFIXES:
+        for seisarray_prefix in seisarray_prefixes:
             # array_picks = dt_df[dt_df.swifter.progress_bar(False).apply(
             #     lambda row: fnmatch.fnmatch(
             #         row['station'], seisarray_prefix, flags=fnmatch.EXTMATCH),
@@ -401,7 +403,7 @@ def _filter_master_arrivals(
             # Quicker? - select rows where all seisarray-
             non_array_picks = dt_df[np.sum([
                 dt_df[seisarray_prefix]
-                for seisarray_prefix in SEISARRAY_PREFIXES], axis=0) == 0]
+                for seisarray_prefix in seisarray_prefixes], axis=0) == 0]
             # pandas sum is slower here:
             # non_array_picks = dt_df[
             #     dt_df[SEISARRAY_PREFIXES].sum(axis=1) == 0]
@@ -460,6 +462,7 @@ def _filter_master_arrivals(
 
 def filter_correlation_file_arrivals(
         event_pair_dict, cc_df, update_event_pair_dict=False,
+        seisarray_prefixes=[],
         return_event_pair_dicts=False, return_df_gen=True,
         dt_df_generator=[], n_jobs=0, filter_all_stations=False,
         parallel=False, cores=None):
@@ -508,6 +511,7 @@ def filter_correlation_file_arrivals(
             for master_id, master_dict in event_pair_dict.items():
                 remove_indices += _filter_master_arrivals(
                     master_dict, master_id=master_id,
+                    seisarray_prefixes=seisarray_prefixes,
                     return_event_pair_dicts=return_event_pair_dicts,
                     return_df_gen=False,
                     filter_all_stations=filter_all_stations,
@@ -518,6 +522,7 @@ def filter_correlation_file_arrivals(
             results = Parallel(n_jobs=filt_jobs)(
                 delayed(_filter_master_arrivals)(
                     event_pair_dict[master_id], master_id=master_id,
+                    seisarray_prefixes=seisarray_prefixes,
                     return_event_pair_dicts=return_event_pair_dicts,
                     return_df_gen=False,
                     filter_all_stations=filter_all_stations)
@@ -529,6 +534,7 @@ def filter_correlation_file_arrivals(
             for df_j, dt_df in enumerate(dt_df_generator):
                 remove_indices += _filter_master_arrivals(
                     None, master_id=df_j, n_jobs=n_jobs,
+                    seisarray_prefixes=seisarray_prefixes,
                     return_event_pair_dicts=False,
                     return_df_gen=return_df_gen, dt_df=dt_df,
                     filter_all_stations=filter_all_stations)
@@ -538,6 +544,7 @@ def filter_correlation_file_arrivals(
             results = Parallel(n_jobs=filt_jobs)(delayed(
                 _filter_master_arrivals)(
                     None, master_id=df_j, n_jobs=n_jobs,
+                    seisarray_prefixes=seisarray_prefixes,
                     return_event_pair_dicts=False,
                     return_df_gen=return_df_gen, dt_df=dt_df,
                     filter_all_stations=filter_all_stations,)
@@ -556,7 +563,7 @@ def filter_correlation_file_arrivals(
         return None, cc_df
 
 
-def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
+def filter_dt_file_for_arrays(folder, seisarray_prefixes=[], t_diff_max=None,
                               return_event_pair_dicts=False,
                               filter_all_stations=False,
                               return_df_gen=True, backup_parquet_file=False,
@@ -616,7 +623,7 @@ def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
     Logger.info('Reading correlation file: ' + dt_file)
     if return_event_pair_dicts:
         event_pair_dict, cc_df, n_jobs = _read_correlation_file_quick(
-            dt_file, SEISARRAY_PREFIXES, t_diff_max=t_diff_max,
+            dt_file, seisarray_prefixes, t_diff_max=t_diff_max,
             return_event_pair_dicts=return_event_pair_dicts,
             excluded_event_ids=excluded_event_ids,
             return_df_gen=False, parallel=parallel, cores=cores)
@@ -624,12 +631,13 @@ def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
         # Select the highest-CC phase type for each array and remove the others
         event_pair_dict, cc_df, n_jobs = filter_correlation_file_arrivals(
             event_pair_dict, cc_df,
+            seisarray_prefixes=seisarray_prefixes,
             return_event_pair_dicts=return_event_pair_dicts,
             return_df_gen=False, filter_all_stations=filter_all_stations,
             parallel=parallel, cores=cores)
     elif return_df_gen:
         dt_df_generator, cc_df, n_jobs = _read_correlation_file_quick(
-            dt_file, SEISARRAY_PREFIXES, t_diff_max=t_diff_max,
+            dt_file, seisarray_prefixes, t_diff_max=t_diff_max,
             return_event_pair_dicts=False,
             return_df_gen=return_df_gen,
             excluded_event_ids=excluded_event_ids,
@@ -638,6 +646,7 @@ def filter_dt_file_for_arrays(folder, SEISARRAY_PREFIXES, t_diff_max=None,
         # Select the highest-CC phase type for each array and remove the others
         _, cc_df = filter_correlation_file_arrivals(
             None, cc_df, return_event_pair_dicts=False,
+            seisarray_prefixes=seisarray_prefixes,
             return_df_gen=True, dt_df_generator=dt_df_generator,
             filter_all_stations=filter_all_stations, n_jobs=n_jobs,
             parallel=parallel, cores=cores)

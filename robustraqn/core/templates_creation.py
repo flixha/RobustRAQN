@@ -1190,6 +1190,15 @@ def create_template_objects(
                     event = event_file
                     ev_stations = list(set([pick.waveform_id.station_code
                                             for pick in event.picks]))
+                # Check if we should add pick-calculation stations to the
+                # selection:
+                try:
+                    pick_calculation_stations = kwargs[
+                        'pick_calculation_stations']
+                    ev_stations = list(
+                        set(ev_stations + pick_calculation_stations))
+                except KeyError:
+                    pass
                 # When we get a list of the stations for the event, we may
                 # need to add array stations so that the relevant inventory
                 # is transmitted.

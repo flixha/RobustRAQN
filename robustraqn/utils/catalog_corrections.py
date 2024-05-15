@@ -12,12 +12,12 @@ from importlib import reload
 import glob
 import numpy as np
 from collections import defaultdict
-from ordered_set import OrderedSet
+from orderedset import OrderedSet
 from urllib.error import HTTPError
 from re import A
 from math import sqrt
 from obspy import read_events, Catalog
-# from obspy.core.event import Event, OriginUncertainty, QuantityError, Comment, Pick
+
 from obspy.core.event import (
     Event, Origin, Magnitude, StationMagnitude, Catalog, EventDescription,
     CreationInfo, OriginQuality, OriginUncertainty, Pick, WaveformStreamID,
@@ -42,11 +42,11 @@ import pickle
 # Client.get_events()
 
 from joblib import Parallel, delayed, parallel_backend
-from robustraqn.load_events_for_detection import (
-    get_all_relevant_stations, try_remove_responses, read_seisan_database)
-from robustraqn.seismic_array_tools import (
+from robustraqn.core.load_events import (
+    get_all_relevant_stations, read_seisan_database)
+from robustraqn.core.seismic_array import (
     _check_extra_info, SEISARRAY_REF_EQUIVALENT_STATIONS)
-from robustraqn.bayesloc_utils import read_bayesloc_events
+from robustraqn.utils.bayesloc import read_bayesloc_events
 
 INV_SEISARRAY_REF_EQUIVALENT_STATIONS = {
     val: key for key, val in SEISARRAY_REF_EQUIVALENT_STATIONS.items()}
@@ -654,6 +654,82 @@ def add_NNSN_catalog_info(
             event, recursion_level=recursion_level+1,
             add_extra_uib_picks=add_extra_uib_picks)
     return event
+
+
+
+def check_ps_nbg_phase_hints(
+        cat, stations_df, pn_group_velocity=(6.5, 8.2),
+        sn_group_velocity=(4.0, 4.6), local_distance_cutoff=100,
+        teleseismic_distance_cutoff=2000,
+        check_s_minus_p_time=True, extract_len=None):
+    # Make sure that picks are properly named P / Pn / Pb /  Pg / S / Sn / Sb / Sg
+    # for each pick:
+    for event in cat:
+        remove_pick_list = []
+        origin = event.preferred_origin() or event.origins[0]
+        # pick_ttimes = {pick.id: pick.time - orig.time for pick in event.picks}
+        # pick_distances = {pick: pick.distance for pick in event.picks}
+        for pick in event.picks:
+            # Only rename picks that do not have a specification yet
+            if pick.phase_hint not in ['P', 'S']:
+                continue
+            stacode = pick.waveform_id.station_code
+            sta_series = stations_df[stations_df.station == stacode].iloc[0]
+            if origin.latitude is None or origin.longitude is None:
+                continue
+            pick_distance = gps2dist_azimuth(
+                origin.latitude, origin.longitude,
+                sta_series.latitude, sta_series.longitude)[0] / 1000.
+            # Treat everything as Pg / Sg if it is closer than 100 km
+            if pick_distance < local_distance_cutoff:
+                pick.phase_hint = pick.phase_hint + 'g'
+                continue
+            # Do not change the phase hint if it is teleseismic
+            if pick_distance > teleseismic_distance_cutoff:
+                continue  # Do not change teleseismic picks
+            traveltime = pick.time - origin.time
+            if traveltime <= 0 or np.isnan(traveltime):
+                continue
+            app_vel = pick_distance / traveltime
+            if pick.phase_hint == 'P':
+                if (app_vel >= pn_group_velocity[0] and
+                        app_vel <= pn_group_velocity[1]):
+                    pick.phase_hint = 'Pn'
+                elif app_vel < pn_group_velocity[0]:
+                    pick.phase_hint = 'Pg'
+            if pick.phase_hint == 'S':
+                if (app_vel >= sn_group_velocity[0] and
+                        app_vel <= sn_group_velocity[1]):
+                    pick.phase_hint = 'Sn'
+                elif app_vel < pn_group_velocity[0]:
+                    pick.phase_hint = 'Sg'
+            # Check S-P time vs window length:
+            # - if the window is longer than the S-P time, then throw out all
+            #   P-picks so that we don't compute P-differential time picks on
+            #   S-waveforms.
+            if check_s_minus_p_time:
+                if pick.phase_hint.startswith('P'):
+                    if origin.depth is None:
+                        o_depth = origin.depth / 1000.
+                    else:
+                        o_depth = 10.
+                    total_dist = np.sqrt(pick_distance ** 2 + o_depth ** 2)
+                    theo_SmP_time = (total_dist / sn_group_velocity[0] -
+                                            total_dist / pn_group_velocity[1])
+                    s_picks = [pk for pk in event.picks
+                            if pk.phase_hint.startswith('S') and
+                            pk.waveform_id.station_code == stacode]
+                    picked_SmP_time = np.nan
+                    if len(s_picks) >= 0:
+                        # Select earliest S-pick:
+                        s_pick = s_picks[np.argmin([pk.time for pk in s_picks])]
+                        picked_SmP_time = s_pick.time - pick.time
+                    if ((picked_SmP_time is None and theo_SmP_time < extract_len)
+                        or (picked_SmP_time is not None and
+                            picked_SmP_time < extract_len)):
+                        remove_pick_list += [pick.id]
+        for rpick in remove_pick_list:
+            event.picks.remove(event.picks[rpick])
 
 
 def correct_asterisk_picks_from_intaros(

@@ -115,8 +115,7 @@ if __name__ == "__main__":
         ]
     custom_epoch = UTCDateTime(1960, 1, 1, 0, 0, 0)
 
-    sta_translation_file = os.path.expanduser(
-        "~/Documents2/ArrayWork/Inventory/station_code_translation.txt")
+    sta_translation_file = "station_code_translation.txt"
     ispaq_folder = '~/repos/ispaq/WrapperScripts/Parquet_database/csv_parquet'
 
     inv_file = '~/Documents2/ArrayWork/Inventory/NorSea_inventory.xml'

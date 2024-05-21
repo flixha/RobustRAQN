@@ -354,6 +354,7 @@ def run_day_detection(
 
     # Check if this date has already been processed with the same settings
     # i.e., current date and a settings-based hash exist already in file
+    settings_hash = np.nan
     if day_hash_file is not None:
         Logger.info('Checking if a run with the same parameters has been '
                     'performed before...')
@@ -593,8 +594,10 @@ def run_day_detection(
                     min_n_station_sites=1,
                     use_weights=use_weights, copy_data=copy_data, **kwargs)
 
-            append_list_completed_days(
-                file=day_hash_file, date=current_day_str, hash=settings_hash)
+            if day_hash_file is not None:
+                append_list_completed_days(
+                    file=day_hash_file, date=current_day_str,
+                    hash=settings_hash)
             if not party:
                 Logger.warning('Party of families of detections is empty')
                 return_st = Stream()
